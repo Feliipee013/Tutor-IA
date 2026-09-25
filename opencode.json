@@ -1,0 +1,58 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "context7": {
+      "type": "remote",
+      "url": "https://mcp.context7.com/mcp",
+      "enabled": true,
+      "headers": { "CONTEXT7_API_KEY": "{file:./.context7-key}" }
+    }
+  },
+  "agent": {
+    "build": {
+      "permission": {
+        "bash": {
+          "*": "ask",
+          "git status*": "allow",
+          "git branch*": "allow",
+          "git diff*": "allow",
+          "git log*": "allow",
+          "git show*": "allow",
+          "git add*": "allow",
+          "git rev-parse*": "allow",
+          "git merge-base*": "allow",
+          "gh auth status*": "allow",
+          "gh issue list*": "allow",
+          "gh issue view*": "allow",
+          "gh pr list*": "allow",
+          "gh pr view*": "allow",
+          "gh pr diff*": "allow",
+          "pytest*": "allow",
+          "python -m pytest*": "allow",
+          "ruff*": "allow",
+          "mypy*": "allow",
+          "docker compose ps*": "allow",
+          "docker compose logs*": "allow"
+        }
+      }
+    },
+    "plan": {
+      "permission": {
+        "edit": "deny",
+        "bash": {
+          "*": "ask",
+          "git status*": "allow",
+          "git branch*": "allow",
+          "git diff*": "allow",
+          "git log*": "allow",
+          "git rev-parse*": "allow",
+          "gh auth status*": "allow",
+          "gh issue list*": "allow",
+          "gh issue view*": "allow",
+          "gh pr list*": "allow",
+          "gh pr view*": "allow"
+        }
+      }
+    }
+  }
+}

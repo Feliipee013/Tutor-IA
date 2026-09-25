@@ -1,0 +1,18 @@
+# Segredo do Context7 (ver SETUP.md)
+.context7-key
+
+# Ambiente
+.env
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Saída do harness das Perguntas-teste (issue #12)
+outputs/
+
+# Rascunho temporário de agente
+.scratch/
