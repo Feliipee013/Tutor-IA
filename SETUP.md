@@ -168,9 +168,13 @@ exatamente o defeito que o ADR-0002 existe para fechar, e o motivo de a issue
 #4 exigir falha alta na checagem de pré-requisito em vez de uma espera silenciosa.
 
 **Dois detalhes de laptop híbrido.** A máquina da decisão tem Intel UHD e NVIDIA
-integrada: ao medir, fixe `OLLAMA_VISIBLE_DEVICES` para a placa discrete, senão a
-medição da issue #3 descreve a GPU errada. E o bot, por estar em container,
-precisa do alias para o host, que no Linux não é automático:
+integrada: ao medir, fixe `CUDA_VISIBLE_DEVICES` para a placa discreta, senão a
+medição da issue #3 descreve a GPU errada. É esse o nome da variável no Ollama —
+`OLLAMA_VISIBLE_DEVICES` não existe e é ignorado em silêncio. Use o UUID que
+`nvidia-smi -L` imprime, e não o índice numérico, porque a ordem dos devices pode
+variar. A variável não substitui o passo 3: quem prova a placa em uso é o
+`ollama ps`. E o bot, por estar em container, precisa do alias para o host, que no
+Linux não é automático:
 
 ```yaml
 extra_hosts:

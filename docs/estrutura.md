@@ -40,7 +40,26 @@ agente Implementar localizar o ponto de impacto sem varrer o repositório inteir
 | `docs/agents/` | contratos de tracker, labels, domínio e formato de PR | sim |
 | `docs/adr/` | decisões de arquitetura, com o que foi descartado e por quê | sim |
 | `docs/sprints/` | plano legível da 1.1 e da 1.2 | sim |
+| `docs/medicao-modelo/` | a sondagem, o script de medição e a saída de cada máquina — **issue #3** | sim |
 | `docs/limitacoes.md` | documento de limitações do modelo — **issue #14** | não |
+
+## `docs/medicao-modelo/` — a evidência da escolha do modelo
+
+O que sustenta o [ADR-0003](./adr/0003-modelo-do-ollama.md). Fica versionado
+porque a escolha de modelo é a decisão mais fácil de rever sem evidência: o
+número de velocidade só vale para a máquina em que saiu, e por isso cada máquina
+tem o seu próprio arquivo.
+
+| Caminho | O que faz | Ticket | Existe |
+| --- | --- | --- | --- |
+| `docs/medicao-modelo/sondagem.md` | as 4 perguntas de sondagem, com o comportamento esperado de cada uma | #3 | sim |
+| `docs/medicao-modelo/medir.py` | mede tamanho, tempo e a resposta à pergunta sem resposta; só stdlib | #3 | sim |
+| `docs/medicao-modelo/resultado-cpu.md` | a saída medida em CPU, nesta máquina, que **não** é a máquina do ADR-0002 | #3 | sim |
+| `docs/medicao-modelo/resultado-gpu.md` | o passo a passo para quem tem a máquina NVIDIA colar o número de velocidade | #3 | sim |
+
+A sondagem **não** é o conjunto de Perguntas-teste: as 10 Perguntas-teste são da
+#6 e moram em `perguntas-teste/`. A sondagem existe para escolher o modelo, e uma
+Pergunta-teste medida contra modelo nenhum não compara nada.
 
 ## `sau/` — o pacote do bot
 
@@ -53,7 +72,7 @@ serviço à parte.
 | `sau/config.py` | lê o ambiente: modelo, temperatura, `k` do semáforo, webhook e a URL base do Ollama no host | #4 | não |
 | `sau/persona.py` | o prompt versionado do S.A.U., com todas as regras de comportamento | #10 | não |
 | `sau/telegram/webhook.py` | handler do webhook, com acuse de recibo antes da inferência | #5 | não |
-| `sau/inference/ollama.py` | cliente do Ollama, que roda **no host** e é alcançado por `host.docker.internal:11434` ([ADR-0002](./adr/0002-topologia-do-ollama.md)) | #3, #7 | não |
+| `sau/inference/ollama.py` | cliente do Ollama, que roda **no host** e é alcançado por `host.docker.internal:11434` ([ADR-0002](./adr/0002-topologia-do-ollama.md)) | #7 | não | não |
 | `sau/inference/semaphore.py` | fila com teto e semáforo em frente à inferência | #11 | não |
 | `sau/graph/state.py` | estado da conversa, isolado por Aluno | #9 | não |
 | `sau/graph/graph.py` | monta o grafo LangGraph do turno | #8 | não |
