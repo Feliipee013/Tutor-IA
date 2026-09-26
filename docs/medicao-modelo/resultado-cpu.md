@@ -61,11 +61,11 @@ processo de medição chegou a ver 0,8 GiB livres com um modelo carregado.
 
 ## A tabela, como o script a imprimiu
 
-| Candidato | Pesos (`ollama list`) | Quant. | Parâm. | Peso ≤ 2,2 GB | É Q4_K_M | Filtro duro (peso e Q4_K_M) | Processador | Geração média (s) | Mediana (s) | tok/s | 1ª linha da resposta à pergunta sem resposta |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `qwen2.5:3b` | 1.9 GB | Q4_K_M | 3.1B | sim | sim | passa | 100% CPU | pendente | pendente | 15.4 | Não está no material que você forneceu. O prazo exato para entregar a Atividade 2 da disciplina não está mencionado n... |
-| `llama3.2:3b` | 2.0 GB | Q4_K_M | 3.2B | sim | sim | passa | 100% CPU | pendente | pendente | 14.5 | Infelizmente, não está no material fornecido. O material apenas menciona que os prazos de entrega das Atividades est... |
-| `gemma2:2b` | 1.6 GB | Q4_0 | 2.6B | sim | **não** — é Q4_0 | **não** — não é Q4_K_M; trocar a tag resolve | 100% CPU | pendente | pendente | 16.8 | Para saber o prazo exato para entregar a Atividade 2 da disciplina, você precisa acessar a aba "Calendário" do AVA da... |
+| Candidato | Pesos (`ollama list`) | Quant. | Parâm. | Peso ≤ 2,2 GB | É Q4_K_M | Filtro duro (peso e Q4_K_M) | Processador | Primeiro token mediana (s) | Primeiro token cold start (s) | Geração média (s) | Mediana (s) | tok/s (secundário) | 1ª linha da resposta à pergunta sem resposta |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `qwen2.5:3b` | 1.9 GB | Q4_K_M | 3.1B | sim | sim | passa | 100% CPU | pendente | pendente | pendente | pendente | 9.2 | Não está no material que você forneceu. O prazo exato para entregar a Atividade 2 da disciplina não está mencionado n... |
+| `llama3.2:3b` | 2.0 GB | Q4_K_M | 3.2B | sim | sim | passa | 100% CPU | pendente | pendente | pendente | pendente | 12.6 | Infelizmente, não está no material fornecido. O material apenas menciona que os prazos de entrega das Atividades estã... |
+| `gemma2:2b` | 1.6 GB | Q4_0 | 2.6B | sim | **não** — é Q4_0 | **não** — não é Q4_K_M; trocar a tag resolve | 100% CPU | pendente | pendente | pendente | pendente | 15.0 | Para saber o prazo exato para entregar a Atividade 2 da disciplina, você precisa acessar a aba "Calendário" do AVA da... |
 
 As três colunas do filtro são **duas condições da regra e o veredito delas**,
 não três perguntas: a regra do [ADR-0003](../adr/0003-modelo-do-ollama.md) é
@@ -83,10 +83,29 @@ isso reprova no filtro inteiro apesar de ser o mais leve dos três.
 > e Q4_K_M)" e o script passou a conferir a regra inteira. Quem reexecutar o
 > script agora recebe exatamente estas células.
 
-As colunas de média e mediana dizem `pendente` **por construção**: o script se
-recusa a preencher a velocidade quando não há GPU, porque um número de CPU
-numa coluna chamada "velocidade" seria lido como número de produção. Os tempos
-de CPU estão abaixo, rotulados como o que são.
+As colunas de tempo dizem `pendente` **por construção**: o script se recusa a
+preencher a velocidade de um candidato cuja coluna PROCESSOR mostra CPU, porque
+um número de CPU numa coluna chamada "velocidade" seria lido como número de
+produção. A tarja é **por candidato**, lida do `ollama ps` de cada um — quem
+prova a placa é a coluna PROCESSOR, não a ausência de `nvidia-smi` nesta
+máquina. Os tempos de CPU estão abaixo, rotulados como o que são.
+
+O `Primeiro token mediana` é a coluna que o
+[ADR-0003](../adr/0003-modelo-do-ollama.md) diz ser a régua de troca, e ela está
+`pendente` pelo mesmo motivo. O que a corrida **mostrou** é que a separação
+funciona e não é detalhe: a mediana das repetições 2 e 3 é de décimos de segundo,
+enquanto a repetição 1, que paga a carga do modelo, é de segundos inteiros —
+
+| Candidato | Primeiro token, repetições 2 e 3 (a régua) | Primeiro token, repetição 1 (cold start) |
+| --- | --- | --- |
+| `qwen2.5:3b` | 0,12 s | 1,22 s |
+| `llama3.2:3b` | 0,08 s | 1,01 s |
+| `gemma2:2b` | 0,19 s | 4,32 s |
+
+Estes números **não entram no ADR** e estão aqui só para mostrar que a régua é
+mensurável e que o cold start é uma diferença de ~10× a ~23×, não um outlier.
+O `gemma2:2b` é o caso mais illustrative: 4,32 s de espera na primeira resposta e
+0,19 s depois, com o modelo já carregado.
 
 ### Tamanhos medidos, com a linha do `ollama list`
 
@@ -136,18 +155,19 @@ pesos e não em 4 GB.
 
 | Candidato | Geração média | Mediana | Mín | Máx | tok/s médio |
 | --- | --- | --- | --- | --- | --- |
-| `qwen2.5:3b` | 11,20 s | 10,22 s | 6,34 s | 19,25 s | 15,4 |
-| `llama3.2:3b` | 12,32 s | 13,72 s | 5,90 s | 18,68 s | 14,5 |
-| `gemma2:2b` | 8,07 s | 6,70 s | 4,20 s | 18,52 s | 16,8 |
+| `qwen2.5:3b` | 17,27 s | 15,79 s | 9,69 s | 33,14 s | 9,2 |
+| `llama3.2:3b` | 13,82 s | 16,02 s | 5,97 s | 22,56 s | 12,6 |
+| `gemma2:2b` | 8,99 s | 7,40 s | 4,25 s | 19,02 s | 15,0 |
 
 Uma observação sobre a **inutilidade** destes números, e não é retórica: a
-variação dentro de um mesmo candidato chega a **3×** (o `qwen2.5:3b` vai de
-6,34 s a 19,25 s na mesma pergunta com os mesmos parâmetros), porque CPU
+variação dentro de um mesmo candidato chega a **4,5×** (o `gemma2:2b` vai de
+4,25 s a 19,02 s na mesma pergunta com os mesmos parâmetros), porque CPU
 compartilhada com o resto da máquina oscile. A ordem aqui é
-`gemma2:2b` > `qwen2.5:3b` > `llama3.2:3b`, e essa ordem provavelmente **inverte**
-na GPU, onde o custo é dominado pela leitura da VRAM e não pela contagem de
-tokens. É por isso que o desempate por velocidade do ADR-0003 fica pendente em
-vez de resolvido.
+`gemma2:2b` > `llama3.2:3b` > `qwen2.5:3b`, e essa ordem já **trocou** em relação
+às execuções anteriores desta mesma medição (ver abaixo) — o que é a prova mais
+direta de que o número mede a máquina e o ruído dela, e não o modelo. Na GPU o
+custo é dominado pela leitura da VRAM e não pela contagem de tokens. É por isso
+que o desempate por velocidade do ADR-0003 fica pendente em vez de resolvido.
 
 ## As respostas literais à pergunta sem resposta
 
@@ -261,21 +281,37 @@ evidência de comportamento**. O telefone inventado do `qwen2.5:3b` apareceu em
 2 de 3 repetições — quem mediu uma vez teria registrado a resposta boa e
 concluído o oposto do que o modelo faz.
 
-### A medição foi repetida, e os achados de qualidade voltaram
+### A medição foi repetida três vezes, e os achados de qualidade voltaram
 
-A correção do filtro levou a uma segunda execução completa, com os
-mesmos parâmetros e os mesmos modelos. Ela **não** mudou nenhum achado de
-qualidade: o telefone inventado do `qwen2.5:3b` voltou em 2 de 3 repetições
-da pergunta de Encaminhamento, o "arquivo da Atividade 2" do `llama3.2:3b`
-voltou nas 3 repetições, e as 12 perguntas voltaram a dar **4** com as 3
-repetições idênticas. A tabela de cima é da primeira execução e esses números
-valem para as duas.
+A correção do filtro, e depois a correção da régua de troca, levaram a **três
+execuções completas**, com os mesmos parâmetros e os mesmos modelos. Nenhuma
+mudou um achado de qualidade:
 
-O que mudou entre as execuções foi o `tok/s` — 15,4 / 14,5 / 16,8 na primeira,
-12,7 / 11,4 / 12,8 na segunda. São os mesmos modelos, os mesmos parâmetros e a
-mesma máquina, e a ordem se manteve (`gemma2` > `qwen2.5` > `llama3.2`), o que
-confirma que esse número mede a máquina e o ruído dela, e não o modelo. Mais um
-motivo para a coluna do ADR continuar como pendência.
+| Execução | Telefone do `qwen2.5:3b` | "arquivo da Atividade 2" do `llama3.2:3b` | Perguntas com as 3 repetições idênticas |
+| --- | --- | --- | --- |
+| 1 | em 2 de 3 repetições | nas 3 repetições | 4 de 12 |
+| 2 | em 2 de 3 repetições | nas 3 repetições | 4 de 12 |
+| 3 | em 2 de 3 repetições | nas 3 repetições | 4 de 12 |
+
+A terceira execução também bateu com o **detalhe** de quais perguntas eram
+idênticas, e não só com a contagem: `qwen2.5:3b/frequente`,
+`llama3.2:3b/sem-resposta`, `gemma2:2b/frequente` e `gemma2:2b/sem-resposta`, as
+mesmas quatro registradas nas execuções anteriores.
+
+O que muda entre execuções é o `tok/s`, e agora há prova de que ele mede a
+máquina:
+
+| Execução | `qwen2.5:3b` | `llama3.2:3b` | `gemma2:2b` | Ordem |
+| --- | --- | --- | --- | --- |
+| 1 | 15,4 | 14,5 | 16,8 | gemma > qwen > llama |
+| 2 | 12,7 | 11,4 | 12,8 | gemma > qwen > llama |
+| 3 | 9,2 | 12,6 | 15,0 | gemma > **llama > qwen** |
+
+Mesmos modelos, mesmos parâmetros, mesma máquina — e a **ordem trocou**: o
+`qwen2.5:3b` era o segundo mais rápido e agora é o mais lento, com uma queda de
+40%. Se o tok/s medisse o modelo, a ordem seria a mesma três vezes. Mais um
+motivo para a coluna do ADR continuar como pendência, e para a régua de troca ser
+o tempo de primeiro token.
 
 ## Referências
 

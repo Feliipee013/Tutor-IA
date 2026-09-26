@@ -216,12 +216,20 @@ Revisamos se:
 - **a velocidade na GPU não servir.** Se o `qwen2.5:3b` na máquina do ADR-0002
   ficar lento demais para o plantão da madrugada — a régua é o tempo de
   primeiro token perceptível, não o tok/s —, o critério 4 da regra desta
-  decisão resolve o desempate, e `gemma2:2b` ou `llama3.2:3b` entram. O `gemma2:2b`
-  sendo o mais leve torna essa a revisão mais provável das três, e por isso a
-  tag Q4_0 dele precisa ser resolvida antes: existe `gemma2:2b-instruct-q4_K_M`
-  (1,7 GB), que passaria o filtro, e medir essa tag é a forma barata de
-  resolver. Se ela for medida e o `gemma2` for mais rápido na GPU, a revisão
-  acontece por desempate declarado, não por preferência.
+  decisão resolve o desempate, e `gemma2:2b` ou `llama3.2:3b` entram. Essa régua
+  já é mensurável: o [`medir.py`](../medicao-modelo/medir.py) coleta
+  `Resposta.primeiro_token_segundos`, que é `load_duration + prompt_eval_duration`
+  — o modelo carregar e o prompt ser lido são dois tempos encadeados, e o
+  primeiro token só existe quando os dois acabaram. A mediana sai das repetições
+  2 e 3, com o modelo quente, e a repetição 1 fica à parte como cold start
+  porque o script usa `keep_alive: 0` entre candidatos. O `tok/s` é secundário
+  aqui, e o passo a passo está em
+  [`resultado-gpu.md`](../medicao-modelo/resultado-gpu.md). O
+  `gemma2:2b` sendo o mais leve torna essa a revisão mais provável das três, e
+  por isso a tag Q4_0 dele precisa ser resolvida antes: existe
+  `gemma2:2b-instruct-q4_K_M` (1,7 GB), que passaria o filtro, e medir essa tag é
+  a forma barata de resolver. Se ela for medida e o `gemma2` for mais rápido na
+  GPU, a revisão acontece por desempate declarado, não por preferência.
 - **o RAG da 1.2 mudar o tamanho do modelo de embedding.** O filtro de 2,2 GB
   foi escolhido para caber os dois pesos na VRAM. Se o embedding precisar de
   mais de ~1 GB, o filtro tem de baixar e **esta escolha cai junto** — não é a

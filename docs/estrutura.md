@@ -72,7 +72,7 @@ serviço à parte.
 | `sau/config.py` | lê o ambiente: modelo, temperatura, `k` do semáforo, webhook e a URL base do Ollama no host | #4 | não |
 | `sau/persona.py` | o prompt versionado do S.A.U., com todas as regras de comportamento | #10 | não |
 | `sau/telegram/webhook.py` | handler do webhook, com acuse de recibo antes da inferência | #5 | não |
-| `sau/inference/ollama.py` | cliente do Ollama, que roda **no host** e é alcançado por `host.docker.internal:11434` ([ADR-0002](./adr/0002-topologia-do-ollama.md)) | #7 | não | não |
+| `sau/inference/ollama.py` | cliente do Ollama, que roda **no host** e é alcançado por `host.docker.internal:11434` ([ADR-0002](./adr/0002-topologia-do-ollama.md)) | #7 | não |
 | `sau/inference/semaphore.py` | fila com teto e semáforo em frente à inferência | #11 | não |
 | `sau/graph/state.py` | estado da conversa, isolado por Aluno | #9 | não |
 | `sau/graph/graph.py` | monta o grafo LangGraph do turno | #8 | não |

@@ -364,6 +364,34 @@ def puxar_tamanho(executavel: str, url: str, modelo: str) -> dict[str, Any]:
     }
 
 
+def percentual_de_cpu(processador: str) -> float | None:
+    """Quanto de CPU a coluna PROCESSOR do `ollama ps` mostra, ou `None`.
+
+    `None` é o que "100% GPU" quer dizer: a coluna não menciona CPU. A coluna
+    PROCESSOR é a autoridade do ADR-0002, e esta função é o **único** lugar do
+    script que a interpreta — as duas comportas, abortar e tarjar, leem por aqui
+    de propósito, porque quando elas liam cada uma do seu jeito uma perguntava
+    à máquina e a outra perguntava ao serviço, e as duas discordavam.
+    """
+    achado = RE_CPU_NO_PROCESSADOR.search(processador)
+    if achado is None:
+        return None
+    return float(achado.group(1))
+
+
+def processador_esta_na_gpu(processador: str) -> bool:
+    """A velocidade de um candidato só vale se a coluna PROCESSOR não mostrar CPU.
+
+    Isso vale por candidato, e não por máquina: quem prova a placa é a coluna
+    PROCESSOR, e não a presença do `nvidia-smi` nem o resultado de uma medição
+    anterior. Uma máquina sem `nvidia-smi` pode tarjar um modelo que esteja de
+    fato na GPU, e um candidato que caia parcialmente para CPU é tarjado mesmo
+    com `--permitir-cpu` — que é a regra que o `resultado-gpu.md` já escreve.
+    """
+    percentual = percentual_de_cpu(processador)
+    return percentual is None or percentual <= 0
+
+
 def conferir_processador(executavel: str, modelo: str, permitir_cpu: bool) -> tuple[str, str]:
     """A checagem do ADR-0002, e ela aborta. Devolve `(processador, linha_do_ps)`.
 
@@ -382,12 +410,8 @@ def conferir_processador(executavel: str, modelo: str, permitir_cpu: bool) -> tu
         falhar(f"a linha do `ollama ps` para {modelo} tem forma inesperada: {linha!r}")
     processador = campos[3]
 
-    achado = RE_CPU_NO_PROCESSADOR.search(processador)
-    if achado is None:
-        return processador, linha
-
-    percentual = float(achado.group(1))
-    if percentual <= 0:
+    percentual = percentual_de_cpu(processador)
+    if percentual is None or percentual <= 0:
         return processador, linha
 
     if permitir_cpu:
@@ -452,6 +476,20 @@ class Resposta:
     segundos_totais: float
     segundos_da_geracao: float
     carga_segundos: float
+    primeiro_token_segundos: float
+    """`load_duration + prompt_eval_duration`, em segundos.
+
+    A soma é uma escolha, e vale explicitar: o primeiro token existe para o
+    Aluno quando o modelo **já está carregado** *e* o prompt **já foi lido**.
+    São dois tempos encadeados, e o que o Aluno percebe é a soma deles, não
+    qualquer um dos dois. `prompt_eval_duration` sozinho mediria só a leitura do
+    prompt, que num modelo já carregado é a fração pequena; `load_duration`
+    sozinho mediria só a carga, que num modelo já quente é zero.
+
+    É a régua de troca do [ADR-0003](../../adr/0003-modelo-do-ollama.md) — o
+    tempo de primeiro token perceptível, não o tok/s. Por isso o campo existe:
+    uma régua que o instrumento não mede é uma régua de Alucinação.
+    """
     tokens_por_segundo: float | None
     tokens_gerados: int | None
     concluida: bool
@@ -494,6 +532,7 @@ def medir_resposta(
     segundos = time.perf_counter() - inicio
 
     carga = float(bruto.get("load_duration", 0)) / 1e9
+    avaliacao_prompt = float(bruto.get("prompt_eval_duration", 0)) / 1e9
     duracao = float(bruto.get("eval_duration", 0)) / 1e9
     tokens = bruto.get("eval_count")
     tokens_por_segundo: float | None = None
@@ -510,6 +549,9 @@ def medir_resposta(
         # a leitura da velocidade usa só a geração.
         segundos_da_geracao=max(segundos - carga, 0.0),
         carga_segundos=carga,
+        # Ver o docstring do campo: carga e leitura do prompt são encadeadas, e o
+        # Aluno espera as duas.
+        primeiro_token_segundos=carga + avaliacao_prompt,
         tokens_por_segundo=tokens_por_segundo,
         tokens_gerados=tokens if isinstance(tokens, int) else None,
         concluida=bool(bruto.get("done", False)),
@@ -666,6 +708,38 @@ def estatisticas(candidato: Candidato) -> dict[str, float]:
     }
 
 
+def tempos_de_primeiro_token(candidato: Candidato) -> dict[str, float]:
+    """Separa o tempo de primeiro token em cold start e em modelo quente.
+
+    A mediana sai das repetições 2 e 3; a repetição 1 é linha separada, porque
+    ela não é uma atípica e sim outra coisa: o script usa `keep_alive: 0` entre
+    candidatos, então a primeira repetição de cada pergunta paga a carga do
+    modelo e as outras duas não. Misturar as três só destruiria o número que a
+    régua do ADR-0003 quer — o plantão é com o modelo quente.
+
+    A repetição 1 continua visível, com o seu `carga_segundos`, para o cold start
+    não ser escondido: quem espera o primeiro Aluno de uma madrugada paga a
+    carga, e isso é fato, não ruído.
+    """
+    quentes = [r.primeiro_token_segundos for r in candidato.respostas if r.repeticao > 1]
+    frias = [r.primeiro_token_segundos for r in candidato.respostas if r.repeticao == 1]
+
+    if not quentes:
+        raise ValueError(
+            f"{candidato.nome}: nenhuma repetição quente (repetição > 1) para mediar o "
+            "primeiro token; a régua do ADR-0003 é do modelo carregado"
+        )
+    if not frias:
+        raise ValueError(f"{candidato.nome}: nenhuma repetição 1 para o cold start")
+
+    return {
+        "mediana": statistics.median(quentes),
+        "minimo": min(quentes),
+        "maximo": max(quentes),
+        "cold_start": statistics.median(frias),
+    }
+
+
 def avaliar_filtro_duro(candidato: Candidato) -> tuple[str, str, str]:
     """Aplica o filtro inteiro do ADR-0003: peso **e** quantização.
 
@@ -705,15 +779,22 @@ def avaliar_filtro_duro(candidato: Candidato) -> tuple[str, str, str]:
     return celula_peso, celula_quant, celula_filtro
 
 
-def tabela_markdown(candidatos: list[Candidato], maquina: dict[str, Any]) -> str:
+def tabela_markdown(candidatos: list[Candidato]) -> str:
     """A tabela pronta para colar no ADR, com a velocidade como pendência.
 
-    A coluna de velocidade não sai daqui quando a medição é em CPU: sairia
-    preenchida com um número que parece comparável e não é, e foi exatamente
-    esse o erro que a nota da issue #3 aponta como o mais fácil de cometer. A
-    célula diz que falta, e diz por quê.
+    A velocidade não sai daqui para o candidato cuja coluna PROCESSOR mostra CPU:
+    sairia preenchida com um número que parece comparável e não é, e foi
+    exatamente esse o erro que a nota da issue #3 aponta como o mais fácil de
+    cometer.
+
+    A tarja é **por candidato**, lida da coluna PROCESSOR. Antes ela era uma
+    única decisão para a tabela inteira, tirada da mensagem de hardware da
+    máquina — que descreve a máquina, não o serviço — e por isso errava em dois
+    sentidos: uma máquina sem `nvidia-smi` tarjava um modelo que estivesse de
+    fato na GPU, e um modelo que tivesse caído só parcialmente para CPU saía com
+    número. Quem prova a placa é a coluna PROCESSOR, então é ela que decide, e
+    cada candidato decide por si.
     """
-    em_cpu = "nenhuma GPU NVIDIA detectada" in str(maquina.get("gpu", ""))
     # As três colunas do filtro têm o mesmo nome e a mesma ordem das colunas do
     # ADR-0003, para as duas tabelas serem comparáveis linha a linha. "Peso" e
     # "Q4_K_M" são colunas separadas de propósito: são condições diferentes, e
@@ -721,18 +802,27 @@ def tabela_markdown(candidatos: list[Candidato], maquina: dict[str, Any]) -> str
     cabecalho = (
         "| Candidato | Pesos (`ollama list`) | Quant. | Parâm. | Peso ≤ 2,2 GB "
         f"| É {QUANTIZACAO_EXIGIDA} | Filtro duro (peso e {QUANTIZACAO_EXIGIDA}) "
-        "| Processador | Geração média (s) | Mediana (s) | tok/s "
+        "| Processador | Primeiro token mediana (s) | Primeiro token cold start (s) "
+        "| Geração média (s) | Mediana (s) | tok/s (secundário) "
         "| 1ª linha da resposta à pergunta sem resposta |"
     )
-    divisoria = "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"
+    # A divisoria sai do proprio cabecalho, e nao de um numero escrito a mao: se
+    # uma coluna nova entrar no cabecalho e o numero nao acompanhar-la, a tabela
+    # quebra em silencio, que e o jeito mais caro de errar.
+    divisoria = "| --- " * (cabecalho.count("|") - 1) + "|"
 
     linhas = [cabecalho, divisoria]
     for candidato in candidatos:
         numero = estatisticas(candidato)
+        primeiro_token = tempos_de_primeiro_token(candidato)
         celula_peso, celula_quant, celula_filtro = avaliar_filtro_duro(candidato)
-        velocidade_media = "pendente"
-        celula_media = velocidade_media if em_cpu else f"{numero['media']:.2f}"
-        celula_mediana = velocidade_media if em_cpu else f"{numero['mediana']:.2f}"
+        if processador_esta_na_gpu(candidato.processador):
+            celula_ttft = f"{primeiro_token['mediana']:.2f}"
+            celula_cold = f"{primeiro_token['cold_start']:.2f}"
+            celula_media = f"{numero['media']:.2f}"
+            celula_mediana = f"{numero['mediana']:.2f}"
+        else:
+            celula_ttft = celula_cold = celula_media = celula_mediana = "pendente"
         tok_por_s = [
             r.tokens_por_segundo for r in candidato.respostas if r.tokens_por_segundo is not None
         ]
@@ -746,8 +836,8 @@ def tabela_markdown(candidatos: list[Candidato], maquina: dict[str, Any]) -> str
         linhas.append(
             f"| `{candidato.nome}` | {candidato.tamanho_texto} | {candidato.quantizacao} "
             f"| {candidato.parametros} | {celula_peso} | {celula_quant} | {celula_filtro} "
-            f"| {candidato.processador} | {celula_media} "
-            f"| {celula_mediana} | {celula_tok} | {primeira} |"
+            f"| {candidato.processador} | {celula_ttft} | {celula_cold} "
+            f"| {celula_media} | {celula_mediana} | {celula_tok} | {primeira} |"
         )
 
     reprovados: list[str] = []
@@ -770,14 +860,29 @@ def tabela_markdown(candidatos: list[Candidato], maquina: dict[str, Any]) -> str
             + "."
         )
 
-    if em_cpu:
+    tarjados = [c.nome for c in candidatos if not processador_esta_na_gpu(c.processador)]
+    if tarjados:
         linhas.append("")
         linhas.append(
-            "> **Velocidade: pendente de propósito.** Esta medição saiu em CPU, e a "
-            "coluna de velocidade do ADR-0003 só pode ser preenchida com a GPU do "
-            "host, conforme o ADR-0002. Ver "
+            "> **Velocidade: pendente de propósito para "
+            + ", ".join(f"`{nome}`" for nome in tarjados)
+            + ".** A coluna PROCESSOR do `ollama ps` mostra CPU, e um tempo de "
+            "modelo rodando em CPU descreve outra máquina, não a do ADR-0002. A "
+            "tarja é por candidato, então um candidato na GPU sai com número "
+            "mesmo com outro tarjado ao lado. Ver "
             "[`resultado-gpu.md`](../medicao-modelo/resultado-gpu.md)."
         )
+
+    linhas.append("")
+    linhas.append(
+        "> **Régua de troca: primeiro token, não tok/s.** O ADR-0003 desempata pelo "
+        "tempo de primeiro token perceptível, e `Primeiro token mediana` é a "
+        "medição dessa régua: a mediana das repetições 2 e 3, com o modelo "
+        "carregado. `Primeiro token cold start` é a repetição 1, à parte, porque "
+        "o script usa `keep_alive: 0` entre candidatos e a primeira repetição paga "
+        "a carga do modelo — ela não é uma atípica, é o cold start. O `tok/s` "
+        "fica como secundário, como o ADR diz que ele é."
+    )
     return "\n".join(linhas)
 
 
@@ -796,7 +901,7 @@ def imprimir_resumo(candidatos: list[Candidato], maquina: dict[str, Any]) -> Non
         print("RAM:          não determinada")
 
     print(f"\n{'=' * 78}\nTABELA PARA O ADR\n{'=' * 78}")
-    print(tabela_markdown(candidatos, maquina))
+    print(tabela_markdown(candidatos))
 
     for candidato in candidatos:
         print(f"\n{'=' * 78}")

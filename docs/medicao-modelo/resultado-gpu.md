@@ -123,11 +123,11 @@ banda, não do modelo: rode um candidato por vez com
 Substitua o bloco de pendência abaixo pelos números da sua máquina. São **três
 números por candidato**, e eles são os que faltam no ADR.
 
-| Candidato | Pesos (`ollama list`) | Processador (do `ollama ps`) | Geração média (s) | Mediana (s) | tok/s |
-| --- | --- | --- | --- | --- | --- |
-| `qwen2.5:3b` | _a medir_ | _a medir_ | _a medir_ | _a medir_ | _a medir_ |
-| `llama3.2:3b` | _a medir_ | _a medir_ | _a medir_ | _a medir_ | _a medir_ |
-| `gemma2:2b` | _a medir_ | _a medir_ | _a medir_ | _a medir_ | _a medir_ |
+| Candidato | Pesos (`ollama list`) | Processador (do `ollama ps`) | Primeiro token mediana (s) | Primeiro token cold start (s) | Geração média (s) | Mediana (s) | tok/s (secundário) |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `qwen2.5:3b` | _a medir_ | _a medir_ | _a medir_ | _a medir_ | _a medir_ | _a medir_ | _a medir_ |
+| `llama3.2:3b` | _a medir_ | _a medir_ | _a medir_ | _a medir_ | _a medir_ | _a medir_ | _a medir_ |
+| `gemma2:2b` | _a medir_ | _a medir_ | _a medir_ | _a medir_ | _a medir_ | _a medir_ | _a medir_ |
 
 E cole também, para a evidência:
 
@@ -138,7 +138,32 @@ ollama ps:   <a linha de cada modelo, com o PROCESSOR>
 
 Se a coluna PROCESSOR mostrar **100% GPU**, a medição é válida. Se mostrar
 qualquer porcentagem de CPU, a medição **não** é válida, mesmo que os tempos
-pareçam bons — e nesse caso o número não entra no ADR.
+pareçam bons — e nesse caso o número não entra no ADR. A regra vale por
+candidato: um que caia só parcialmente para CPU já é tarjado, e um que esteja
+de fato na GPU sai com número mesmo numa máquina sem `nvidia-smi`. Quem prova a
+placa é a coluna PROCESSOR.
+
+## Qual número decide
+
+O [ADR-0003](../adr/0003-modelo-do-ollama.md) desempata pelo **tempo de
+primeiro token perceptível**, não pelo tok/s. As duas medidas estão na tabela,
+mas não têm o mesmo peso:
+
+- **`Primeiro token mediana` é a régua.** É o que o Aluno espera, e o ADR
+  desempata por ela. Vem do campo `Resposta.primeiro_token_segundos` do
+  [`medir.py`](./medir.py), calculado como `load_duration + prompt_eval_duration`:
+  o modelo carregar e o prompt ser lido são dois tempos encadeados, e o
+  primeiro token só existe quando os dois acabaram.
+- **`Primeiro token cold start` é a repetição 1, e não é uma atípica.** O script
+  usa `keep_alive: 0` entre candidatos, então a primeira repetição de cada
+  pergunta paga a carga do modelo e as outras duas não. A mediana sai das
+  repetições 2 e 3 porque o plantão é com o modelo quente. **Não** trate a
+  repetição fria como outlier nem jogue fora a linha: quem espera o primeiro
+  Aluno de uma madrugada paga a carga, e isso é fato.
+- **`tok/s` é secundário.** O ADR diz que é, e por isso ele vem marcado como tal
+  na coluna. Ele mede a vazão da geração, não a espera — um modelo que despeja
+  tokens rápido depois de esperar 5 s continua sendo um modelo que o Aluno
+  espera 5 s.
 
 ## Como o número volta para o ADR
 
