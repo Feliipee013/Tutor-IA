@@ -61,11 +61,27 @@ processo de medição chegou a ver 0,8 GiB livres com um modelo carregado.
 
 ## A tabela, como o script a imprimiu
 
-| Candidato | Pesos (`ollama list`) | Quant. | Parâm. | No teto de 2,2 GB | Processador | Geração média (s) | Mediana (s) | tok/s | 1ª linha da resposta à pergunta sem resposta |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `qwen2.5:3b` | 1.9 GB | Q4_K_M | 3.1B | sim | 100% CPU | pendente | pendente | 15.4 | Não está no material que você forneceu. O prazo exato para entregar a Atividade 2 da disciplina não está mencionado n... |
-| `llama3.2:3b` | 2.0 GB | Q4_K_M | 3.2B | sim | 100% CPU | pendente | pendente | 14.5 | Infelizmente, não está no material fornecido. O material apenas menciona que os prazos de entrega das Atividades est... |
-| `gemma2:2b` | 1.6 GB | Q4_0 | 2.6B | sim | 100% CPU | pendente | pendente | 16.8 | Para saber o prazo exato para entregar a Atividade 2 da disciplina, você precisa acessar a aba "Calendário" do AVA da... |
+| Candidato | Pesos (`ollama list`) | Quant. | Parâm. | Peso ≤ 2,2 GB | É Q4_K_M | Filtro duro (peso e Q4_K_M) | Processador | Geração média (s) | Mediana (s) | tok/s | 1ª linha da resposta à pergunta sem resposta |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `qwen2.5:3b` | 1.9 GB | Q4_K_M | 3.1B | sim | sim | passa | 100% CPU | pendente | pendente | 15.4 | Não está no material que você forneceu. O prazo exato para entregar a Atividade 2 da disciplina não está mencionado n... |
+| `llama3.2:3b` | 2.0 GB | Q4_K_M | 3.2B | sim | sim | passa | 100% CPU | pendente | pendente | 14.5 | Infelizmente, não está no material fornecido. O material apenas menciona que os prazos de entrega das Atividades est... |
+| `gemma2:2b` | 1.6 GB | Q4_0 | 2.6B | sim | **não** — é Q4_0 | **não** — não é Q4_K_M; trocar a tag resolve | 100% CPU | pendente | pendente | 16.8 | Para saber o prazo exato para entregar a Atividade 2 da disciplina, você precisa acessar a aba "Calendário" do AVA da... |
+
+As três colunas do filtro são **duas condições da regra e o veredito delas**,
+não três perguntas: a regra do [ADR-0003](../adr/0003-modelo-do-ollama.md) é
+"pesos ≤ 2,2 GB **em Q4_K_M**". Elas vêm separadas porque falham por motivos
+diferentes — um peso alto se resolve com um modelo menor, uma quantização
+errada se resolve **trocando a tag**, que é o caso do `gemma2:2b`, que por
+isso reprova no filtro inteiro apesar de ser o mais leve dos três.
+
+> **A primeira versão desta tabela tinha o filtro errado.** O script conferia
+> só o peso e imprimia "sim" para o `gemma2:2b` numa coluna chamada "No teto de
+> 2,2 GB", enquanto o ADR marcava "não" na coluna "Filtro de 2,2 GB" do mesmo
+> candidato: mesma coluna, perguntas diferentes, respostas opostas, no
+> candidato que o ADR elimina. Quem reexecutasse o script receberia uma tabela
+> que contradizia o ADR. As duas colunas foram unificadas em "Filtro duro (peso
+> e Q4_K_M)" e o script passou a conferir a regra inteira. Quem reexecutar o
+> script agora recebe exatamente estas células.
 
 As colunas de média e mediana dizem `pendente` **por construção**: o script se
 recusa a preencher a velocidade quando não há GPU, porque um número de CPU
@@ -244,6 +260,22 @@ repetir esta medição achando que 1 repetição basta: **uma repetição única
 evidência de comportamento**. O telefone inventado do `qwen2.5:3b` apareceu em
 2 de 3 repetições — quem mediu uma vez teria registrado a resposta boa e
 concluído o oposto do que o modelo faz.
+
+### A medição foi repetida, e os achados de qualidade voltaram
+
+A correção do filtro levou a uma segunda execução completa, com os
+mesmos parâmetros e os mesmos modelos. Ela **não** mudou nenhum achado de
+qualidade: o telefone inventado do `qwen2.5:3b` voltou em 2 de 3 repetições
+da pergunta de Encaminhamento, o "arquivo da Atividade 2" do `llama3.2:3b`
+voltou nas 3 repetições, e as 12 perguntas voltaram a dar **4** com as 3
+repetições idênticas. A tabela de cima é da primeira execução e esses números
+valem para as duas.
+
+O que mudou entre as execuções foi o `tok/s` — 15,4 / 14,5 / 16,8 na primeira,
+12,7 / 11,4 / 12,8 na segunda. São os mesmos modelos, os mesmos parâmetros e a
+mesma máquina, e a ordem se manteve (`gemma2` > `qwen2.5` > `llama3.2`), o que
+confirma que esse número mede a máquina e o ruído dela, e não o modelo. Mais um
+motivo para a coluna do ADR continuar como pendência.
 
 ## Referências
 

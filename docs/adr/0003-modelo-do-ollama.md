@@ -58,11 +58,20 @@ sondagem ([`sondagem.md`](../medicao-modelo/sondagem.md)) com
 `temperature: 0`, `seed` 20260926, `num_predict: 256`, `num_ctx: 2048` e 3
 repetições por pergunta.
 
-| Candidato | Pesos (`ollama list`) | Bytes | Quant. | Parâm. | Filtro de 2,2 GB | Velocidade | Resposta à pergunta sem resposta |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| **`qwen2.5:3b`** | **1,9 GB** | 1.929.912.432 | Q4_K_M | 3.1B | sim | **pendente** | "Não está no material que você forneceu... verifique a aba Calendário" — **sem data inventada** |
-| `llama3.2:3b` | 2,0 GB | 2.019.393.189 | Q4_K_M | 3.2B | sim | **pendente** | "Infelizmente, não está no material fornecido" — **sem data inventada** |
-| `gemma2:2b` | 1,6 GB | 1.629.518.495 | **Q4_0** | 2.6B | **não** — não é Q4_K_M | **pendente** | "você precisa acessar a aba Calendário do AVA" — **sem data inventada** |
+| Candidato | Pesos (`ollama list`) | Bytes | Quant. | Parâm. | Peso ≤ 2,2 GB | É Q4_K_M | Filtro duro (peso e Q4_K_M) | Velocidade | Resposta à pergunta sem resposta |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| **`qwen2.5:3b`** | **1,9 GB** | 1.929.912.432 | Q4_K_M | 3.1B | sim | sim | **passa** | **pendente** | "Não está no material que você forneceu... verifique a aba Calendário" — **sem data inventada** |
+| `llama3.2:3b` | 2,0 GB | 2.019.393.189 | Q4_K_M | 3.2B | sim | sim | **passa** | **pendente** | "Infelizmente, não está no material fornecido" — **sem data inventada** |
+| `gemma2:2b` | 1,6 GB | 1.629.518.495 | **Q4_0** | 2.6B | sim | **não** — é Q4_0 | **não** — não é Q4_K_M; trocar a tag resolve | **pendente** | "você precisa acessar a aba Calendário do AVA" — **sem data inventada** |
+
+O filtro tem **duas condições** e elas estão em colunas separadas, com o
+veredito na terceira, pelo mesmo motivo e com os mesmos nomes que a tabela do
+script em [`resultado-cpu.md`](../medicao-modelo/resultado-cpu.md): as duas
+condições falham por motivos diferentes. `Peso ≤ 2,2 GB` é a pergunta do peso;
+`É Q4_K_M` é a pergunta da quantização; `Filtro duro` é a regra inteira, e é a
+única das três que elimina. Isso não é preciosismo de coluna — o `gemma2:2b`
+é o caso que prova a diferença, porque ele **passa** na primeira e **reprova**
+na terceira, e a reprovação se resolve trocando a tag, não trocando o modelo.
 
 A coluna de velocidade está escrita como pendente, e não preenchida com o que a
 medição em CPU deu, porque essa medição saiu em outra máquina

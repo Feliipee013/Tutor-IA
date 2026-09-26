@@ -86,6 +86,14 @@ REPETICOES_PADRAO: Final = 3
 # em 7%: 2,2 GB decimal são 2,05 GiB, e o filtro mudaria de resultado.
 TETO_PESOS_GB: Final = 2.2
 
+# Segunda condição do mesmo filtro: a regra do ADR-0003 pede "≤ 2,2 GB **em
+# Q4_K_M**", e as duas condições falham por motivos diferentes. Um peso alto se
+# resolve com um modelo menor; uma quantização errada se resolve trocando a tag
+# — o `gemma2:2b-instruct-q4_K_M` (1,7 GB) é exatamente esse caso, e o próprio ADR
+# o registra como ponto aberto. Por isso o filtro é conferido inteiro, e não
+# só o peso.
+QUANTIZACAO_EXIGIDA: Final = "Q4_K_M"
+
 # Divisores para reproduzir a formatação do `ollama list`, que é o que entra no
 # ADR. O CLI imprime em unidade decimal com uma casa: 1.9299e9 vira "1.9 GB".
 DIVISOR_POR_UNIDADE: Final[tuple[tuple[str, float], ...]] = (
@@ -658,6 +666,45 @@ def estatisticas(candidato: Candidato) -> dict[str, float]:
     }
 
 
+def avaliar_filtro_duro(candidato: Candidato) -> tuple[str, str, str]:
+    """Aplica o filtro inteiro do ADR-0003: peso **e** quantização.
+
+    A regra declarada é "pesos ≤ 2,2 GB em Q4_K_M" — duas condições, e as duas
+    são conferidas aqui. Antes desta correção o script só olhava o peso, e o
+    `gemma2:2b` (Q4_0, 1,6 GB) passava numa coluna que o ADR marcava como
+    reprovada: mesma coluna, duas perguntas, respostas opostas.
+
+    As duas condições saem em colunas separadas porque falham por motivos
+    diferentes, e uma delas se resolve trocando a tag em vez de trocando o
+    modelo. Devolve as células de peso, quantização e veredito.
+    """
+    if candidato.tamanho_gb is None:
+        return ("n/d", "n/d", "n/d")
+
+    dentro_do_peso: bool = candidato.tamanho_gb <= TETO_PESOS_GB
+    eh_quantizacao_exigida: bool = candidato.quantizacao == QUANTIZACAO_EXIGIDA
+
+    celula_peso = "sim" if dentro_do_peso else f"**não** — pesou {candidato.tamanho_texto}"
+    celula_quant = (
+        "sim" if eh_quantizacao_exigida else f"**não** — é {candidato.quantizacao}"
+    )
+
+    if dentro_do_peso and eh_quantizacao_exigida:
+        celula_filtro = "passa"
+    elif not dentro_do_peso and not eh_quantizacao_exigida:
+        celula_filtro = (
+            f"**não** — pesou {candidato.tamanho_texto} e é {candidato.quantizacao}"
+        )
+    elif not eh_quantizacao_exigida:
+        celula_filtro = (
+            f"**não** — não é {QUANTIZACAO_EXIGIDA}; trocar a tag resolve"
+        )
+    else:
+        celula_filtro = f"**não** — pesou {candidato.tamanho_texto}"
+
+    return celula_peso, celula_quant, celula_filtro
+
+
 def tabela_markdown(candidatos: list[Candidato], maquina: dict[str, Any]) -> str:
     """A tabela pronta para colar no ADR, com a velocidade como pendência.
 
@@ -667,21 +714,22 @@ def tabela_markdown(candidatos: list[Candidato], maquina: dict[str, Any]) -> str
     célula diz que falta, e diz por quê.
     """
     em_cpu = "nenhuma GPU NVIDIA detectada" in str(maquina.get("gpu", ""))
+    # As três colunas do filtro têm o mesmo nome e a mesma ordem das colunas do
+    # ADR-0003, para as duas tabelas serem comparáveis linha a linha. "Peso" e
+    # "Q4_K_M" são colunas separadas de propósito: são condições diferentes, e
+    # uma delas se resolve trocando a tag.
     cabecalho = (
-        "| Candidato | Pesos (`ollama list`) | Quant. | Parâm. | No teto de 2,2 GB "
-        "| Processador | Geração média (s) | Mediana (s) | tok/s | 1ª linha da resposta à pergunta sem resposta |"
+        "| Candidato | Pesos (`ollama list`) | Quant. | Parâm. | Peso ≤ 2,2 GB "
+        f"| É {QUANTIZACAO_EXIGIDA} | Filtro duro (peso e {QUANTIZACAO_EXIGIDA}) "
+        "| Processador | Geração média (s) | Mediana (s) | tok/s "
+        "| 1ª linha da resposta à pergunta sem resposta |"
     )
-    divisoria = "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"
+    divisoria = "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"
 
     linhas = [cabecalho, divisoria]
     for candidato in candidatos:
         numero = estatisticas(candidato)
-        if candidato.tamanho_gb is None:
-            teto = "n/d"
-        elif candidato.tamanho_gb <= TETO_PESOS_GB:
-            teto = "sim"
-        else:
-            teto = "**não**"
+        celula_peso, celula_quant, celula_filtro = avaliar_filtro_duro(candidato)
         velocidade_media = "pendente"
         celula_media = velocidade_media if em_cpu else f"{numero['media']:.2f}"
         celula_mediana = velocidade_media if em_cpu else f"{numero['mediana']:.2f}"
@@ -697,8 +745,29 @@ def tabela_markdown(candidatos: list[Candidato], maquina: dict[str, Any]) -> str
 
         linhas.append(
             f"| `{candidato.nome}` | {candidato.tamanho_texto} | {candidato.quantizacao} "
-            f"| {candidato.parametros} | {teto} | {candidato.processador} | {celula_media} "
+            f"| {candidato.parametros} | {celula_peso} | {celula_quant} | {celula_filtro} "
+            f"| {candidato.processador} | {celula_media} "
             f"| {celula_mediana} | {celula_tok} | {primeira} |"
+        )
+
+    reprovados: list[str] = []
+    for candidato in candidatos:
+        motivo = avaliar_filtro_duro(candidato)[2]
+        if motivo != "passa":
+            reprovados.append(f"`{candidato.nome}` ({motivo.replace('**', '')})")
+
+    if reprovados:
+        linhas.append("")
+        linhas.append(
+            "> **Filtro duro tem duas condições.** A regra do ADR-0003 é \"pesos "
+            f"≤ 2,2 GB em {QUANTIZACAO_EXIGIDA}\", e `Peso ≤ 2,2 GB` e "
+            f"`É {QUANTIZACAO_EXIGIDA}` são as duas metades, separadas de propósito: "
+            "um peso alto se resolve com um modelo menor, uma quantização errada se "
+            "resolve **trocando a tag** — `gemma2:2b-instruct-q4_K_M` (1,7 GB) é "
+            "esse caso, e o ADR-0003 o registra como ponto aberto. Reprovaram no "
+            "filtro inteiro: "
+            + ", ".join(reprovados)
+            + "."
         )
 
     if em_cpu:
