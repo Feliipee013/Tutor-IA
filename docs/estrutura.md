@@ -68,8 +68,9 @@ intenção, e a 1.2 entra como rota nova **dentro** desse mesmo grafo, não como
 serviço à parte.
 
 | Caminho | O que faz | Ticket | Existe |
-| --- | --- | --- | --- |
-| `sau/config.py` | lê o ambiente: modelo, temperatura, `k` do semáforo, webhook e a URL base do Ollama no host | #4 | não |
+| `sau/config.py` | lê o ambiente: modelo, timeout, portas e a URL base do Ollama no host | #4 | sim |
+| `sau/prereqs.py` | checagem rigorosa de pré-requisitos (conectividade, modelo e GPU no host) | #4 | sim |
+| `sau/main.py` | entrypoint do serviço com logs estruturados `[SAU-BOT]` e health server | #4 | sim |
 | `sau/persona.py` | o prompt versionado do S.A.U., com todas as regras de comportamento | #10 | não |
 | `sau/telegram/webhook.py` | handler do webhook, com acuse de recibo antes da inferência | #5 | não |
 | `sau/inference/ollama.py` | cliente do Ollama, que roda **no host** e é alcançado por `host.docker.internal:11434` ([ADR-0002](./adr/0002-topologia-do-ollama.md)) | #7 | não |
@@ -87,7 +88,7 @@ serviço à parte.
 | `perguntas-teste/` | as 10 Perguntas-teste, com o comportamento esperado de cada uma | #6 | sim |
 | `corpus/` | os quatro documentos autorados, um por categoria, com as contradições plantadas | P1 | não |
 | `outputs/` | saída bruta do harness, ignorada pelo git | #12 | não |
-| `tests/` | suíte `pytest` | — | não |
+| `tests/` | suíte `pytest` | #4 | sim |
 
 O `corpus/` é quebrado em unidades de recuperação pela própria equipe: cada
 `##` dentro de um documento responde a uma Pergunta Frequente, então **o chunk é

@@ -121,26 +121,40 @@ opencode mcp list
 
 Ou, numa sessão, peça ao agente a documentação de uma biblioteca do projeto
 (ex.: "use context7: assinatura do `getUpdates` do python-telegram-bot 21").
-
 ## 3. Executando o projeto
 
-> **Ainda não existe.** Esta seção é o contrato do que vai existir, derivado dos
-> tickets da sprint 1.1. Substitua cada bloco pelo comando real assim que a
-> pasta existir.
+O serviço do bot é empacotado no container via `docker-compose.yml`,
+consumindo o **Ollama rodando nativamente no host**, conforme
+[ADR-0002](./docs/adr/0002-topologia-do-ollama.md).
 
-**Previsto:** Python com `pytest`, `ruff` e `mypy`; o serviço do bot em
-`docker compose` (issue #4) com o **Ollama rodando no host**, conforme
-[ADR-0002](./docs/adr/0002-topologia-do-ollama.md); o bot recebendo o webhook
-do Telegram (issue #5) e respondendo pelo grafo LangGraph (issue #8).
+**Definições consolidadas (issue #4):**
+- **Pacote Python e entrypoint:** pacote `sau`, entrypoint `python -m sau.main`
+- **Porta padrão do serviço:** `8000` (com endpoint de saúde `/health`)
+- **Variáveis de ambiente (`.env` opcional):**
+  - `OLLAMA_BASE_URL`: padrão `http://host.docker.internal:11434`
+  - `OLLAMA_MODEL`: padrão `llama3.2:3b`
+  - `OLLAMA_ALLOW_CPU`: padrão `false` (exige GPU e falha alto se cair em CPU; use `true` apenas em dev/CI sem GPU)
+  - `OLLAMA_TIMEOUT`: padrão `30` (segundos)
+  - `BOT_PORT`: padrão `8000`
+  - `LOG_LEVEL`: padrão `INFO`
+- **Logs estruturados:** formato padronizado com prefixo `[SAU-BOT]` no stdout.
 
-**A definir junto com o código, não antes:**
+### Subindo o bot via Docker Compose
 
-- o nome do pacote Python e o entrypoint do serviço do bot;
-- a porta do webhook local;
-- o arquivo de ambiente e quais variáveis ele carrega, entre elas a URL base
-  do Ollama, que é `http://host.docker.internal:11434`;
-- o `k` do semáforo de inferência, que [ADR-0001](docs/adr/0001-concorrencia-do-bot.md)
-  exige que seja **medido na máquina alvo**, não assumido.
+```sh
+# 1. Certifique-se de que o Ollama está rodando no host e o modelo está baixado
+ollama serve
+ollama pull llama3.2:3b
+
+# 2. Suba o serviço do bot
+docker compose up --build
+
+# Para subir em background
+docker compose up -d --build
+
+# Para visualizar os logs
+docker compose logs -f bot
+```
 
 ### Pré-requisitos de host: o Ollama
 
