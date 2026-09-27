@@ -5,12 +5,15 @@ status: accepted
 ---
 
 O S.A.U. é servido pelo **`qwen2.5:3b`** em quantização Q4_K_M: 1,9 GB de pesos,
-3,1B de parâmetros. É o único dos três candidatos que **não mandou o Aluno atrás
-de um arquivo que não existe** — e essa diferença é a que as duas máquinas em
-que ele foi medido sustentam, o que faz dela o único motivo de escolha que
-ambas apoiam. A escolha vem de medir, não de preferir: a regra de decisão foi
-escrita **antes** de olhar qualquer resultado e está registrada abaixo, com a
-mesma ordem que foi aplicada.
+3,1B de parâmetros. São dois os candidatos que passam no filtro duro, o
+`qwen2.5:3b` e o `llama3.2:3b`, e entre eles é o `qwen2.5:3b` o único que **não
+mandou o Aluno atrás de um arquivo que não existe** — e essa diferença é a que
+as duas máquinas em que ele foi medido sustentam, o que faz dela o único motivo
+de escolha que ambas apoiam. O `gemma2:2b` também não mandou ninguém a lugar
+nenhum, e mesmo assim reprova no filtro duro, que é o que elimina. A escolha vem
+de medir, não de preferir: a regra de decisão foi escrita **antes** de olhar
+qualquer resultado e está registrada abaixo, com a mesma ordem que foi
+aplicada.
 
 A velocidade foi medida na máquina do ADR-0002, com `100% GPU` nos três
 candidatos, e está na coluna de velocidade de Considered Options. O número
@@ -32,10 +35,8 @@ desempate.
 
 ## A regra de decisão, antes dos resultados
 
-Os quatro critérios abaixo foram escritos antes da medição e **não** mudaram
-depois. Registrados aqui para que a escolha não pareça retro-raciocínio. A
-única coisa que esta seção perdeu desde a primeira redação foi a nota de que a
-velocidade estava por medir, que saiu quando a medição foi feita.
+Esta seção foi escrita antes da medição e não foi mexida depois. Registrada
+aqui para que a escolha não pareça retro-raciocínio.
 
 1. **Filtro duro: pesos ≤ 2,2 GB em Q4_K_M.** Cabe nos 4 GB de VRAM da máquina
    do ADR-0002 e deixa espaço para o modelo de embedding que a 1.2 vai pedir ao
@@ -49,8 +50,15 @@ velocidade estava por medir, que saiu quando a medição foi feita.
 4. **Terciário:** velocidade, medida depois. Empate se resolve por velocidade.
 
 A ordem não se inverte depois de ver os dados. Em particular: a velocidade é o
-**último** critério, e por isso é a que confirma em vez de decidir — foi
-medida depois, e o número de 0,02 s não precisou ser acionado como desempate.
+**último** critério, e é a que ainda está pendente.
+
+O que a medição fez com o critério 4 fica deste lado da linha, e não dentro da
+seção acima: o desempate declarado **não precisou ser acionado**. O
+`qwen2.5:3b` e o `llama3.2:3b` empataram em 0,02 s de primeiro token na máquina
+do ADR-0002, e o que separou os dois candidatos foram os três critérios
+anteriores. O número está em
+[`resultado-gpu.md`](../medicao-modelo/resultado-gpu.md) e na coluna de
+velocidade de Considered Options, com a máquina junto.
 
 ## Considered Options
 
