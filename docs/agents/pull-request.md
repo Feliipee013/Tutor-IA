@@ -15,8 +15,8 @@ chore(harness): grava os outputs brutos em JSONL
 ```
 
 Use o escopo quando a mudança estiver concentrada em uma área: `bot`,
-`telegram`, `harness`, `corpus` ou `infra`. Em mudanças multiárea, omita o
-escopo: `feat: fecha o primeiro turno ponta a ponta`.
+`telegram`, `harness`, `corpus`, `infra` ou `perguntas-teste`. Em mudanças
+multiárea, omita o escopo: `feat: fecha o primeiro turno ponta a ponta`.
 
 O tipo descreve a mudança (`feat`, `fix`, `chore`, `refactor`, `docs`, `test`,
 `perf`, `build` ou `ci`). Prefira um verbo específico e não use títulos como
