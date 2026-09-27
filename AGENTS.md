@@ -16,7 +16,7 @@ Layout single-context: `CONTEXT.md` na raiz e `docs/adr/`. Ver `docs/agents/doma
 
 ### Code review
 
-`/code-review` revisa a mudança em dois eixos paralelos: **Standards** (segue as convenções deste repo?) e **Spec** (implementa a issue e o ADR?). A skill vive em `.agents/skills/code-review` e é a única deste conjunto em inglês. Use a merge base entre a branch e a base como ponto fixo.
+`/code-review` revisa a mudança em dois eixos paralelos: **Standards** (segue as convenções deste repo?) e **Spec** (implementa a issue e o ADR?). A skill vive em `.agents/skills/code-review` e está em inglês. Use a merge base entre a branch e a base como ponto fixo.
 
 ### Implementar
 
@@ -25,6 +25,44 @@ Layout single-context: `CONTEXT.md` na raiz e `docs/adr/`. Ver `docs/agents/doma
 ### Criar PR
 
 `criar-pr` é um subagente, não uma skill. Ele monta um preview sem nenhuma mutação e só publica depois que uma pessoa aprovar o preview completo. Ver `.opencode/agents/criar-pr.md` e o formato em `docs/agents/pull-request.md`.
+
+### Dúvidas de skill
+
+`/duvidas-skills` é o roteador do fluxo. Ele não inventa fluxo: se uma skill
+apontar para outra, é porque as duas existem. Ver `.opencode/skills/duvidas-skills/SKILL.md`.
+
+### Da ideia ao ticket
+
+Quatro skills encadeadas, todas com `disable-model-invocation` — só entram por
+comando explícito, e o contexto de uma alimenta a seguinte:
+
+1. `/entrevistar-com-docs` — afia a ideia por entrevista e resolve o vocabulário
+   e os ADRs no caminho (delega para `/grilling` e `/domain-modeling`).
+2. `/transformar-em-spec` — sintetiza a conversa numa spec e publica no tracker
+   com `ready-for-agent`.
+3. `/transformar-em-tickets` — quebra a spec em tickets tracer-bullet por
+   entrega, cada um com suas arestas de bloqueio. A publicação de cada ticket
+   é delegada ao subagente `criar-ticket`.
+4. `/implementar` — planeja e delega ao `executor`.
+
+`/transformar-em-spec` e `/transformar-em-tickets` não acrescentam decisão: elas
+sintetizam o que já foi discutido. `/entrevistar-com-docs` e `/implementar` têm
+gate de aprovação humana explícita.
+
+### Criar ticket
+
+`criar-ticket` é um subagente, não uma skill, e é `hidden`. Ele recebe o ticket
+completo no prompt, cria a issue em uma única chamada `gh issue create` já com
+`ready-for-agent`, e devolve só o número. Este projeto não tem divisão por área
+nos tickets, e o subagente não cria nem aplica label além dessa. Ver
+`.opencode/agents/criar-ticket.md`.
+
+### Contribuir numa PR de outro dev
+
+`/contribuir-pr` assume uma PR parada com *request changes* enquanto o autor não
+pode responder: pega a branch dele, implementa o bloqueante, devolve os commits à
+PR original com trailer de assinatura, e tem dois gates de aprovação antes de
+qualquer mutação no GitHub. Ver `.opencode/skills/contribuir-pr/SKILL.md`.
 
 ### Mapa de pastas
 

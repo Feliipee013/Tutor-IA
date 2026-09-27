@@ -1,6 +1,7 @@
 ---
 name: implementar
-description: Planeja a implementação de uma issue ou spec e, após aprovação explícita, delega a execução ao subagente executor. Use quando um ticket do GitHub Issues precisa virar código, antes de editar qualquer arquivo.
+description: Planeja a implementação de uma issue ou spec e, após aprovação explícita, delega a execução ao subagente executor. Só entra por comando explícito — se um ticket do GitHub Issues precisa virar código, invoque `/implementar` antes de editar qualquer arquivo.
+disable-model-invocation: true
 ---
 
 # Implementação em duas fases

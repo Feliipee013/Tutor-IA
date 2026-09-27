@@ -28,9 +28,9 @@ agente Implementar localizar o ponto de impacto sem varrer o repositório inteir
 | `SETUP.md` | ambiente: `gh`, Context7, e como executar o projeto | sim |
 | `opencode.json` | MCP do Context7 e permissões de `bash` por agente | sim |
 | `docs/` | documentação versionada (abaixo) | sim |
-| `.opencode/agents/` | subagentes `criar-pr` e `executor` | sim |
-| `.opencode/skills/` | a skill `implementar` | sim |
-| `.agents/skills/` | skills de terceiros, hoje só a `code-review` (em inglês) | sim |
+| `.opencode/agents/` | subagentes `criar-pr`, `criar-ticket` e `executor` | sim |
+| `.opencode/skills/` | as skills do projeto: `implementar`, `duvidas-skills`, `entrevistar-com-docs`, `grilling`, `domain-modeling`, `transformar-em-spec`, `transformar-em-tickets` e `contribuir-pr` | sim |
+| `.agents/skills/` | skills de terceiros em inglês. Em uso: `code-review`, `triage`, `setup-matt-pocock-skills`, `wayfinder` e `writing-for-agents` — o resto veio do set upstream e não tem par em português | sim |
 
 ## `docs/`
 

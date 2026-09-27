@@ -9,22 +9,25 @@
 
 ## Language
 
-**Order**:
+**Aluno**:
 {A one or two sentence description of the term}
-_Avoid_: Purchase, transaction
+_Evite_: usuário, cliente, discente, estudante
 
-**Invoice**:
-A request for payment sent to a customer after delivery.
-_Avoid_: Bill, payment request
+**Atividade**:
+Trabalho ou entrega do curso sobre o qual o Aluno pede ajuda. O Tutor não
+entrega a resposta de uma Atividade, mesmo quando a sabe.
+_Evite_: exercício, projeto, tarefa, assignment
 
-**Customer**:
-A person or organization that places orders.
-_Avoid_: Client, buyer, account
+**Encaminhamento**:
+Ação do Tutor de sugerir ao Aluno que procure um Tutor humano, usada quando a
+resposta não está ao seu alcance. Não é um fluxo com estado; é um encerramento
+de conversa.
+_Evite_: handoff, escalonamento, suporte
 ```
 
 ## Rules
 
-- **Be opinionated.** When multiple words exist for the same concept, pick the best one and list the others under `_Avoid_`.
+- **Be opinionated.** When multiple words exist for the same concept, pick the best one and list the others under `_Evite_`.
 - **Keep definitions tight.** One or two sentences max. Define what it IS, not what it does.
 - **Only include terms specific to this project's context.** General programming concepts (timeouts, error types, utility patterns) don't belong even if the project uses them extensively. Before adding a term, ask: is this a concept unique to this context, or a general programming concept? Only the former belongs.
 - **Group terms under subheadings** when natural clusters emerge. If all terms belong to a single cohesive area, a flat list is fine.
@@ -40,15 +43,15 @@ _Avoid_: Client, buyer, account
 
 ## Contexts
 
-- [Ordering](./src/ordering/CONTEXT.md): receives and tracks customer orders
-- [Billing](./src/billing/CONTEXT.md): generates invoices and processes payments
-- [Fulfillment](./src/fulfillment/CONTEXT.md): manages warehouse picking and shipping
+- [Bot](./sau/CONTEXT.md) — classifies intent, retrieves from the corpus and answers the Aluno
+- [Conteudo](./corpus/CONTEXT.md) — the team-authored corpus and the Perguntas-teste
+- [Medicao](./harness/CONTEXT.md) — runs the Perguntas-teste and scores the rate of Alucinacao
 
 ## Relationships
 
-- **Ordering → Fulfillment**: Ordering emits `OrderPlaced` events; Fulfillment consumes them to start picking
-- **Fulfillment → Billing**: Fulfillment emits `ShipmentDispatched` events; Billing consumes them to generate invoices
-- **Ordering ↔ Billing**: Shared types for `CustomerId` and `Money`
+- **Bot → Conteudo**: Bot queries the corpus by Pergunta Frequente; Conteudo answers with the section
+- **Conteudo → Medicao**: Conteudo ships the Perguntas-teste; Medicao runs them against a model
+- **Bot ↔ Medicao**: Shared vocabulary for Alucinação, the rate of non-answer and the rate of refusal of Atividade
 ```
 
 The skill infers which structure applies:
