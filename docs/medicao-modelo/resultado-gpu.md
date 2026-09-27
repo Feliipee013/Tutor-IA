@@ -5,8 +5,9 @@
 > A coluna de velocidade do
 > [ADR-0003](../adr/0003-modelo-do-ollama.md) está preenchida, e saiu desta
 > máquina — que **é** a do ADR-0002. O `ollama ps` mostrou **`100% GPU` nos
-> três candidatos**, que é a autoridade: é ela, e não a ausência de CPU na
-> coluna, que prova em que processador cada um rodou.
+> três candidatos**, e é a coluna PROCESSOR que prova em que processador cada
+> um rodou: não a ausência de CPU escrita nela, e não a existência de um
+> `nvidia-smi` na máquina.
 >
 > | | |
 > | --- | --- |
@@ -30,10 +31,10 @@
 > máquina de CPU não se sustentam aqui, e o ADR agora diz o nome da máquina ao
 > lado de cada uma.
 >
-> As seções de método abaixo — procedure, checagens, regra do número — foram
-> mantidas de propósito. Elas descrevem **como** a medição foi feita e
-> **como** o número deve ser lido, e continuam valendo para quem medir em
-> outra máquina.
+> As seções de método abaixo — "Para quem é", "Antes de começar" e "Qual
+> número decide" — foram mantidas de propósito. Elas descrevem **como** a
+> medição foi feita e **como** o número deve ser lido, e continuam valendo para
+> quem medir em outra máquina.
 
 ## Para quem é
 
@@ -169,17 +170,20 @@ tabela do ADR trata como secundária, o `tok/s`, onde o `gemma2:2b` lidera
 (56,3 contra 51,3) — a ordem se inverte entre as duas últimas colunas, e é a
 régua que decide.
 
-> **O que essa linha é, e o que ela não é.** É a mediana das 4 repetições 1 dos
-> 4 candidatos, e por isso não é uma atípica nem ruído: o mesmo padrão se
-> repete nos três, com `gemma2:2b` cerca de 5× acima dos outros dois. O que
-> ela **não** é é tempo de carregar pesos: o `carga_segundos` que o `medir.py`
-> grava é de **~0,001 s nas 12 respostas**, repetição 1 incluída — o modelo
-> já está aquecido quando as 12 respostas começam, e a diferença da repetição 1
-> é quase toda a leitura do prompt (`prompt_eval_duration`), não a carga. A
-> docstring do campo diz que a repetição 1 "paga a carga do modelo", e o número
-> desta corrida não confirma essa leitura. O ADR-0003 mantém a coluna e o
-> significado dela porque a regra de troca é a mesma; o que muda é a causa, e
-> ela está registrada aqui em vez de ser afirmada em silêncio.
+> **O que essa linha é, e o que ela não é.** É a mediana das 4 respostas de
+> repetição 1 — uma por pergunta —, e não a da repetição 1 da primeira pergunta:
+> essa sai bem acima (1,38 s no `qwen2.5:3b`, 7,88 s no `gemma2:2b`) porque é a
+> primeira leitura de prompt da corrida. A mediana absorve isso, e o que sobra é
+> um padrão que se repete nos três candidatos, com o `gemma2:2b` cerca de 5×
+> acima dos outros dois. Não é ruído, e **não** é uma atípica que se possa
+> descartar. O que essa linha **não** é é tempo de carregar pesos: o
+> `carga_segundos` que o `medir.py` grava é de **~0,001 s nas 12 respostas**,
+> repetição 1 incluída — o modelo já estava carregado quando elas começaram. O
+> tempo da repetição 1 é quase todo `prompt_eval_duration`, e a docstring do
+> campo, que diz que a repetição 1 "paga a carga do modelo", não bate com o que
+> o campo gravou. O ADR-0003 mantém a coluna e o significado dela porque a
+> regra de troca é a mesma; o que muda é a causa, e ela está registrada aqui em
+> vez de ser afirmada em silêncio.
 
 ## A evidência
 
@@ -222,11 +226,12 @@ mas não têm o mesmo peso:
   o modelo carregar e o prompt ser lido são dois tempos encadeados, e o
   primeiro token só existe quando os dois acabaram.
 - **`Primeiro token cold start` é a repetição 1, e não é uma atípica.** O script
-  usa `keep_alive: 0` entre candidatos, então a primeira repetição de cada
-  pergunta paga a carga do modelo e as outras duas não. A mediana sai das
-  repetições 2 e 3 porque o plantão é com o modelo quente. **Não** trate a
-  repetição fria como outlier nem jogue fora a linha: quem espera o primeiro
-  Aluno de uma madrugada paga a carga, e isso é fato.
+  usa `keep_alive: 0` entre candidatos, então a repetição 1 de cada pergunta é a
+  primeira leitura daquele prompt na corrida. A mediana sai das repetições 2 e 3
+  porque é o tempo de espera que o Aluno encontra na maior parte das vezes.
+  **Não** trate a repetição fria como valor atípico e não jogue fora a linha:
+  quem espera o primeiro Aluno de uma madrugada paga esse tempo, e isso é fato.
+  O que causa esse tempo está medido no bloco de cima, e não é a carga dos pesos.
 - **`tok/s` é secundário.** O ADR diz que é, e por isso ele vem marcado como tal
   na coluna. Ele mede a vazão da geração, não a espera — um modelo que despeja
   tokens rápido depois de esperar 5 s continua sendo um modelo que o Aluno
@@ -245,10 +250,9 @@ O que foi feito com esta medição, e o que ela decidiu:
    assumido.
 3. **A escolha não mudou.** `qwen2.5:3b` continua o escolhido, e o desempate
    declarado nunca precisou ser acionado: os dois candidatos que passam no
-   filtro duro estão empatados em 0,02 s, e o critério 3 — Alucinação e
-   comportamento no secundário — já os tinha separado. A velocidade confirmou
-   o que os outros três critérios disseram, que é o melhor jeito de ela
-   confirmar.
+   filtro duro estão empatados em 0,02 s, e o critério 3 — o secundário — já os
+   tinha separado. A velocidade confirmou o que os outros três critérios
+   disseram, que é o melhor jeito de ela confirmar.
 4. **A prosa do ADR mudou, e isso é o resultado que importa.** A máquina de CPU
    e esta máquina discordam em três afirmações qualitativas que o ADR
    escrevia sem dizer de qual máquina vinham. Nenhuma delas muda o vencedor, e

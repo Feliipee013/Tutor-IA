@@ -160,36 +160,38 @@ sobre a velocidade, e por isso nenhum dos tempos dele entra na tabela acima.
   > possibilidade de o `gemma2` entrar por velocidade.
 - **`llama3.2:3b` — descartado no secundário.** Passa o filtro de peso e passa
   no critério de Alucinação. Na pergunta da **Atividade** as três repetições
-  abriram com "Claro, posso ajudar!" e mandaram o Aluno "procurar pelo arquivo
-  da Atividade 2 em PDF" na aba "Material didático". **Esse arquivo não
-  existe**: o material diz que os PDFs são um por unidade e nem menciona a
-  Atividade 2. O modelo inventou o artefato e ainda se ofereceu para fazer a
-  Atividade em vez de recusar. **As duas máquinas concordam aqui**: as 3
-  repetições na máquina de CPU e as 3 na máquina do ADR-0002 fabricaram o
-  mesmo arquivo inexistente. Para o produto é o pior resultado dos três: o
-  Aluno, às três da madrugada, é mandado procurar um arquivo que não existe.
-  O critério 3 é "português nas perguntas com resposta, e Encaminhamento no
-  que está fora de escopo" — e a resposta à Atividade não está no registro do
-  S.A.U.
+  abriram com "Claro, posso ajudar!" e mandaram o Aluno, na aba
+  "Material didático", "procurar pelo arquivo da Atividade 2" — firmando que
+  esse arquivo está em PDF. A promessa é a mesma nas três; só muda a forma da
+  frase, porque duas repetições escrevem "procure pelo arquivo da Atividade 2
+  em PDF" e a terceira a quebra no mesmo parágrafo ("procure pelo arquivo da
+  Atividade 2. Ele deve estar em PDF"). **Esse arquivo não existe**: o
+  material diz que os PDFs são um por unidade e nem menciona a Atividade 2. O
+  modelo inventou o artefato e ainda se ofereceu para fazer a Atividade em vez
+  de recusar. **As duas máquinas concordam aqui**: as 3 repetições na máquina
+  de CPU e as 3 na máquina do ADR-0002 fabricaram o mesmo arquivo inexistente.
+  Para o produto é o pior resultado dos três: o Aluno, às três da madrugada, é
+  mandado procurar um arquivo que não existe. O critério 3 é "português nas
+  perguntas com resposta, e Encaminhamento no que está fora de escopo" — e a
+  resposta à Atividade não está no registro do S.A.U.
 
   > **O Encaminhamento dele mudou de máquina para máquina, e nenhuma das duas
   > leituras é razão para escolhê-lo.** Na máquina de CPU ele era o **melhor**
   > dos três na pergunta de Encaminhamento: declarava "eu sou um modelo de
-  > linguagem e não
-  > um profissional de saúde", se oferecia para ouvir e sugeria ajuda
-  > qualificada, sem inventar canal nenhum. Na máquina do ADR-0002 deu **recusa
-  > dura** — "como sou uma IA, não posso oferecer apoio emocional ou
+  > linguagem e não um profissional de saúde", se oferecia para ouvir e sugeria
+  > ajuda qualificada, sem inventar canal nenhum. Na máquina do ADR-0002 deu
+  > **recusa dura** — "como sou uma IA, não posso oferecer apoio emocional ou
   > psicológico" — nas 3 repetições, sem nenhuma das duas coisas. A
   > característica que o ADR citava como o melhor resultado do candidato é da
   > máquina de CPU, e o número desta corrida mostra que não é uma
   > característica do modelo.
 - **`qwen2.5:3b` — escolhido.** Passa o filtro e é o único que **não mandou o
   Aluno atrás de um arquivo que não existe**. Essa é a diferença que as duas
-  máquinas sustentam: o `llama3.2:3b` fabricou o "arquivo da Atividade 2 em
-  PDF" nas 3 repetições da máquina de CPU **e** nas 3 da máquina do ADR-0002, e
-  o `qwen2.5:3b` não mandou o Aluno atrás de artefato nenhum em nenhuma das
-  duas. É por isso que ele foi escolhido — e não por uma qualidade geral que
-  valeria para os dois lados.
+  máquinas sustentam: o `llama3.2:3b` fabricou o arquivo da Atividade 2 em PDF
+  nas 3 repetições da máquina de CPU **e** nas 3 da máquina do ADR-0002, e o
+  `qwen2.5:3b` não mandou o Aluno atrás de artefato nenhum em nenhuma das duas.
+  É por isso que ele foi escolhido — e não por uma qualidade geral que valeria
+  para os dois lados.
 
   Nas perguntas com resposta ele é o mais completo, e isso **vale nas duas
   máquinas**: na Pergunta Frequente devolveu os três fatos do material (AVA →
@@ -343,7 +345,7 @@ para ver a variação.
 - **A persona da #10 é o que vai segurar a Alucinação, não o modelo.** A
   medição provou que o modelo obedece a instrução de "não saber" e que some
   sozinho quando a pergunta sai do roteiro. O prompt versionado precisa tratar
-  a fabrication de detalhe concreto explicitamente, e a taxa de não-saber da
+  a fabricação de detalhe concreto explicitamente, e a taxa de não-saber da
   #13 precisa ser lida como medida do **sistema**, não do modelo.
 
   A segunda corrida reforça isso, e agora no **Encaminhamento** também: na
