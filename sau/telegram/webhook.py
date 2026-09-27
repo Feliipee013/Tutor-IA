@@ -6,7 +6,8 @@ and returns an immediate "ok" acknowledgment without depending on LLM inference.
 
 import logging
 import os
-from flask import Flask, request, jsonify
+
+from flask import Flask, jsonify, request
 
 logger = logging.getLogger(__name__)
 
