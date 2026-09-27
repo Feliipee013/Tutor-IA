@@ -1,15 +1,39 @@
 # Medição de velocidade na máquina com GPU
 
-> **PENDENTE — a coluna de velocidade do
-> [ADR-0003](../adr/0003-modelo-do-ollama.md) está esperando este arquivo.**
+> ## Medido em 26/09/2026, e o número é válido
 >
-> A qualidade dos três candidatos já foi medida e está em
-> [`resultado-cpu.md`](./resultado-cpu.md). A **velocidade não foi**: a máquina
-> onde a medição de qualidade saiu é um notebook AMD sem GPU discreta, e o
-> ADR-0002 exige que a velocidade seja medida na máquina alvo. Os tempos em CPU
-> que existem em `resultado-cpu.md` **não** podem substituir esta medição — eles
-> descrevem outra máquina, e a nota da issue #3 chama exatamente isso de "o
-> critério mais fácil de cumprir errado".
+> A coluna de velocidade do
+> [ADR-0003](../adr/0003-modelo-do-ollama.md) está preenchida, e saiu desta
+> máquina — que **é** a do ADR-0002. O `ollama ps` mostrou **`100% GPU` nos
+> três candidatos**, que é a autoridade: é ela, e não a ausência de CPU na
+> coluna, que prova em que processador cada um rodou.
+>
+> | | |
+> | --- | --- |
+> | Sistema | Linux 7.1.1-76070101-generic |
+> | GPU | NVIDIA GeForce GTX 1650 |
+> | VRAM | 4,00 GiB |
+> | RAM | 7,53 GiB totais, 2,73 GiB livres no momento da medição |
+> | Ollama | 0.34.4 |
+>
+> As condições são as mesmas da corrida em CPU: `seed` 20260926,
+> `temperature` 0, `num_predict` 256, `num_ctx` 2048, 3 repetições, 36
+> respostas. A medição rodou **sem** `--permitir-cpu` e **sem** `--manter-vivo`,
+> e é por isso que o cold start desta tabela é o cold start de verdade: o
+> defeito conhecido da flag `--manter-vivo`, que quebra a régua de cold start
+> em silêncio, não entrou aqui.
+>
+> **O número não reverteu a escolha.** `qwen2.5:3b` e `llama3.2:3b` empatam
+> em 0,02 s de primeiro token, e o critério 3 da regra — que separa os dois —
+> já tinha decidido antes deste número existir. O que a segunda máquina mudou
+> foi a **prosa**: três afirmações qualitativas do ADR-0003 que descreviam a
+> máquina de CPU não se sustentam aqui, e o ADR agora diz o nome da máquina ao
+> lado de cada uma.
+>
+> As seções de método abaixo — procedure, checagens, regra do número — foram
+> mantidas de propósito. Elas descrevem **como** a medição foi feita e
+> **como** o número deve ser lido, e continuam valendo para quem medir em
+> outra máquina.
 
 ## Para quem é
 
@@ -118,30 +142,73 @@ Se der erro de RAM ao baixar o segundo modelo, é falta de memória de disco ou 
 banda, não do modelo: rode um candidato por vez com
 `--candidatos llama3.2:3b` e cole as tabelas na mesma ordem.
 
-## O que colar aqui
+## O número medido
 
-Substitua o bloco de pendência abaixo pelos números da sua máquina. São **três
-números por candidato**, e eles são os que faltam no ADR.
+A tabela abaixo está preenchida com o número desta máquina, que é a do ADR-0002.
+Quem medir em outra máquina substitui as células pelas suas — e o número do
+[ADR-0003](../adr/0003-modelo-do-ollama.md) é o que entra na coluna de
+velocidade, nunca outro.
 
 | Candidato | Pesos (`ollama list`) | Processador (do `ollama ps`) | Primeiro token mediana (s) | Primeiro token cold start (s) | Geração média (s) | Mediana (s) | tok/s (secundário) |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `qwen2.5:3b` | _a medir_ | _a medir_ | _a medir_ | _a medir_ | _a medir_ | _a medir_ | _a medir_ |
-| `llama3.2:3b` | _a medir_ | _a medir_ | _a medir_ | _a medir_ | _a medir_ | _a medir_ | _a medir_ |
-| `gemma2:2b` | _a medir_ | _a medir_ | _a medir_ | _a medir_ | _a medir_ | _a medir_ | _a medir_ |
+| `qwen2.5:3b` | 1.9 GB | **100% GPU** | **0,02 s** | **0,21 s** | 2,67 s | 1,67 s | 51,3 |
+| `llama3.2:3b` | 2.0 GB | **100% GPU** | **0,02 s** | **0,22 s** | 2,25 s | 1,98 s | 53,2 |
+| `gemma2:2b` | 1.6 GB | **100% GPU** | **0,05 s** | **1,05 s** | 2,70 s | 1,90 s | 56,3 |
 
-E cole também, para a evidência:
+`100% GPU` nos três, então **nenhum candidato foi tarjado** e todos os três
+saíram com número. A diferença entre eles na régua é pequena: o
+`qwen2.5:3b` e o `llama3.2:3b` empatam em 0,02 s, e o `gemma2:2b` está a
+0,03 s dos dois. Na régua, os três são praticamente o mesmo modelo — e o que
+separa os dois que passam no filtro é o critério 3, que vem **antes** da
+velocidade na ordem da regra.
+
+O que **não** é empate é a primeira repetição de cada pergunta, a linha que o
+ADR separa como cold start: 1,05 s do `gemma2:2b` contra 0,21 s do
+`qwen2.5:3b` é **cinco vezes** mais espera. E é exatamente na métrica que a
+tabela do ADR trata como secundária, o `tok/s`, onde o `gemma2:2b` lidera
+(56,3 contra 51,3) — a ordem se inverte entre as duas últimas colunas, e é a
+régua que decide.
+
+> **O que essa linha é, e o que ela não é.** É a mediana das 4 repetições 1 dos
+> 4 candidatos, e por isso não é uma atípica nem ruído: o mesmo padrão se
+> repete nos três, com `gemma2:2b` cerca de 5× acima dos outros dois. O que
+> ela **não** é é tempo de carregar pesos: o `carga_segundos` que o `medir.py`
+> grava é de **~0,001 s nas 12 respostas**, repetição 1 incluída — o modelo
+> já está aquecido quando as 12 respostas começam, e a diferença da repetição 1
+> é quase toda a leitura do prompt (`prompt_eval_duration`), não a carga. A
+> docstring do campo diz que a repetição 1 "paga a carga do modelo", e o número
+> desta corrida não confirma essa leitura. O ADR-0003 mantém a coluna e o
+> significado dela porque a regra de troca é a mesma; o que muda é a causa, e
+> ela está registrada aqui em vez de ser afirmada em silêncio.
+
+## A evidência
+
+As linhas que o `medir.py` imprimiu, com o PROCESSOR de cada candidato:
 
 ```
-ollama list: <a linha de cada modelo>
-ollama ps:   <a linha de cada modelo, com o PROCESSOR>
+ollama list: qwen2.5:3b  357c53fb659c  1.9 GB  Less than a second ago
+ollama list: llama3.2:3b  a80c4f17acd5  2.0 GB  Less than a second ago
+ollama list: gemma2:2b  8ccf136fdd52  1.6 GB  Less than a second ago
+
+ollama ps:   qwen2.5:3b  357c53fb659c  2.1 GB  100% GPU  2048  4 minutes from now
+ollama ps:   llama3.2:3b  a80c4f17acd5  2.3 GB  100% GPU  2048  4 minutes from now
+ollama ps:   gemma2:2b  8ccf136fdd52  1.8 GB  100% GPU  2048  4 minutes from now
 ```
 
-Se a coluna PROCESSOR mostrar **100% GPU**, a medição é válida. Se mostrar
-qualquer porcentagem de CPU, a medição **não** é válida, mesmo que os tempos
-pareçam bons — e nesse caso o número não entra no ADR. A regra vale por
-candidato: um que caia só parcialmente para CPU já é tarjado, e um que esteja
-de fato na GPU sai com número mesmo numa máquina sem `nvidia-smi`. Quem prova a
-placa é a coluna PROCESSOR.
+Os pesos dos dois blocos batem coluna a coluna com a tabela acima, e o SIZE do
+`ollama ps` é sempre **maior** que o peso no `ollama list` — 1,9 vira 2,1, 2,0
+vira 2,3, 1,6 vira 1,8. É o KV cache e o overhead de runtime com
+`num_ctx: 2048`, medidos na GPU, e é o que sustenta o teto de ~1,9–2,0 GB de
+pesos do ADR-0003. Em CPU a diferença é a mesma, e é por isso que o número do
+teto não dependia da máquina.
+
+A regra de leitura desta tabela continua valendo, e é a que impediu um número
+errado de entrar: se a coluna PROCESSOR mostrar qualquer porcentagem de CPU, a
+medição **não** é válida, mesmo que os tempos pareçam bons — e nesse caso o
+número não entra no ADR. A regra vale por candidato: um que caia só
+parcialmente para CPU já é tarjado, e um que esteja de fato na GPU sai com
+número mesmo numa máquina sem `nvidia-smi`. Quem prova a placa é a coluna
+PROCESSOR. Nos três daqui, `100% GPU`.
 
 ## Qual número decide
 
@@ -165,22 +232,47 @@ mas não têm o mesmo peso:
   tokens rápido depois de esperar 5 s continua sendo um modelo que o Aluno
   espera 5 s.
 
-## Como o número volta para o ADR
+## Como o número voltou para o ADR
 
-1. Preencher a tabela acima e o bloco de pendência.
-2. Trocar, no [ADR-0003](../adr/0003-modelo-do-ollama.md), a coluna de velocidade
-   de `pendente` pelos números, e **tirar** o aviso de que a velocidade está
-   pendente.
-3. Conferir que a máquina registrada no ADR é a do ADR-0002 (4 GB de VRAM,
-   7,5 GiB de RAM) e que o `ollama ps` de cada candidato mostrou GPU.
-4. Se a velocidade **mudar o vencedor**, isso é um resultado, não um problema:
-   a regra de decisão do ADR-0003 põe a velocidade em último lugar e desempata
-   por ela, então o texto da escolha precisa ser revisto junto com o número.
+O que foi feito com esta medição, e o que ela decidiu:
+
+1. **A coluna de velocidade do
+   [ADR-0003](../adr/0003-modelo-do-ollama.md) foi preenchida** com os números
+   desta tabela e com o `100% GPU` dos três, e o aviso de que a velocidade
+   estava por medir saiu do ADR.
+2. **A máquina foi registrada junto do número**: VRAM de 4,00 GiB e RAM de
+   7,53 GiB, que é o teto do ADR-0002 conferido contra o `ollama ps`, e não
+   assumido.
+3. **A escolha não mudou.** `qwen2.5:3b` continua o escolhido, e o desempate
+   declarado nunca precisou ser acionado: os dois candidatos que passam no
+   filtro duro estão empatados em 0,02 s, e o critério 3 — Alucinação e
+   comportamento no secundário — já os tinha separado. A velocidade confirmou
+   o que os outros três critérios disseram, que é o melhor jeito de ela
+   confirmar.
+4. **A prosa do ADR mudou, e isso é o resultado que importa.** A máquina de CPU
+   e esta máquina discordam em três afirmações qualitativas que o ADR
+   escrevia sem dizer de qual máquina vinham. Nenhuma delas muda o vencedor, e
+   as três mudam o que o ADR afirma saber:
+   | Afirmação que estava no ADR | Na máquina de CPU | Na máquina do ADR-0002 |
+   | --- | --- | --- |
+   | Telefone de apoio emocional do `qwen2.5:3b` | fabricou `1800 651 88` em 2 das 3 repetições de Encaminhamento | **não reproduziu** — 3 de 3 deram a mesma recusa limpa, sem detalhe inventado |
+   | Arquivo da Atividade 2 do `llama3.2:3b` | fabricou nas 3 repetições | **fabricou nas 3 de novo**, e é a diferença que as duas máquinas sustentam |
+   | Encaminhamento do `llama3.2:3b` | "declaro ser um modelo de linguagem, ofereço ouvir, sugiro ajuda qualificada" | recusa dura: "como sou uma IA, não posso oferecer apoio emocional ou psicológico" |
+
+5. **O `gemma2:2b` ganhou a métrica secundária e perdeu a régua.** 56,3 tok/s
+   contra 51,3 do `qwen2.5:3b` — e 1,05 s de cold start contra 0,21 s. Se o
+   ADR desempatasse pelo `tok/s`, a escolha seria outra; como desempata pelo
+   primeiro token, o `gemma2:2b` fica fora pelo filtro duro e a escolha não se
+   move. É a regra de troca funcionando como foi escrita.
+6. **`temperature: 0` com seed fixo não reproduziu aqui também** — e não era
+   para reproduzir. Das 12 perguntas, **7** tiveram as 3 repetições idênticas,
+   contra 4 de 12 na máquina de CPU. A variância **entre máquinas** é maior
+   que a variância dentro de uma delas, e o ADR-0003 passou a citar as duas.
 
 ## Referências
 
 - [ADR-0002 — topologia do Ollama](../adr/0002-topologia-do-ollama.md) — a falha silenciosa de CPU, e o teto de hardware
 - [ADR-0003 — modelo do Ollama](../adr/0003-modelo-do-ollama.md) — a regra de decisão e a escolha
 - [`sondagem.md`](./sondagem.md) — as 4 perguntas e o comportamento esperado de cada uma
-- [`resultado-cpu.md`](./resultado-cpu.md) — a medição de qualidade, que **não** substitui esta
+- [`resultado-cpu.md`](./resultado-cpu.md) — a medição de qualidade, em outra máquina, que **não** substitui esta
 - [Ollama com GPU NVIDIA](https://docs.ollama.com/gpu)
