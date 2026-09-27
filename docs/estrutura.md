@@ -84,7 +84,7 @@ serviço à parte.
 
 | Caminho | O que é | Ticket | Existe |
 | --- | --- | --- | --- |
-| `perguntas-teste/` | as 10 Perguntas-teste, com o comportamento esperado de cada uma | #6 | não |
+| `perguntas-teste/` | as 10 Perguntas-teste, com o comportamento esperado de cada uma | #6 | sim |
 | `corpus/` | os quatro documentos autorados, um por categoria, com as contradições plantadas | P1 | não |
 | `outputs/` | saída bruta do harness, ignorada pelo git | #12 | não |
 | `tests/` | suíte `pytest` | — | não |
