@@ -85,43 +85,45 @@ def test_verificar_modelo_disponivel_sucesso() -> None:
             200,
             {
                 "models": [
-                    {"name": "llama3.2:3b", "model": "llama3.2:3b"},
                     {"name": "qwen2.5:3b", "model": "qwen2.5:3b"},
+                    {"name": "gemma2:2b", "model": "gemma2:2b"},
                 ]
             },
         )
     })
     # Não deve levantar exceção
-    verificar_modelo_disponivel("http://host.docker.internal:11434", "llama3.2:3b", client=client)
+    verificar_modelo_disponivel("http://host.docker.internal:11434", "qwen2.5:3b", client=client)
 
 
 def test_verificar_modelo_disponivel_com_latest() -> None:
     client = _criar_mock_client({
         "GET /api/tags": (
             200,
-            {"models": [{"name": "llama3.2:latest", "model": "llama3.2:latest"}]},
+            {"models": [{"name": "qwen2.5:latest", "model": "qwen2.5:latest"}]},
         )
     })
     # Sem tag explícita, deve encontrar com :latest
-    verificar_modelo_disponivel("http://host.docker.internal:11434", "llama3.2", client=client)
+    verificar_modelo_disponivel("http://host.docker.internal:11434", "qwen2.5", client=client)
 
 
 def test_verificar_modelo_disponivel_falha_nao_encontrado() -> None:
+    # O host tem o llama3.2, que o ADR-0003 descartou; o serviço pede o qwen2.5,
+    # que é o escolhido. A mensagem precisa listar o que está lá de fato.
     client = _criar_mock_client({
         "GET /api/tags": (
             200,
-            {"models": [{"name": "qwen2.5:3b", "model": "qwen2.5:3b"}]},
+            {"models": [{"name": "llama3.2:3b", "model": "llama3.2:3b"}]},
         )
     })
     with pytest.raises(ModeloNaoEncontradoError) as exc_info:
         verificar_modelo_disponivel(
-            "http://host.docker.internal:11434", "llama3.2:3b", client=client
+            "http://host.docker.internal:11434", "qwen2.5:3b", client=client
         )
 
     msg = str(exc_info.value)
     assert "FALHA CRÍTICA" in msg
-    assert "ollama pull llama3.2:3b" in msg
-    assert "qwen2.5:3b" in msg
+    assert "ollama pull qwen2.5:3b" in msg
+    assert "llama3.2:3b" in msg
 
 
 # --- Testes de Alocação GPU vs CPU ---
@@ -129,7 +131,8 @@ def test_verificar_modelo_disponivel_falha_nao_encontrado() -> None:
 _VRAM_4GIB = 4 * 1_073_741_824
 """VRAM declarada da máquina do ADR-0002: os 4 GiB da GTX 1650 que a #3 mediu."""
 
-_MODELO = "llama3.2:3b"
+_MODELO = "qwen2.5:3b"
+"""O modelo do ADR-0003, o mesmo que o compose pede por padrão."""
 
 
 def _client_com_ps(item_modelo: dict[str, Any]) -> httpx.Client:

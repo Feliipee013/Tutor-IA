@@ -4,10 +4,11 @@ Este arquivo é a referência de ambiente do **Tutor-IA**. Ele tem duas partes: 
 ferramenta que o time já usa agora, que está pronta, e a execução do projeto,
 que ainda vai ser preenchida conforme o código entrar.
 
-> **Estado do repositório em 25/09/2026:** o projeto tem documentação, ADRs e
-> plano de sprint, mas **nenhuma linha de código de aplicação ainda**. A §3 é o
-> contrato do que vai existir; atualize-a junto com o primeiro `docker compose up`
-> funcional (issue #4).
+> **Estado do repositório:** a §3 já não é contrato — é o que está rodando. A
+> issue #4 entregou o serviço do bot como container, e a §3 descreve o
+> `docker compose up` que o sobe. As partes de conversa do S.A.U. ainda não
+> existem: o serviço sobe, checa os pré-requisitos e responde `/health`, e nada
+> mais. O mapa do que falta está em [`docs/estrutura.md`](./docs/estrutura.md).
 
 ## 1. Mapa do repositório
 
