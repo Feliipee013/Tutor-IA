@@ -98,23 +98,30 @@ def destinos_de_saida(monkeypatch: pytest.MonkeyPatch, telegram: TelegramFalso) 
     O `TelegramFalso` só enxerga o `httpx.Client` que o teste injeta, e o handler
     pode abrir um cliente próprio para falar com o Ollama. Nesse caso nada seria
     registrado e uma guarda de "o acuse não espera o modelo" passaria com a
-    garantia quebrada — foi o que a primeira versão desta PR fazia. Por isso o
-    registro é no nível do módulo, e não no cliente injetado.
+    garantia quebrada — foi o que a primeira versão desta PR fazia.
+
+    Por isso o registro é no `httpx.Client.request`, e não no cliente injetado.
+    Esse método é o funil por onde **todo** o tráfego HTTP do processo passa:
+    `Client.post` e `Client.get` delegam a ele, e `httpx.post` e `httpx.request`
+    de módulo abrem um `Client` e chamam o mesmo método. Patchear o `.post` — a
+    versão anterior desta fixture — deixava passar de fininho uma chamada
+    `.request`, que é a forma que a inferência da #8 usa para falar com o Ollama:
+    a guarda ficava verde com a garantia quebrada.
     """
     destinos: list[str] = []
 
-    def post_do_cliente(
-        _self: httpx.Client, url: Any, *_args: Any, **_kwargs: Any
+    def request_do_cliente(
+        _self: httpx.Client, *args: Any, **kwargs: Any
     ) -> httpx.Response:
+        # As duas portas do funil passam `method` e `url` de formas diferentes:
+        # `Client.post` e `Client.get` por posição, `httpx.request` de módulo por
+        # nome. A substituta precisa aceitar as duas, senão ela mede só metade do
+        # tráfego que diz medir.
+        url = kwargs["url"] if "url" in kwargs else args[1]
         destinos.append(str(url))
         return telegram.responder(url)
 
-    def post_do_modulo(url: Any, *_args: Any, **_kwargs: Any) -> httpx.Response:
-        destinos.append(str(url))
-        return telegram.responder(url)
-
-    monkeypatch.setattr(httpx.Client, "post", post_do_cliente)
-    monkeypatch.setattr(httpx, "post", post_do_modulo)
+    monkeypatch.setattr(httpx.Client, "request", request_do_cliente)
     return destinos
 
 
@@ -222,6 +229,87 @@ def test_entrypoint_do_webhook_configura_o_log_antes_do_banner(
     assert "S.A.U. - webhook do Telegram" in saida, f"o banner não saiu no stdout: {saida!r}"
 
 
+def test_entrypoint_do_webhook_aplica_o_log_level_do_ambiente(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """O `LOG_LEVEL` do ambiente precisa chegar ao log do serviço, e este é o AC #3.
+
+    O `main` do webhook chama `configurar_logging` duas vezes: uma antes de ler a
+    configuração, para que uma configuração inválida saia no mesmo formato de todo
+    o resto, e outra depois, com o nível que a própria configuração pediu. Ninguém
+    provava a segunda. A suíte ficava verde com ela removida — `LOG_LEVEL` era
+    lido do ambiente e jogado fora, e o operador que pedia `DEBUG` para depurar
+    recebia `INFO` sem nenhum aviso.
+
+    O módulo do webhook não tem nenhum `logger.debug`, então este teste não pode
+    procurar um registro que não existe. Ele faz as duas coisas que importam:
+    confere o nível efetivo da raiz, e emite de verdade um registro de DEBUG
+    **depois** do `main`, para o stdout. A segunda é a que vale — prova que o
+    operador veria a linha, e não só que uma configuração mudou.
+    """
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", _TOKEN)
+    monkeypatch.setenv("TELEGRAM_WEBHOOK_SECRET_TOKEN", _SEGREDO)
+    monkeypatch.setenv("LOG_LEVEL", "DEBUG")
+    monkeypatch.setattr(Flask, "run", _nao_sobe_servidor)
+
+    marcador = "marcador de depuração que o operador precisa ver"
+    raiz = logging.getLogger()
+    handlers, nivel = raiz.handlers[:], raiz.level
+    try:
+        raiz.handlers[:] = []
+        raiz.setLevel(logging.WARNING)
+        main()
+        assert raiz.level == logging.DEBUG, (
+            f"o LOG_LEVEL=DEBUG do ambiente não foi aplicado: raiz ficou em {raiz.level}"
+        )
+        # Depois do `main`, com o nível que ele deixou: é o caminho do operador.
+        logging.getLogger(LOGGER).debug(marcador)
+    finally:
+        raiz.handlers[:] = handlers
+        raiz.setLevel(nivel)
+
+    saida = capsys.readouterr().out
+    assert marcador in saida, f"o DEBUG não chegou ao stdout do operador: {saida!r}"
+
+
+def test_linha_de_log_do_webhook_traz_o_prefixo_do_sau_e_o_nome_do_servico(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A linha do webhook diz `[SAU]` e o nome do serviço que a emitiu.
+
+    O prefixo é do S.A.U. e não do serviço: `bot` está na seção *Evite* do
+    `CONTEXT.md`, e o serviço já está identificado na própria linha pelo nome do
+    módulo — `sau.telegram.webhook` contra `sau.main`. O prefixo `[SAU-BOT]`
+    rotulava como "bot" a linha de um serviço que é o canal do Telegram, e
+    apontava para o serviço errado para quem fosse filtrar por ele.
+
+    Passa pelo `main` de verdade porque é a linha que o operador recebe que está
+    em questão, não o que o `configurar_logging` produziria chamado na mão.
+    """
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", _TOKEN)
+    monkeypatch.setenv("TELEGRAM_WEBHOOK_SECRET_TOKEN", _SEGREDO)
+    monkeypatch.setattr(Flask, "run", _nao_sobe_servidor)
+
+    raiz = logging.getLogger()
+    handlers, nivel = raiz.handlers[:], raiz.level
+    try:
+        main()
+    finally:
+        raiz.handlers[:] = handlers
+        raiz.setLevel(nivel)
+
+    saida = capsys.readouterr().out
+    linha = next(
+        (texto for texto in saida.splitlines() if "S.A.U. - webhook do Telegram" in texto),
+        None,
+    )
+    assert linha is not None, f"o banner não saiu no stdout: {saida!r}"
+    # `[SAU]` fecha com o colchete, e é isso que barra o prefixo antigo:
+    # `[SAU-BOT]` não contém `[SAU]`.
+    assert "[SAU]" in linha, f"o prefixo do S.A.U. não está na linha: {linha!r}"
+    assert f"{LOGGER}:" in linha, f"o nome do serviço não está na linha: {linha!r}"
+
+
 # --- O Aluno recebe o acuse de recibo, que é o que dá nome ao ticket ---
 
 
@@ -248,7 +336,13 @@ def test_webhook_nao_toca_no_ollama(
     cliente injetado registrou. As duas coisas não são a mesma coisa: um cliente
     que o próprio handler abre para falar com o Ollama não passa pelo
     `TelegramFalso`, e uma guarda montada só sobre ele passa com o acuse
-    esperando o modelo. Por isso a fixture `destinos_de_saida`.
+    esperando o modelo.
+
+    "Toda URL" só é verdade porque a fixture `destinos_de_saida` patcha o
+    `httpx.Client.request`, por onde todo o tráfego passa. Numa versão anterior
+    ela patchava o `Client.post`, e uma chamada `.request` para o Ollama — a
+    forma que a #8 usa — não era registrada: este teste ficava verde com a
+    garantia quebrada. A promessa agora vem com o funil que a sustenta.
     """
     config = carregar_configuracao(_ENV_PADRAO)
     _postar(criar_app(config, telegram.cliente), UPDATE_DO_ALUNO)

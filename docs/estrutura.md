@@ -74,7 +74,7 @@ grafo, não como serviço à parte.
 | Caminho | O que faz | Ticket | Existe |
 | `sau/config.py` | lê do ambiente o que a #4 precisa: modelo, timeout, porta, a URL base do Ollama no host e a VRAM total da máquina; e o que a #5 precisa: as duas credenciais do Telegram, a porta do webhook e a URL da API. Temperatura e `k` do semáforo ainda não são lidos — chegam nos tickets que vão escrevê-los, e a linha cresce aqui quando eles existirem | #4, #5 | sim |
 | `sau/prereqs.py` | checagem rigorosa de pré-requisitos (conectividade, modelo e GPU no host) | #4 | sim |
-| `sau/main.py` | entrypoint do serviço com logs estruturados `[SAU-BOT]` e health server | #4 | sim |
+| `sau/main.py` | entrypoint do serviço com logs estruturados e health server. O prefixo da linha é `[SAU]`, do S.A.U.; o serviço que emitiu a linha é identificado pelo nome do módulo nela mesma (`sau.main` contra `sau.telegram.webhook`), e não pelo prefixo | #4 | sim |
 | `sau/persona.py` | o prompt versionado do S.A.U., com todas as regras de comportamento | #10 | não |
 | `sau/telegram/webhook.py` | handler do webhook, com acuse de recibo fixo ao Aluno antes de qualquer inferência, registro do update bruto e conferência do `secret_token` | #5 | sim |
 | `sau/telegram/__main__.py` | entrypoint do serviço `webhook`, para o log sair com o nome do módulo e não `__main__` | #5 | sim |

@@ -104,7 +104,7 @@ Para executar em segundo plano:
 docker compose up -d --build
 ```
 
-Para visualizar os logs estruturados com o identificador `[SAU-BOT]`:
+Para visualizar os logs estruturados com o identificador `[SAU]`:
 
 ```sh
 docker compose logs -f bot

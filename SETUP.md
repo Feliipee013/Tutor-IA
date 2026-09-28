@@ -154,7 +154,7 @@ consumindo o **Ollama rodando nativamente no host**, conforme
     a expõe, porque o canal conversa com a API do Telegram
 - **Variável do host, fora do container:** `OLLAMA_HOST=0.0.0.0:11434`, consumida
   pelo `ollama serve` e não pelo serviço. Ver o passo 2 logo abaixo.
-- **Logs estruturados:** formato padronizado com prefixo `[SAU-BOT]` no stdout.
+- **Logs estruturados:** formato padronizado com prefixo `[SAU]` no stdout.
 
 ### Subindo o bot via Docker Compose
 
