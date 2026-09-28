@@ -17,6 +17,8 @@ def test_configuracao_valores_padrao() -> None:
     assert config.bot_port == 8000
     assert config.bot_env == "development"
     assert config.log_level == "INFO"
+    assert config.telegram_bot_token is None
+    assert config.telegram_webhook_secret_token is None
 
 
 def test_configuracao_sobrescrita_via_ambiente() -> None:
@@ -102,3 +104,52 @@ def test_configuracao_timeout_invalido() -> None:
 def test_configuracao_porta_invalida() -> None:
     with pytest.raises(ValueError, match="Valor inválido para BOT_PORT"):
         carregar_configuracao({"BOT_PORT": "oito_mil"})
+
+
+# --- Credenciais do Telegram ---
+
+
+def test_configuracao_telegram_padroes_sem_credenciais() -> None:
+    """Quem não conversa com o Telegram sobe sem elas.
+
+    O serviço do bot não fala com o Telegram, então a ausência das credenciais
+    não pode ser erro de parsing — a obrigatoriedade mora no webhook.
+    """
+    config = carregar_configuracao({})
+    assert config.telegram_bot_token is None
+    assert config.telegram_webhook_secret_token is None
+    assert config.telegram_webhook_port == 8080
+    assert config.telegram_api_base == "https://api.telegram.org"
+
+
+def test_configuracao_telegram_credenciais_lidas_do_ambiente() -> None:
+    config = carregar_configuracao({
+        "TELEGRAM_BOT_TOKEN": "  7123456789:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsaw  ",
+        "TELEGRAM_WEBHOOK_SECRET_TOKEN": " chave-de-desenvolvimento ",
+        "TELEGRAM_WEBHOOK_PORT": "9001",
+        "TELEGRAM_API_BASE": "https://api.exemplo.invalid",
+    })
+    assert config.telegram_bot_token == "7123456789:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsaw"
+    assert config.telegram_webhook_secret_token == "chave-de-desenvolvimento"
+    assert config.telegram_webhook_port == 9001
+    assert config.telegram_api_base == "https://api.exemplo.invalid"
+
+
+@pytest.mark.parametrize("variavel", ["TELEGRAM_BOT_TOKEN", "TELEGRAM_WEBHOOK_SECRET_TOKEN"])
+@pytest.mark.parametrize("bruto", ["", "   "])
+def test_configuracao_telegram_credencial_vazia_vira_ausente(
+    variavel: str, bruto: str
+) -> None:
+    """Ausente de verdade e string vazia do compose são a mesma coisa."""
+    config = carregar_configuracao({variavel: bruto})
+    valor = (
+        config.telegram_bot_token
+        if variavel == "TELEGRAM_BOT_TOKEN"
+        else config.telegram_webhook_secret_token
+    )
+    assert valor is None
+
+
+def test_configuracao_telegram_porta_invalida() -> None:
+    with pytest.raises(ValueError, match="Valor inválido para TELEGRAM_WEBHOOK_PORT"):
+        carregar_configuracao({"TELEGRAM_WEBHOOK_PORT": "oito_mil"})
