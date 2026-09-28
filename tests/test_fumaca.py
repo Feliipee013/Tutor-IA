@@ -861,17 +861,24 @@ def test_script_imprime_a_linha_do_ollama_ps(tmp_path: Path) -> None:
     assert "100% GPU" in resultado.stdout
 
 
-def test_script_avisa_quando_nao_consegue_carregar_o_modelo(tmp_path: Path) -> None:
-    """Ollama no ar, mas o modelo não carregou: o script avisa, e não confirma nada."""
+def test_script_para_quando_nao_consegue_carregar_o_modelo(tmp_path: Path) -> None:
+    """Ollama no ar, mas o modelo não carregou: o script para, e não aprova nada.
+
+    Sem a linha do `ollama ps` a GPU não está verificada, e o "Pronto" final
+    seria uma aprovação sem evidência — contra o contrato do script, que para
+    e diz o motivo quando algo dá errado.
+    """
     registro = tmp_path / "pulls.txt"
     ferramentas = _montar_maquina(tmp_path, nvidia_smi="8176", pull_registrado=registro)
 
     resultado = _rodar_script(tmp_path, ferramentas, registro, {"CURL_GERAR_FALHO": "1"})
 
-    assert resultado.returncode == 0, resultado.stderr
+    assert resultado.returncode != 0
+    assert "FALHA" in resultado.stderr
     assert "não consegui carregar o modelo" in resultado.stderr
     assert "ollama run" in resultado.stderr
     assert "ollama ps:" not in resultado.stdout
+    assert "Pronto" not in resultado.stdout
 
 
 def test_script_nao_baixa_de_novo_quando_o_modelo_ja_existe(tmp_path: Path) -> None:

@@ -198,21 +198,15 @@ Docker, não no loopback. Ver o ADR-0002."
 
 mostrar_ps() {
   if ! command -v curl >/dev/null 2>&1; then
-    aviso "curl não está instalado, então não consegui carregar o modelo para ver a"
-    aviso "linha do \`ollama ps\`. Confira na mão:"
-    aviso "  ollama run ${MODELO}   e depois Ctrl+C"
-    aviso "  ollama ps"
-    return 0
+    falhar "sem curl não dá para carregar o modelo e ver a linha do \`ollama ps\` — e sem ela a GPU não está verificada. Instale o curl e rode de novo, ou confira na mão:
+  ollama run ${MODELO}   e depois Ctrl+C
+  ollama ps"
   fi
 
   curl -sS --max-time 120 "${OLLAMA_URL}/api/generate" \
     -H 'Content-Type: application/json' \
     -d "{\"model\":\"${MODELO}\",\"prompt\":\"\",\"stream\":false,\"options\":{\"num_predict\":1}}" \
-    >/dev/null 2>&1 || {
-      aviso "não consegui carregar o modelo para ver a linha do \`ollama ps\`."
-      aviso "Confira na mão se ele roda na GPU: \`ollama run ${MODELO}\` e depois Ctrl+C."
-      return 0
-    }
+    >/dev/null 2>&1 || falhar "não consegui carregar o modelo para ver a linha do \`ollama ps\` — e sem ela a GPU não está verificada. Confira na mão se ele roda na GPU: \`ollama run ${MODELO}\` e depois Ctrl+C."
 
   local linha
   linha="$(ollama ps 2>/dev/null | awk -v alvo="$MODELO" '$1 == alvo' | head -1)"
