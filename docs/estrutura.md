@@ -3,11 +3,11 @@
 Mapa de onde cada coisa mora no Tutor-IA e qual ticket a cria. Serve para um
 agente Implementar localizar o ponto de impacto sem varrer o repositório inteiro.
 
-> **Nenhuma das pastas de código existe ainda.** Este mapa é derivado dos
-> tickets da sprint 1.1 e do plano da 1.2, e é uma **proposta de layout**, não uma
-> decisão fechada. Atualize a coluna `Existe` e ajuste o caminho quando a pasta
-> for realmente criada — sobretudo o nome do pacote, que precisa ser decidido
-> junto com a issue #4.
+> **O layout já está em execução para o serviço do bot.** A issue #4 entregou
+> o pacote `sau`, o compose e a suíte de testes, e o nome do pacote foi decidido
+> junto com ela. Este mapa continua sendo derivado dos tickets das sprints 1.1 e
+> 1.2: a coluna `Existe` diz o que já existe, e as pastas marcadas `não` ainda
+> não foram criadas. Ajuste o caminho quando a pasta for realmente criada.
 
 ## Como usar este mapa
 
@@ -26,6 +26,10 @@ agente Implementar localizar o ponto de impacto sem varrer o repositório inteir
 | `CONTEXT.md` | glossário do domínio. A fonte do vocabulário de todo o código | sim |
 | `AGENTS.md` | como o agente trabalha aqui: skills, regras, Context7 | sim |
 | `SETUP.md` | ambiente: `gh`, Context7, e como executar o projeto | sim |
+| `Dockerfile` | imagem do serviço do bot, `python -m sau.main` — **issue #4** | sim |
+| `docker-compose.yml` | sobe só o serviço do bot, com o Ollama no host (ADR-0002) — **issue #4** | sim |
+| `pyproject.toml` | pacote `sau`, dependências e config de pytest, ruff e mypy — **issue #4** | sim |
+| `.env.example` | modelo das variáveis de ambiente do compose, com o que é obrigatório — **issue #4** | sim |
 | `opencode.json` | MCP do Context7 e permissões de `bash` por agente | sim |
 | `docs/` | documentação versionada (abaixo) | sim |
 | `.opencode/agents/` | subagentes `criar-pr`, `criar-ticket` e `executor` | sim |
@@ -68,7 +72,7 @@ intenção, e a 1.2 entra como rota nova **dentro** desse mesmo grafo, não como
 serviço à parte.
 
 | Caminho | O que faz | Ticket | Existe |
-| `sau/config.py` | lê o ambiente: modelo, timeout, portas e a URL base do Ollama no host | #4 | sim |
+| `sau/config.py` | lê o ambiente: modelo, temperatura, `k` do semáforo, webhook, timeout, portas, VRAM total da máquina e a URL base do Ollama no host | #4 | sim |
 | `sau/prereqs.py` | checagem rigorosa de pré-requisitos (conectividade, modelo e GPU no host) | #4 | sim |
 | `sau/main.py` | entrypoint do serviço com logs estruturados `[SAU-BOT]` e health server | #4 | sim |
 | `sau/persona.py` | o prompt versionado do S.A.U., com todas as regras de comportamento | #10 | não |

@@ -132,19 +132,22 @@ consumindo o **Ollama rodando nativamente no host**, conforme
 - **Porta padrão do serviço:** `8000` (com endpoint de saúde `/health`)
 - **Variáveis de ambiente (`.env` opcional):**
   - `OLLAMA_BASE_URL`: padrão `http://host.docker.internal:11434`
-  - `OLLAMA_MODEL`: padrão `llama3.2:3b`
+  - `OLLAMA_MODEL`: padrão `qwen2.5:3b` (o escolhido no [ADR-0003](./docs/adr/0003-modelo-do-ollama.md))
   - `OLLAMA_ALLOW_CPU`: padrão `false` (exige GPU e falha alto se cair em CPU; use `true` apenas em dev/CI sem GPU)
   - `OLLAMA_TIMEOUT`: padrão `30` (segundos)
+  - `VRAM_TOTAL_MIB`: sem padrão, **obrigatória** (VRAM total da máquina em MiB, como o `nvidia-smi` imprime; exigida pelo confronto de VRAM do ADR-0002, dispensada com `OLLAMA_ALLOW_CPU=true`)
   - `BOT_PORT`: padrão `8000`
   - `LOG_LEVEL`: padrão `INFO`
+- **Variável do host, fora do container:** `OLLAMA_HOST=0.0.0.0:11434`, consumida
+  pelo `ollama serve` e não pelo serviço. Ver o passo 2 logo abaixo.
 - **Logs estruturados:** formato padronizado com prefixo `[SAU-BOT]` no stdout.
 
 ### Subindo o bot via Docker Compose
 
 ```sh
 # 1. Certifique-se de que o Ollama está rodando no host e o modelo está baixado
-ollama serve
-ollama pull llama3.2:3b
+OLLAMA_HOST=0.0.0.0:11434 ollama serve
+ollama pull qwen2.5:3b
 
 # 2. Suba o serviço do bot
 docker compose up --build
@@ -165,15 +168,35 @@ Em troca, a GPU da máquina é usada sem instalar driver de container algum.
 **Instalar e verificar, nesta ordem:**
 
 ```sh
-# 1. o driver NVIDIA responde?
+# 1. o driver NVIDIA responde, e quanto de VRAM a placa tem?
 nvidia-smi
+nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits
 
-# 2. o Ollama está no ar?
-curl -s http://localhost:11434/api/version
+# 2. o Ollama está no ar, escutando em todas as interfaces?
+OLLAMA_HOST=0.0.0.0:11434 ollama serve   # em um terminal
+curl -s http://localhost:11434/api/version   # em outro
 
 # 3. está mesmo na GPU, e não em CPU?
 ollama ps        # a coluna PROCESSOR diz "100% GPU" ou "100% CPU"
 ```
+
+**O passo 2 é o que o compose não consegue fazer por você.** O bind padrão do
+Ollama é `127.0.0.1`, e o container do bot chega no IP da bridge do Docker, não
+no loopback do host: com o bind padrão a conexão é recusada na hora, com
+`Errno 111: Connection refused`, antes de qualquer checagem de pré-requisito. Por
+isso o `OLLAMA_HOST` precisa ser `0.0.0.0:11434` no shell **antes** de subir o
+Ollama. A contrapartida é de segurança: `0.0.0.0` expõe a porta 11434 em todas
+as interfaces da rede, não só na localhost. Em rede confiável, com a máquina de
+inference atrás de firewall, é o preço do bind; em rede não confiável, restrinja
+o bind a uma interface que só a bridge alcance, ou coloque um proxy com
+autenticação na frente.
+
+O número do `nvidia-smi --query-gpu=memory.total` é o que alimenta a
+`VRAM_TOTAL_MIB`, e ele é **obrigatório**: nenhum endpoint do Ollama reporta a
+VRAM total da máquina, então sem ele a checagem do ADR-0002 não tem contra o que
+comparar o `size_vram` que o Ollama relata, e o serviço falha alto. Quem está em
+dev ou CI sem GPU não precisa dele, porque `OLLAMA_ALLOW_CPU=true` transforma a
+falha em warning.
 
 O passo 3 é o que não pode ser pulado. `nvidia-smi` responder e a porta 11434
 devolver JSON **são compatíveis com o Ollama servindo em CPU** — e nesse estado

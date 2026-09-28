@@ -1,7 +1,9 @@
 """Módulo de checagem rigorosa de pré-requisitos do S.A.U.
 
 Garante que o Ollama no host esteja ativo, com o modelo baixado e alocado
-em GPU, impedindo a degradação silenciosa para CPU conforme o ADR-0002.
+em GPU, impedindo a degradação silenciosa para CPU conforme o ADR-0002. A
+alocação é conferida contra a VRAM que a máquina declarou, porque nem a
+porta respondendo nem o `size_vram` isolado provam GPU.
 """
 
 from __future__ import annotations
@@ -30,6 +32,10 @@ class ModeloNaoEncontradoError(PreRequisitoError):
 
 class CpuNaoAutorizadaError(PreRequisitoError):
     """Lançada quando o modelo cai para CPU sem autorização explícita."""
+
+
+class VramNaoInformadaError(PreRequisitoError):
+    """Lançada quando o host não declarou a VRAM total que a checagem confronta."""
 
 
 def verificar_conectividade(
@@ -154,17 +160,106 @@ def aquecer_modelo(
         ) from err
 
 
+def _diagnosticar_alocacao(
+    modelo: str,
+    size: int,
+    size_vram: int | None,
+    vram_total_bytes: int | None,
+) -> tuple[type[PreRequisitoError], str] | None:
+    """Confere a alocação do modelo contra a VRAM que a máquina declarou.
+
+    Devolve o par (exceção, mensagem) quando a alocação não é aceitável, ou
+    None quando o modelo está inteiro na GPU. Cada situação tem mensagem
+    própria, porque "não deu para conferir" e "caiu para CPU" pedem ações
+    diferentes de quem lê o log, e o diagnóstico que os dois casos tinham em
+    comum — "100.0% em CPU" — não separava a queda silenciosa de um payload
+    incompleto.
+    """
+    if vram_total_bytes is None or vram_total_bytes <= 0:
+        return VramNaoInformadaError, (
+            f"Não foi possível conferir a VRAM do modelo '{modelo}': "
+            "a VRAM total da máquina não foi informada.\n"
+            "Nenhum endpoint do Ollama reporta o total da placa, então ele tem de "
+            "vir do host:\n"
+            "  export VRAM_TOTAL_MIB=$(nvidia-smi --query-gpu=memory.total "
+            "--format=csv,noheader,nounits)\n"
+            "Sem esse número a checagem do ADR-0002 não tem contra o que comparar o "
+            "size_vram que o Ollama relata."
+        )
+
+    if size_vram is None:
+        return PreRequisitoError, (
+            f"O Ollama não informou o campo 'size_vram' do modelo "
+            f"'{modelo}' em /api/ps. O payload veio incompleto, o que é diferente de "
+            f"VRAM zerada, e a checagem para aqui em vez de assumir que o modelo está "
+            f"na GPU.\n"
+            f"O que veio: size={size} bytes, com a máquina declarando "
+            f"{vram_total_bytes} bytes de VRAM."
+        )
+
+    if size_vram > vram_total_bytes:
+        return PreRequisitoError, (
+            f"Dados contraditórios para o modelo '{modelo}'. O Ollama "
+            f"relata {size_vram} bytes na VRAM, acima dos {vram_total_bytes} bytes "
+            f"declarados para a máquina. Um dos dois números está errado, então o "
+            f"veredito é impossível: ou o modelo não cabe em {vram_total_bytes} bytes, "
+            f"ou VRAM_TOTAL_MIB não descreve a placa em uso."
+        )
+
+    if size > vram_total_bytes:
+        return PreRequisitoError, (
+            f"O modelo '{modelo}' não cabe na placa. O Ollama relata "
+            f"{size} bytes para o modelo e a máquina declarou {vram_total_bytes} bytes "
+            f"de VRAM.\n"
+            "Baixe um modelo menor no host, ou corrija VRAM_TOTAL_MIB se o valor não "
+            "for o da placa em uso."
+        )
+
+    percentual_cpu = ((size - size_vram) / size * 100.0) if size > 0 else 0.0
+
+    if size_vram == 0:
+        return CpuNaoAutorizadaError, (
+            f"Queda silenciosa para CPU. A máquina tem "
+            f"{vram_total_bytes} bytes de VRAM declarados, mas o Ollama relata "
+            f"size_vram=0 para o modelo '{modelo}' ({size} bytes, "
+            f"{percentual_cpu:.1f}% em CPU).\n"
+            "Conforme ADR-0002, o Tutor-IA exige GPU para evitar degradação silenciosa.\n"
+            "Inicie o Ollama no host com suporte a GPU, ou defina OLLAMA_ALLOW_CPU=true "
+            "explicitamente apenas para ambientes de teste e desenvolvimento sem GPU."
+        )
+
+    if size_vram < size:
+        return CpuNaoAutorizadaError, (
+            f"Spill parcial para CPU. O modelo '{modelo}' tem {size} "
+            f"bytes, dos quais {size_vram} estão na VRAM e os {size - size_vram} "
+            f"restantes em CPU ({percentual_cpu:.1f}% em CPU).\n"
+            "Conforme ADR-0002, o Tutor-IA exige o modelo inteiro na GPU para evitar "
+            "degradação silenciosa.\n"
+            "Baixe um modelo menor no host, ou defina OLLAMA_ALLOW_CPU=true "
+            "explicitamente apenas para ambientes de teste e desenvolvimento sem GPU."
+        )
+
+    return None
+
+
 def verificar_alocacao_gpu(
     base_url: str,
     modelo: str,
     permitir_cpu: bool = False,
+    vram_total_bytes: int | None = None,
     timeout: float = 30.0,
     client: httpx.Client | None = None,
 ) -> dict[str, Any]:
     """Verifica se o modelo está alocado em GPU via /api/ps.
 
     Caso o modelo não esteja em execução, realiza aquecimento prévio.
-    Se o modelo estiver em CPU e permitir_cpu for False, falha alto.
+
+    O confronto é entre o que o Ollama relata e a VRAM que a máquina declarou,
+    porque nenhum dos dois lados basta sozinho: porta respondendo não prova
+    GPU, e size_vram sem o total da placa não diz se o modelo coube. Sem
+    permitir_cpu, qualquer uma das situações que não fecha é falha alta; com
+    permitir_cpu, todas viram warning e a execução segue — é o que fecha o
+    caminho de dev e de CI sem GPU.
     """
     url_ps = f"{base_url.rstrip('/')}/api/ps"
 
@@ -178,10 +273,10 @@ def verificar_alocacao_gpu(
             raise PreRequisitoError(
                 f"FALHA CRÍTICA: Consulta /api/ps falhou com código {resp.status_code}: {resp.text}"
             )
-        data = resp.json()
-        models = data.get("models", [])
-        if isinstance(models, list):
-            return [m for m in models if isinstance(m, dict)]
+        dados = resp.json()
+        modelos = dados.get("models", [])
+        if isinstance(modelos, list):
+            return [m for m in modelos if isinstance(m, dict)]
         return []
 
     modelos_ativos = consultar_ps()
@@ -210,39 +305,35 @@ def verificar_alocacao_gpu(
         )
 
     size = int(item_modelo.get("size", 0))
-    size_vram = int(item_modelo.get("size_vram", 0))
+    # Campo ausente e campo zerado são defeitos diferentes: o primeiro impede o
+    # diagnóstico, o segundo é a queda silenciosa que o ADR-0002 existe para
+    # fechar. Tratar os dois como zero apagaria a diferença entre "não deu para
+    # conferir" e "caiu para CPU".
+    vram_relatada = item_modelo.get("size_vram")
+    size_vram = int(vram_relatada) if vram_relatada is not None else None
 
-    if size > 0:
-        percentual_vram = (size_vram / size) * 100.0
-    else:
-        percentual_vram = 100.0 if size_vram > 0 else 0.0
-
-    percentual_cpu = max(0.0, 100.0 - percentual_vram)
-
-    if size_vram == 0 or percentual_cpu > 0.0:
+    diagnostico = _diagnosticar_alocacao(modelo, size, size_vram, vram_total_bytes)
+    if diagnostico is not None:
+        erro, mensagem = diagnostico
         if not permitir_cpu:
-            raise CpuNaoAutorizadaError(
-                f"FALHA CRÍTICA: O modelo '{modelo}' está alocado em CPU "
-                f"(VRAM: {size_vram} bytes, total: {size} bytes, {percentual_cpu:.1f}% em CPU).\n"
-                "Conforme ADR-0002, o Tutor-IA exige GPU para evitar degradação silenciosa.\n"
-                "Inicie o Ollama com suporte a GPU no host ou defina OLLAMA_ALLOW_CPU=true "
-                "explicitamente apenas para ambientes de teste e desenvolvimento sem GPU."
-            )
+            # O "FALHA CRÍTICA" fica no ponto em que a falha é uma falha, e não
+            # dentro da mensagem: autorizada, a mesma mensagem sai como warning,
+            # e a palavra se contradiria com o "ATENÇÃO" do log.
+            raise erro(f"FALHA CRÍTICA: {mensagem}")
         logger.warning(
-            "ATENÇÃO: O modelo '%s' está alocado em CPU (VRAM: %d / %d bytes, %.1f%% CPU). "
-            "Execução autorizada excepcionalmente via OLLAMA_ALLOW_CPU=true.",
-            modelo,
-            size_vram,
-            size,
-            percentual_cpu,
+            "ATENÇÃO: %s\nA execução segue por autorização explícita em "
+            "OLLAMA_ALLOW_CPU=true.",
+            mensagem,
         )
-    else:
-        logger.info(
-            "Alocação em GPU confirmada: 100%% VRAM (%d bytes) para o modelo '%s'.",
-            size_vram,
-            modelo,
-        )
+        return item_modelo
 
+    logger.info(
+        "Alocação em GPU confirmada: %d bytes na VRAM para o modelo '%s', contra %d "
+        "bytes declarados para a máquina.",
+        size_vram,
+        modelo,
+        vram_total_bytes,
+    )
     return item_modelo
 
 
@@ -252,7 +343,15 @@ def executar_checagens(
 ) -> None:
     """Executa todas as checagens de pré-requisito sequencialmente."""
     logger.info("Iniciando verificação de pré-requisitos do S.A.U....")
-    logger.info("Alvo Ollama: %s | Modelo: %s", config.ollama_base_url, config.ollama_model)
+    vram_declarada = (
+        f"{config.vram_total_bytes} bytes" if config.vram_total_bytes else "não declarada"
+    )
+    logger.info(
+        "Alvo Ollama: %s | Modelo: %s | VRAM da máquina: %s",
+        config.ollama_base_url,
+        config.ollama_model,
+        vram_declarada,
+    )
 
     # 1. Conectividade
     versao = verificar_conectividade(
@@ -276,6 +375,7 @@ def executar_checagens(
         config.ollama_base_url,
         config.ollama_model,
         permitir_cpu=config.ollama_allow_cpu,
+        vram_total_bytes=config.vram_total_bytes,
         timeout=config.ollama_timeout,
         client=client,
     )
