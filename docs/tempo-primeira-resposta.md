@@ -137,11 +137,11 @@ produção.
 
 ## A saída, como ela saiu no log
 
-O log vem do cliente de inferência, em INFO, com o prefixo `[SAU-BOT]` do
+O log vem do cliente de inferência, em INFO, com o prefixo `[SAU]` do
 serviço. O texto do modelo vai inteiro, sem resumo e sem aspas:
 
 ```
-2026-09-28 09:06:27 [SAU-BOT] [INFO] sau.inference.ollama: Resposta do modelo 'qwen2.5:3b' | primeiro token 2.254s (carga 2.180s + prompt 0.074s) | total 2.589s | 100.7 tok/s | 33 tokens | parada: stop
+2026-09-28 09:06:27 [SAU] [INFO] sau.inference.ollama: Resposta do modelo 'qwen2.5:3b' | primeiro token 2.254s (carga 2.180s + prompt 0.074s) | total 2.589s | 100.7 tok/s | 33 tokens | parada: stop
 Eu fico à disposição para ajudar um aluno a compreender novos conceitos e resolver problemas de maneira clara e eficaz.
 ```
 
@@ -151,7 +151,7 @@ quinto critério da #7. O texto foi copiado de
 `--de-arquivo`; o arquivo congelado não é lido pela fumaça:
 
 ```
-2026-09-28 09:06:39 [SAU-BOT] [INFO] sau.inference.ollama: Resposta do modelo 'qwen2.5:3b' | primeiro token 0.051s (carga 0.001s + prompt 0.050s) | total 1.327s | 101.5 tok/s | 128 tokens | parada: stop
+2026-09-28 09:06:39 [SAU] [INFO] sau.inference.ollama: Resposta do modelo 'qwen2.5:3b' | primeiro token 0.051s (carga 0.001s + prompt 0.050s) | total 1.327s | 101.5 tok/s | 128 tokens | parada: stop
 Desculpe pela confusão, mas como eu souo uma inteligência artificial criada pela Alibaba Cloud, eu não tenho informações específicas sobre as datas de entrega de atividades de disciplinas em suas respectivas universidades ou instituições de ensino.
 
 A data limite para a entrega de atividades é geralmente uma informação fornecida pelo professor da disciplina ou pela própria instituição. Você deveria verificar com o professor que coordena a disciplina ou o departamento de estudos para obter a informação mais precisa e atual sobre quando a entrega da Atividade 2 deve ser realizada.

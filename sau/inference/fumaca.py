@@ -196,10 +196,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.repeticoes < 1:
         falhar("--repeticoes precisa ser pelo menos 1")
 
-    # O log sai no mesmo formato do serviço, com o prefixo [SAU-BOT], porque a
+    # O log sai no mesmo formato do serviço, com o prefixo [SAU], porque a
     # resposta do modelo é a evidência do quinto critério da #7 e o critério
-    # fala em log. Um prefixo diferente aqui seria a mesma evidência com outro
-    # nome, e o prefixo [SAU-BOT] é o que separa o log do S.A.U. dos outros.
+    # fala em log. O prefixo é do S.A.U.; quem emitiu a linha é o nome do
+    # módulo nela mesma, e não o prefixo.
     configurar_logging()
 
     pergunta = ler_pergunta(args)

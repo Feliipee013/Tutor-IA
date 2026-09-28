@@ -160,7 +160,7 @@ def test_fumaca_escreve_a_resposta_do_modelo_no_log(
     """O quinto critério da #7: a saída do modelo fica em log, para ser lida.
 
     O teste olha o log no stdout, e não o objeto de log do Python, porque é o
-    stdout que a pessoa lê no `docker compose logs`. E o prefixo `[SAU-BOT]` vem
+    stdout que a pessoa lê no `docker compose logs`. E o prefixo `[SAU]` vem
     do mesmo `configurar_logging` do serviço: a evidência é a mesma coisa nos
     dois lugares, e não duas com nomes diferentes.
     """
@@ -170,7 +170,7 @@ def test_fumaca_escreve_a_resposta_do_modelo_no_log(
     linha_do_log = next(
         linha for linha in saida.splitlines() if "sau.inference.ollama" in linha
     )
-    assert "[SAU-BOT]" in linha_do_log
+    assert "[SAU]" in linha_do_log
     assert "[INFO]" in linha_do_log
     # O texto do modelo vai na linha seguinte à do registro, inteiro.
     assert "O prazo eu não sei." in saida
