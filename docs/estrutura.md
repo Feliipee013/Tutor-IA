@@ -30,6 +30,7 @@ agente Implementar localizar o ponto de impacto sem varrer o repositório inteir
 | `docker-compose.yml` | sobe o serviço `bot` (com o Ollama no host, ADR-0002) e o serviço `webhook`, independentes entre si — **issues #4 e #5** | sim |
 | `pyproject.toml` | pacote `sau`, dependências e config de pytest, ruff e mypy — **issue #4** | sim |
 | `.env.example` | modelo das variáveis de ambiente do compose, com o que é obrigatório — **issues #4 e #5** | sim |
+| `scripts/preparar-host.sh` | o passo que o compose não dá conta de fazer: acha a VRAM, confere o Ollama e baixa o modelo se faltar. Idempotente — **issue #7** | sim |
 | `opencode.json` | MCP do Context7 e permissões de `bash` por agente | sim |
 | `docs/` | documentação versionada (abaixo) | sim |
 | `.opencode/agents/` | subagentes `criar-pr`, `criar-ticket` e `executor` | sim |
@@ -43,8 +44,10 @@ agente Implementar localizar o ponto de impacto sem varrer o repositório inteir
 | `docs/estrutura.md` | este arquivo | sim |
 | `docs/agents/` | contratos de tracker, labels, domínio e formato de PR | sim |
 | `docs/adr/` | decisões de arquitetura, com o que foi descartado e por quê | sim |
+| `docs/adr/0004-vram-por-maquina.md` | a VRAM é declarada por máquina: o contrato, como descobrir o valor e o que fazer sem GPU dedicada — **issue #7** | sim |
 | `docs/sprints/` | plano legível da 1.1 e da 1.2 | sim |
 | `docs/medicao-modelo/` | a sondagem, o script de medição e a saída de cada máquina — **issue #3** | sim |
+| `docs/tempo-primeira-resposta.md` | o tempo de primeira resposta nesta máquina, com as condições e o aviso de que não é a do ADR-0002 — **issue #7** | sim |
 | `docs/limitacoes.md` | documento de limitações do modelo — **issue #14** | não |
 
 ## `docs/medicao-modelo/` — a evidência da escolha do modelo
@@ -78,7 +81,8 @@ grafo, não como serviço à parte.
 | `sau/persona.py` | o prompt versionado do S.A.U., com todas as regras de comportamento | #10 | não |
 | `sau/telegram/webhook.py` | handler do webhook, com acuse de recibo fixo ao Aluno antes de qualquer inferência, registro do update bruto e conferência do `secret_token` | #5 | sim |
 | `sau/telegram/__main__.py` | entrypoint do serviço `webhook`, para o log sair com o nome do módulo e não `__main__` | #5 | sim |
-| `sau/inference/ollama.py` | cliente do Ollama, que roda **no host** e é alcançado por `host.docker.internal:11434` ([ADR-0002](./adr/0002-topologia-do-ollama.md)) | #7 | não |
+| `sau/inference/ollama.py` | cliente do Ollama, que roda **no host** e é alcançado por `host.docker.internal:11434` ([ADR-0002](./adr/0002-topologia-do-ollama.md)) | #7 | sim |
+| `sau/inference/fumaca.py` | prova de fumaça: roda as checagens, pede uma geração e mostra o tempo de cada etapa | #7 | sim |
 | `sau/inference/semaphore.py` | fila com teto e semáforo em frente à inferência | #11 | não |
 | `sau/graph/state.py` | estado da conversa, isolado por Aluno | #9 | não |
 | `sau/graph/graph.py` | monta o grafo LangGraph do turno | #8 | não |
