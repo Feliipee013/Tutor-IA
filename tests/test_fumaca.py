@@ -778,6 +778,37 @@ def test_script_baixa_o_modelo_quando_a_tag_falta(tmp_path: Path) -> None:
     assert registro.read_text(encoding="utf-8").strip() == _MODELO
 
 
+def test_script_baixa_o_modelo_quando_so_a_tag_irma_existe(tmp_path: Path) -> None:
+    """A tag irmã no host não é a tag pedida, e prefixo não é identidade.
+
+    Com `qwen2.5:3b-instruct` instalado e `qwen2.5:3b` pedido, o casamento por
+    prefixo respondia "já está no host" sem baixar nada — e a falta só
+    aparecia depois, na checagem de pré-requisito.
+    """
+    registro = tmp_path / "pulls.txt"
+    ollama_tag_irma = (
+        'if [ "$1" = "list" ]; then\n'
+        '  echo "NAME                ID              SIZE      MODIFIED"\n'
+        '  echo "qwen2.5:3b-instruct 357c53fb659c    1.9 GB    now"\n'
+        "fi\n"
+        'if [ "$1" = "pull" ]; then\n'
+        '  echo "$2" > "$PULL_REGISTRADO"\n'
+        "fi\n"
+        'if [ "$1" = "ps" ]; then\n'
+        '  echo "qwen2.5:3b-instruct    357c53fb659c    2.2 GB    100% GPU     4096    29 minutes from now"\n'
+        "fi\n"
+    )
+    ferramentas = _montar_maquina(
+        tmp_path, nvidia_smi="8176", pull_registrado=registro, ollama=ollama_tag_irma
+    )
+
+    resultado = _rodar_script(tmp_path, ferramentas, registro)
+
+    assert resultado.returncode == 0, resultado.stderr
+    assert "Baixando" in resultado.stdout
+    assert registro.read_text(encoding="utf-8").strip() == _MODELO
+
+
 def test_script_rodar_duas_vezes_nao_muda_nada(tmp_path: Path) -> None:
     """Idempotência: o segundo passo é tão seguro quanto o primeiro."""
     registro = tmp_path / "pulls.txt"

@@ -131,10 +131,11 @@ descobrir_vram() {
 # --- Modelo ----------------------------------------------------------------
 
 modelo_ja_existe() {
-  # `ollama list` imprime a tag na primeira coluna. A comparação é por prefixo
-  # porque o CLI às vezes mostra `qwen2.5:3b` e às vezes `qwen2.5:3b-xxxx`, com o
-  # digest colado.
-  ollama list 2>/dev/null | awk -v alvo="$MODELO" '$1 == alvo || index($1, alvo) == 1 { achou = 1 } END { exit !achou }'
+  # `ollama list` imprime a tag na primeira coluna e o digest em coluna
+  # separada, então `$1` já é a tag exata. O casamento é por igualdade:
+  # `qwen2.5:3b-instruct` no host não é `qwen2.5:3b`, e um prefixo diria que
+  # é — a mesma regra de `prereqs.py`, que compara por igualdade.
+  ollama list 2>/dev/null | awk -v alvo="$MODELO" '$1 == alvo { achou = 1 } END { exit !achou }'
 }
 
 baixar_modelo() {
@@ -190,7 +191,7 @@ mostrar_ps() {
     }
 
   local linha
-  linha="$(ollama ps 2>/dev/null | awk -v alvo="$MODELO" '$1 == alvo || index($1, alvo) == 1' | head -1)"
+  linha="$(ollama ps 2>/dev/null | awk -v alvo="$MODELO" '$1 == alvo' | head -1)"
   if [[ -z "$linha" ]]; then
     aviso "\`ollama ps\` não mostrou ${MODELO} depois de carregar. Confira na mão."
     return 0
