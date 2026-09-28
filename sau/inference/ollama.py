@@ -40,11 +40,12 @@ memória: quem subir este valor precisa conferir a VRAM da máquina de novo.
 """
 
 TIMEOUT_PADRAO = 60.0
-"""Tempo de espera da geração, em segundos.
+"""Tempo de espera da geração quando ninguém informa outro, em segundos.
 
-Maior que o timeout das checagens de pré-requisito porque aqui a resposta
-inteira tem de caber no relógio, e não só a mão do servidor. A checagem pergunta
-"você está aí?"; a geração pergunta "quanto tempo o Aluno espera?".
+É o default do construtor, e não o número que roda em serviço: a fumaça e as
+checagens passam `config.ollama_timeout` (30.0 por padrão), então geração e
+checagem usam o mesmo relógio. Sessenta segundos aqui é a rede de segurança
+para quem chama o cliente na mão.
 """
 
 NANOSEGUNDOS_POR_SEGUNDO = 1e9
