@@ -113,10 +113,12 @@ def destinos_de_saida(monkeypatch: pytest.MonkeyPatch, telegram: TelegramFalso) 
     def request_do_cliente(
         _self: httpx.Client, *args: Any, **kwargs: Any
     ) -> httpx.Response:
-        # As duas portas do funil passam `method` e `url` de formas diferentes:
-        # `Client.post` e `Client.get` por posição, `httpx.request` de módulo por
-        # nome. A substituta precisa aceitar as duas, senão ela mede só metade do
-        # tráfego que diz medir.
+        # As duas portas do funil chamam `request` de formas diferentes:
+        # `Client.post` e `Client.get` passam `method` e `url` por posição, e o
+        # `httpx.request` de módulo passa por nome. Uma substituta com `method` e
+        # `url` declarados aceitaria as duas — o Python liga por nome quando a
+        # chamada é nomeada. Pegamos de `args`/`kwargs` mesmo assim, para que a
+        # forma da chamada deixe de ser informação que esta guarda carrega.
         url = kwargs["url"] if "url" in kwargs else args[1]
         destinos.append(str(url))
         return telegram.responder(url)
