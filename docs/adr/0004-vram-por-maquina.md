@@ -93,7 +93,7 @@ fechar. Por isso o "sem GPU" é sempre dito: no script, na fumaça, no README.
 - **Um número só, no `.env`, escrito à mão.** É o que tinha, e é o que deixa a
   variável em branco justamente na máquina de quem não tem `nvidia-smi`. O
   `.env` continua valendo, e o script imprime a linha para ele.
-- **Pedir o valor em MiB já convertido, para todo mundo.** Obligaria quem tem
+- **Pedir o valor em MiB já convertido, para todo mundo.** Obrigaria quem tem
   placa não-NVIDIA a fazer a conta de bytes para MiB à mão, e um erro de fator
   1024 ali reprova a checagem sem mensagem que ajude.
 - **Substituir a checagem por uma leitura do `ollama ps`.** A coluna `PROCESSOR`

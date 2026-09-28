@@ -350,12 +350,41 @@ o caso "sem GPU dedicada" inteiro.
 Ollama é `127.0.0.1`, e o container do bot chega no IP da bridge do Docker, não
 no loopback do host: com o bind padrão a conexão é recusada na hora, com
 `Errno 111: Connection refused`, antes de qualquer checagem de pré-requisito. Por
-isso o `OLLAMA_HOST` precisa ser `0.0.0.0:11434` no shell **antes** de subir o
-Ollama. A contrapartida é de segurança: `0.0.0.0` expõe a porta 11434 em todas
-as interfaces da rede, não só na localhost. Em rede confiável, com a máquina de
-inference atrás de firewall, é o preço do bind; em rede não confiável, restrinja
-o bind a uma interface que só a bridge alcance, ou coloque um proxy com
-autenticação na frente.
+isso o `OLLAMA_HOST` precisa ser `0.0.0.0:11434`.
+
+**Onde essa variável mora depende de quem sobe o Ollama.** São dois casos, e
+confundir os dois é o jeito mais comum de o passo 2 não funcionar:
+
+- **Ollama de serviço do systemd** (pelo pacote do Arch, do Ubuntu ou pelo
+  instalador oficial). A variável vai no serviço, com um arquivo de override:
+
+  ```sh
+  sudo tee /etc/systemd/system/ollama.service.d/host.conf >/dev/null <<'EOF'
+  [Service]
+  Environment="OLLAMA_HOST=0.0.0.0:11434"
+  EOF
+  sudo systemctl daemon-reload
+  sudo systemctl restart ollama
+  ```
+
+  Confira com `systemctl show ollama --property=Environment` (tem que aparecer
+  `OLLAMA_HOST=0.0.0.0:11434`) e com `ss -ltn | grep 11434` (tem que dar
+  `*:11434`). O primeiro comando diz o que o serviço recebeu, o segundo diz onde
+  ele está escutando. Se o primeiro estiver certo e o segundo mostrar
+  `127.0.0.1:11434`, outro processo está na frente da porta e o `ollama` do seu
+  PATH pode estar falando com ele.
+
+- **Ollama que você mesmo sobe**, no seu terminal, com
+  `OLLAMA_HOST=0.0.0.0:11434 ollama serve`. Aqui a variável no shell basta. Ela
+  não sobrevive ao fechamento do terminal, e o comando `ollama` do seu PATH
+  precisa apontar para o mesmo binário do serviço — senão você mede um Ollama e
+  o compose fala com outro.
+
+A contrapartida é de segurança nos dois casos: `0.0.0.0` expõe a porta 11434 em
+todas as interfaces da rede, não só na localhost. Em rede confiável, com a
+máquina de inference atrás de firewall, é o preço do bind; em rede não
+confiável, restrinja o bind a uma interface que só a bridge alcance, ou coloque
+um proxy com autenticação na frente.
 
 O passo 4 é o que não pode ser pulado. `nvidia-smi` responder e a porta 11434
 devolver JSON **são compatíveis com o Ollama servindo em CPU** — e nesse estado

@@ -77,6 +77,39 @@ loopback do host. Sem esta variável, a conexão é recusada na hora
 (`Errno 111: Connection refused`) e o serviço nem chega à checagem de
 pré-requisito.
 
+**Se o seu Ollama é um serviço do systemd** — é o que sobra depois de instalar
+pelo pacote do Arch, do Ubuntu ou pelo instalador oficial — o comando acima não
+resolve. Ele sobe um Ollama a mais, no seu terminal, e some quando você fecha o
+terminal; o serviço do sistema, que é o que o `docker compose` encontra, continua
+no `127.0.0.1`. Nesse caso a variável vai no serviço:
+
+```sh
+sudo tee /etc/systemd/system/ollama.service.d/host.conf >/dev/null <<'EOF'
+[Service]
+Environment="OLLAMA_HOST=0.0.0.0:11434"
+EOF
+sudo systemctl daemon-reload
+sudo systemctl restart ollama
+```
+
+São três comandos, e o último reinicia o Ollama: some com o que já estava
+carregado. Dá para conferir se pegou com estes dois:
+
+```sh
+systemctl show ollama --property=Environment   # tem que aparecer OLLAMA_HOST=0.0.0.0:11434
+ss -ltn | grep 11434                           # tem que dar *:11434, e não 127.0.0.1:11434
+```
+
+O primeiro diz o que o serviço recebeu; o segundo diz em que endereço ele está
+escutando de verdade. Se o primeiro tiver a variável e o segundo mostrar
+`127.0.0.1:11434`, o que está na frente da porta é outro processo — e o comando
+`ollama` do seu PATH pode estar apontando para o outro, o que faz a alteração
+parecer funcionar sem ter funcionado.
+
+O `export OLLAMA_HOST=0.0.0.0:11434` no seu shell só vale se **você** for subir o
+Ollama com `ollama serve`. Com serviço do systemd, quem precisa da variável é o
+serviço.
+
 > **Ressalva de segurança:** `0.0.0.0` expõe a porta 11434 em **todas** as
 > interfaces da rede, não só na localhost. Em rede confiável, com a máquina de
 > inference atrás de firewall, isso é o preço do bind. Se a máquina estiver em
