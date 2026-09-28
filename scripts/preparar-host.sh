@@ -106,6 +106,16 @@ vram_por_sysfs() {
 }
 
 descobrir_vram() {
+  # A VRAM é declarada por máquina (ADR-0004): quem já informou o valor na mão
+  # não precisa que o script descubra nada — e as mensagens de duas placas e de
+  # máquina sem placa mandam justamente informar. Sem esta guarda, seguir a
+  # instrução não adiantava: o valor era sobrescrito adiante.
+  if [[ -n "${VRAM_TOTAL_MIB:-}" ]]; then
+    export VRAM_TOTAL_MIB
+    echo "  VRAM_TOTAL_MIB=$VRAM_TOTAL_MIB (informada à mão)"
+    return 0
+  fi
+
   local valor=""
   if command -v nvidia-smi >/dev/null 2>&1; then
     valor="$(vram_por_nvidia_smi || true)"

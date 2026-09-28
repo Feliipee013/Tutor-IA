@@ -557,6 +557,11 @@ def _rodar_script(
     env["PATH"] = f"{ferramentas}:{env['PATH']}"
     env["DRM_DIR"] = str(pasta / "drm")
     env["PULL_REGISTRADO"] = str(pull_registrado)
+    # A guarda do valor informado à mão lê o ambiente: sem isto, uma
+    # VRAM_TOTAL_MIB exportada na máquina de quem roda a suíte (o próprio
+    # SETUP manda exportar) faria os testes de descoberta passarem pela
+    # guarda em vez do caminho que eles testam.
+    env.pop("VRAM_TOTAL_MIB", None)
     if env_extra:
         env.update(env_extra)
 
@@ -668,6 +673,46 @@ def test_script_para_quando_a_maquina_tem_duas_placas_com_vram(tmp_path: Path) -
     assert "card1" in resultado.stderr
     assert "VRAM_TOTAL_MIB=<total em MiB>" in resultado.stderr
     assert "VRAM_TOTAL_MIB=" not in resultado.stdout
+
+
+def test_script_usa_a_vram_informada_a_mao_quando_ha_duas_placas(tmp_path: Path) -> None:
+    """Quem seguiu a instrução de duas placas não fica preso.
+
+    Com `VRAM_TOTAL_MIB` no ambiente, o script usa o valor e segue, em vez de
+    parar de novo no mesmo ponto — antes, o `falhar` dentro do `$( )` derrubava
+    o script via `set -e` e a saída era 1.
+    """
+    registro = tmp_path / "pulls.txt"
+    ferramentas = _montar_maquina(tmp_path, nvidia_smi=None, pull_registrado=registro)
+    _exec(ferramentas / "nvidia-smi", "exit 1")  # sem nvidia-smi: cai no sysfs
+    _criar_cartao(tmp_path / "drm", "card0", 512 * 1_048_576)
+    _criar_cartao(tmp_path / "drm", "card1", 8_573_157_376)
+
+    resultado = _rodar_script(
+        tmp_path, ferramentas, registro, {"VRAM_TOTAL_MIB": "8192"}
+    )
+
+    assert resultado.returncode == 0, resultado.stderr
+    assert "export VRAM_TOTAL_MIB=8192" in resultado.stdout
+
+
+def test_script_usa_a_vram_informada_a_mao_quando_nao_ha_placa(tmp_path: Path) -> None:
+    """O valor informado à mão vale também no caminho sem placa.
+
+    Sem a guarda, o script ignorava o valor e ainda avisava "sem GPU dedicada"
+    sobre uma máquina que a pessoa acabou de descrever como tendo placa.
+    """
+    registro = tmp_path / "pulls.txt"
+    ferramentas = _montar_maquina(tmp_path, nvidia_smi=None, pull_registrado=registro)
+    _exec(ferramentas / "nvidia-smi", "exit 1")  # sem nvidia-smi: cai no sysfs
+
+    resultado = _rodar_script(
+        tmp_path, ferramentas, registro, {"VRAM_TOTAL_MIB": "4096"}
+    )
+
+    assert resultado.returncode == 0, resultado.stderr
+    assert "export VRAM_TOTAL_MIB=4096" in resultado.stdout
+    assert "sem GPU dedicada" not in resultado.stderr
 
 
 def test_script_ignora_cartao_sem_vram_propria(tmp_path: Path) -> None:
