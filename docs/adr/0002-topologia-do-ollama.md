@@ -25,3 +25,31 @@ A razão é o comportamento de falha. Em container, a GPU depende do NVIDIA Cont
 - **O teto de hardware é conhecido e entra no escopo da 1.1.** A máquina da decisão tem 4 GB de VRAM e 7,5 GiB de RAM. Isso exclui a família 7B em quantização 4 bits e amarra a escolha da #3 à família 3B. A #3 registra esse teto junto com a medição, para que a restrição de hardware não apareça depois como surpresa.
 - **O compose para de ter o Ollama como serviço, então o healthcheck entre eles muda de natureza:** passa a ser o bot verificando um host, e não um serviço esperando outro no mesmo `depends_on`.
 - **Consequência que só apareceu na implementação: o `OLLAMA_HOST` precisa ser `0.0.0.0`.** O bind padrão do Ollama é `127.0.0.1:11434`, e o container chega no IP da bridge do Docker, que não é o loopback do host. Um serviço que escuta só no loopback é inalcançável de fora do host, então o passo manual que este ADR já reconhecia como dívida tem uma condição a mais: sem `OLLAMA_HOST=0.0.0.0:11434` o bot nem chega à checagem de pré-requisito, morre com `Errno 111: Connection refused`. O preço é o oposto do desejado: a porta 11434 passa a responder em todas as interfaces da rede, não só na localhost. A alternativa seria bind restrito e um caminho que não passe por rede, o que o Compose só oferece com `network_mode: host` — que abriria mão do isolamento que o container dá. A escolha é documentar a exposição e tratá-la como decisão de rede da máquina, não do bot.
+
+## Emenda (issue #5, 2026-09-28): o `webhook` também vai em container
+
+A issue #5 adicionou um segundo serviço em container, o `webhook`, e a frase "só
+o serviço do bot vai em container" do texto acima deixou de ser verdade. A emenda
+é **aditiva**: a decisão deste ADR continua `accepted` e continua valendo sem
+alteração. O que muda é o número de serviços em container, de um para dois — `bot`
+e `webhook`, independentes entre si.
+
+Isso **não é um conflito de decisão**, e a distinção importa. O que este ADR
+decidiu foi onde o Ollama roda, e ele continua no host, pelos mesmos motivos: a
+GPU, o modo de falha silencioso em CPU e o `OLLAMA_HOST=0.0.0.0` valem igual. O
+serviço `webhook` não toca na GPU nem no Ollama — ele existe para provar o fio do
+canal (webhook, serialização, roteamento de chat, acuse de recibo) sem depender
+do modelo, e é justamente por não depender dele que ele sobe numa máquina sem
+GPU. Colocá-lo no host junto com o Ollama o acoplaria ao passo manual que as
+"Consequences" já registram como dívida.
+
+O efeito colateral de projeto é o que a emenda deixa registrado: `docker compose
+up` sem argumentos sobe dois serviços, e o `webhook` falha alto sem as duas
+credenciais do Telegram. Quem subir o compose esperando um serviço só vai ver o
+`webhook` morrer na largada — e a mensagem de falha é explícita sobre o motivo,
+que é o comportamento que o serviço promete.
+
+Quando a #7 criar o cliente do Ollama, ele vai no serviço `bot` e alcança
+`http://host.docker.internal:11434` como este ADR descreve. Se algum dia ele for
+posto no `webhook`, isso reabre a decisão e não é uma conveniência de
+implementação.

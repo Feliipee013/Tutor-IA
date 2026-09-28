@@ -171,6 +171,7 @@ não lê `.env` sozinho.
 | `TELEGRAM_BOT_TOKEN` | — (ausente) | **Sim** (só para `webhook`) | Token que o `@BotFather` entrega. É o que faz o Aluno achar o S.A.U. pelo `@username`. Sem ele o serviço `webhook` falha alto na subida; o `bot` sobe sem ele |
 | `TELEGRAM_WEBHOOK_SECRET_TOKEN` | — (ausente) | **Sim** (só para `webhook`) | Chave que o Telegram devolve no header `X-Telegram-Bot-Api-Secret-Token` e que fecha a porta do endpoint. Gere com `openssl rand -hex 16` |
 | `TELEGRAM_WEBHOOK_PORT` | `8080` | Não | Porta do webhook no host. O container escuta sempre em 8080 |
+| `TELEGRAM_API_BASE` | `https://api.telegram.org` | Não | URL base da Bot API do Telegram. Existe para apontar para uma Bot API local em desenvolvimento; o compose não a expõe, porque o canal conversa com a do Telegram |
 
 A VRAM total não é exposta por nenhum endpoint do Ollama — o `/api/ps` só
 relata o `size_vram` de cada modelo — então ela tem de vir do host:

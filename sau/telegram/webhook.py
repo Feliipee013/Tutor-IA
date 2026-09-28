@@ -230,7 +230,6 @@ def main() -> None:
     from sau.main import configurar_logging
 
     configurar_logging()
-    logger = logging.getLogger("sau.telegram.webhook")
 
     try:
         config = carregar_configuracao()

@@ -149,6 +149,9 @@ consumindo o **Ollama rodando nativamente no host**, conforme
     que é público pelo túnel. Gere com `openssl rand -hex 16`
   - `TELEGRAM_WEBHOOK_PORT`: padrão `8080` (só o lado do host do mapeamento; o
     container escuta sempre em 8080)
+  - `TELEGRAM_API_BASE`: padrão `https://api.telegram.org`. Existe para apontar
+    para uma Bot API local em desenvolvimento, e para isso só. O compose **não**
+    a expõe, porque o canal conversa com a API do Telegram
 - **Variável do host, fora do container:** `OLLAMA_HOST=0.0.0.0:11434`, consumida
   pelo `ollama serve` e não pelo serviço. Ver o passo 2 logo abaixo.
 - **Logs estruturados:** formato padronizado com prefixo `[SAU-BOT]` no stdout.
@@ -169,6 +172,13 @@ docker compose up -d --build
 # Para visualizar os logs
 docker compose logs -f bot
 ```
+
+> **Sem argumentos, o compose sobe os dois serviços**, `bot` e `webhook` (issue
+> #5), porque é o que o comando sem nome significa. O `webhook` **falha alto na
+> subida** se as duas credenciais do Telegram não estiverem no `.env`, com uma
+> mensagem explicando o que é cada uma — o `bot` sobe sem elas, porque não
+> conversa com o Telegram. Para subir só o bot, e só o webhook, nomeie o serviço:
+> ver [Canal do Telegram](#canal-do-telegram-issue-5).
 
 ### Canal do Telegram (issue #5)
 
@@ -280,9 +290,10 @@ e nada mais.
 
 ### Pré-requisitos de host: o Ollama
 
-O compose **sobe só o bot**. O Ollama é um serviço do host, e essa é a
-consequência de colocá-lo lá: nenhum container, nenhuma GPU dentro do Docker.
-Em troca, a GPU da máquina é usada sem instalar driver de container algum.
+O compose **não sobe o Ollama**. Ele sobe dois serviços, `bot` e `webhook` (issue
+#5), e o Ollama é um serviço do host: nenhum container, nenhuma GPU dentro do
+Docker. Em troca, a GPU da máquina é usada sem instalar driver de container
+algum.
 
 **Instalar e verificar, nesta ordem:**
 
