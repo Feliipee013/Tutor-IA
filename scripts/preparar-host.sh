@@ -226,10 +226,12 @@ mostrar_ps() {
   # serve para medir tempo.
   echo "  ollama ps:   $linha"
   local processador
-  # Só campos de porcentagem contam: o nome do modelo também passa por aqui,
-  # e um `qwen2.5:3b-cpu` rodando em GPU acusaria CPU à toa. A coluna
-  # PROCESSOR é porcentagem seguida do processador ("100% GPU").
-  processador="$(echo "$linha" | awk '{ for (i = 1; i <= NF; i++) if ($i ~ /^[0-9]+%$/) { printf "%s %s ", $i, $(i+1) } }')"
+  # Só campos que começam com porcentagem contam: o nome do modelo também
+  # passa por aqui, e um `qwen2.5:3b-cpu` rodando em GPU acusaria CPU à toa.
+  # A coluna PROCESSOR é porcentagem seguida do processador — `100% GPU`, ou
+  # o formato com barra do offload parcial (`32%/68% CPU/GPU`), que também
+  # começa com número. O nome do modelo nunca começa com porcentagem.
+  processador="$(echo "$linha" | awk '{ for (i = 1; i <= NF; i++) if ($i ~ /^[0-9]+%/) { printf "%s %s ", $i, $(i+1) } }')"
   case "$processador" in
     *CPU*)
       aviso "a coluna PROCESSOR mostra CPU: '${processador}'."

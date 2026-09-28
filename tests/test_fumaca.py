@@ -812,6 +812,30 @@ def test_script_nao_confunde_o_nome_do_modelo_com_a_coluna_processor(
     assert "coluna PROCESSOR mostra CPU" not in resultado.stderr
 
 
+def test_script_avisa_quando_o_modelo_escorrega_parcialmente_para_cpu(
+    tmp_path: Path,
+) -> None:
+    """O offload parcial (`32%/68% CPU/GPU`) é CPU, e tem de ser dito.
+
+    É o formato que o doc de tempo prova existir: o modelo dividido entre GPU
+    e CPU por falta de VRAM. O casamento ancorado no fim (`%` exato) não via
+    esse token, e o script aprovava em silêncio.
+    """
+    registro = tmp_path / "pulls.txt"
+    ferramentas = _montar_maquina(
+        tmp_path,
+        nvidia_smi="8176",
+        pull_registrado=registro,
+        processador="32%/68% CPU/GPU",
+    )
+
+    resultado = _rodar_script(tmp_path, ferramentas, registro)
+
+    assert resultado.returncode == 0, resultado.stderr
+    assert "32%/68% CPU/GPU" in resultado.stdout
+    assert "coluna PROCESSOR mostra CPU" in resultado.stderr
+
+
 def test_script_avisa_quando_a_marcao_passa_da_integracao(tmp_path: Path) -> None:
     """`50% CPU/GPU` serve para atender e não serve para medir."""
     registro = tmp_path / "pulls.txt"
