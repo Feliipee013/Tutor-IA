@@ -258,16 +258,14 @@ def _imprimir_resumo(respostas: list[Resposta], *, permitir_cpu: bool) -> None:
     ficam separadas: a primeira é o que o primeiro Aluno da madrugada espera, e
     as outras são o que os Alunos seguintes esperam.
     """
-    if len(respostas) == 1:
-        return
-
-    print("=" * 72)
-    print("TEMPO DE PRIMEIRA RESPOSTA (ttft)")
-    print(f"  1ª geração, com a carga do modelo:  {respostas[0].primeiro_token_segundos:.3f} s")
-    seguintes = [r.primeiro_token_segundos for r in respostas[1:]]
-    media = sum(seguintes) / len(seguintes)
-    print(f"  demais gerações, modelo carregado: {media:.3f} s (média de {len(seguintes)})")
-    print("=" * 72)
+    if len(respostas) > 1:
+        print("=" * 72)
+        print("TEMPO DE PRIMEIRA RESPOSTA (ttft)")
+        print(f"  1ª geração, com a carga do modelo:  {respostas[0].primeiro_token_segundos:.3f} s")
+        seguintes = [r.primeiro_token_segundos for r in respostas[1:]]
+        media = sum(seguintes) / len(seguintes)
+        print(f"  demais gerações, modelo carregado: {media:.3f} s (média de {len(seguintes)})")
+        print("=" * 72)
 
     if permitir_cpu:
         print(

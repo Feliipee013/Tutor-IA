@@ -367,6 +367,26 @@ def test_fumaca_com_permitir_cpu_roda_e_avisa_que_o_numero_e_de_cpu(
     assert "não descreve a máquina do ADR-0002" in saida
 
 
+def test_fumaca_com_permitir_cpu_avisa_mesmo_com_uma_geracao_so(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """O aviso de CPU sai também no caminho padrão, de uma geração só.
+
+    `REPETICOES_PADRAO` é 1, e o resumo do ttft não existe com uma geração —
+    mas o aviso não é o resumo. Sem este caso, o `return` do resumo engole o
+    aviso e o número de CPU sai sem marca no uso documentado do módulo.
+    """
+    _ligar_ollama_falso(monkeypatch, _ollama_falso(size_vram=0))
+
+    assert fumaca.main(["--permitir-cpu"]) == 0
+
+    saida = capsys.readouterr().out
+    assert "TEMPOS DA GERAÇÃO" in saida
+    assert "TEMPO DE PRIMEIRA RESPOSTA" not in saida
+    assert "medido com --permitir-cpu" in saida
+    assert "não descreve a máquina do ADR-0002" in saida
+
+
 def test_fumaca_sem_permitir_cpu_nao_avisa_que_rodou_em_cpu(
     ollama_preso: httpx.Client, capsys: pytest.CaptureFixture[str]
 ) -> None:
