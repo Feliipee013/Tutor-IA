@@ -39,7 +39,7 @@ from pathlib import Path
 from typing import Final, NoReturn, Sequence
 
 from sau.config import carregar_configuracao
-from sau.inference.ollama import ClienteOllama, ErroDeInferencia, Resposta
+from sau.inference.ollama import ClienteOllama, ErroDeInferencia, Resposta, _numero
 from sau.main import configurar_logging
 from sau.prereqs import PreRequisitoError, executar_checagens
 
@@ -173,22 +173,14 @@ def imprimir_bloco(resposta: Resposta, indice: int, total: int) -> None:
     print(f"  carga do modelo:         {resposta.carga_segundos:.3f} s")
     print(f"  leitura do prompt:      {resposta.avaliacao_prompt_segundos:.3f} s")
     print(f"  total:                  {resposta.segundos_totais:.3f} s")
-    print(f"  velocidade:             {_tok_por_segundo(resposta.tokens_por_segundo)} tok/s")
-    print(f"  tokens gerados:         {_contagem(resposta.tokens_gerados)}")
+    print(f"  velocidade:             {_numero(resposta.tokens_por_segundo)} tok/s")
+    print(f"  tokens gerados:         {_numero(resposta.tokens_gerados)}")
     print(f"  parou porque:           {resposta.motivo_de_parada or '(o Ollama não informado)'}")
     if not resposta.concluida:
         # Uma geração que não terminou devolve texto pela metade, e texto pela
         # metade é o jeito mais fácil de um modelo parecer que respondeu.
         print("  ATENÇÃO: a geração NÃO terminou (done: false).")
     print("=" * 72)
-
-
-def _tok_por_segundo(valor: float | None) -> str:
-    return "n/d" if valor is None else f"{valor:.1f}"
-
-
-def _contagem(valor: int | None) -> str:
-    return "n/d" if valor is None else str(valor)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
