@@ -17,6 +17,7 @@ import pytest
 from flask import Flask
 
 from sau.config import carregar_configuracao
+from sau.main import configurar_logging
 from sau.telegram.webhook import (
     CABECALHO_SECRET_TOKEN,
     TEXTO_ACK,
@@ -108,22 +109,39 @@ def test_webhook_registra_o_update_bruto(caplog: pytest.LogCaptureFixture) -> No
     assert json.loads(algum.split("bruto: ", 1)[1]) == UPDATE_DO_ALUNO
 
 
-def test_registro_de_update_precisa_do_log_configurado(caplog: pytest.LogCaptureFixture) -> None:
-    """A primeira versão desta PR logava em INFO num logger sem handler.
+def test_update_bruto_sai_no_stdout_com_o_log_do_operador(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """O update bruto precisa sair onde o operador olha, que é o AC #3.
 
-    `logging.getLogger(__name__)` sozinho fica com nível efetivo WARNING, então
-    o registro era descartado antes de chegar a qualquer handler: o único log que
+    A primeira versão desta PR logava em INFO num logger sem handler.
+    `logging.getLogger(__name__)` sozinho fica com nível efetivo WARNING, então o
+    registro era descartado antes de chegar a qualquer handler: o único log que
     saía era o de payload inválido, ou seja, o log real registrava um update que
-    não chegou e o que chegou sumia. Este teste é o que fecha o AC #3.
-    """
-    telegram = TelegramFalso()
-    try:
-        with caplog.at_level(logging.INFO, logger=LOGGER):
-            _postar(_app(telegram), UPDATE_DO_ALUNO)
-    finally:
-        telegram.fechar()
+    não chegou e o que chegou sumia.
 
-    assert any("bruto" in r.getMessage() for r in caplog.records)
+    A diferença em relação ao teste acima é que aqui passa pelo
+    `configurar_logging` de verdade, o mesmo que o `main` chama na subida. Com
+    `caplog` o teste instala o próprio handler e passaria mesmo com a
+    configuração quebrada — que era exatamente o defeito, e por isso ele ficava
+    invisível. Aqui a afirmação é sobre o stdout que o operador recebe.
+    """
+    raiz = logging.getLogger()
+    handlers, nivel = raiz.handlers[:], raiz.level
+    try:
+        configurar_logging()
+        telegram = TelegramFalso()
+        try:
+            _postar(_app(telegram), UPDATE_DO_ALUNO)
+        finally:
+            telegram.fechar()
+    finally:
+        raiz.handlers[:] = handlers
+        raiz.setLevel(nivel)
+
+    saida = capsys.readouterr().out
+    assert "update_telegram bruto" in saida, f"o update bruto não saiu no stdout: {saida!r}"
+    assert str(UPDATE_DO_ALUNO["update_id"]) in saida
 
 
 # --- O Aluno recebe o acuse de recibo, que é o que dá nome ao ticket ---
