@@ -187,39 +187,70 @@ com o Telegram:
 
 ```sh
 # O token que o @BotFather entrega. Fale com ele no Telegram, /newbot, e cole aqui.
-TELEGRAM_BOT_TOKEN=7123456789:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsaw
+TELEGRAM_BOT_TOKEN=<o token que o @BotFather entregou>
 
 # A chave que o Telegram devolve no header X-Telegram-Bot-Api-Secret-Token.
+# Rode o openssl e cole o valor que ele imprimir.
 openssl rand -hex 16
 ```
 
+O token é uma credencial viva: quem tem ele fala como o S.A.U. Ele fica no
+`.env`, que é ignorado pelo git, e **não** entra em commit, issue ou print de
+terminal. Vale saber que `docker compose config` imprime os valores
+resolvidos, então a saída desse comando não deve ser colada em lugar nenhum.
+Se um token vazar, o caminho é `@BotFather` → `/revoke`.
+
 **Expor a porta e registrar o webhook.** O Telegram entrega updates por POST numa
-URL pública, então a porta local precisa de um túnel HTTPS. O `cloudflared` serve
-aqui porque a URL sai pronta, sem conta:
+URL pública, então a porta local precisa de um túnel HTTPS. O `ngrok` serve
+aqui; ele exige conta, que é gratuita:
+
+Antes de uma vez, credencie o ngrok com o token que `dashboard.ngrok.com`
+entrega na conta gratuita:
+
+```sh
+ngrok config add-authtoken <seu token>
+```
+
+Daí em diante, a cada subida:
 
 ```sh
 # 1. suba o serviço
 docker compose up --build webhook
 
 # 2. em outro terminal, abra o túnel para a porta 8080
-cloudflared tunnel --url http://localhost:8080
-# ele imprime algo como: https://aleatorio-1234.trycloudflare.com
+ngrok http 8080
+# ele imprime algo como: https://aleatorio-1234.ngrok-free.app
+```
 
-# 3. registre a URL pública no Telegram, com a mesma chave do passo anterior
+**O `.env` é lido pelo Compose, não pelo seu shell.** Os `curl` abaixo usam
+`${TELEGRAM_BOT_TOKEN}` e `${TELEGRAM_WEBHOOK_SECRET_TOKEN}`, então exporte as
+variáveis antes, senão a URL vira `api.telegram.org/bot/setWebhook` e a resposta
+é um `404` sem outra pista. O mesmo cuidado vale para rodar
+`python -m sau.telegram` direto na máquina.
+
+```sh
+# 3. registre a URL pública no Telegram, com a chave do openssl acima
+set -a; source .env; set +a
+
 curl -sS "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook" \
-  -d url="https://aleatorio-1234.trycloudflare.com/webhook" \
+  -d url="https://aleatorio-1234.ngrok-free.app/webhook" \
   -d secret_token="${TELEGRAM_WEBHOOK_SECRET_TOKEN}"
 # resposta esperada: {"ok":true,"result":true,"description":"Webhook was set"}
 ```
+
+O `ngrok` pode mostrar uma página de aviso na primeira visita de um endereço novo.
+Isso é só para requisições de browser: o POST do Telegram vem com
+`Content-Type: application/json` e passa direto.
 
 Três coisas que esse caminho impõe, e que valem antes de perder tempo:
 
 - **O Telegram só entrega em 443, 80, 88 e 8443.** O túnel resolve isso porque
   ele termina em HTTPS e encaminha para a 8080 local; por isso a URL precisa ser
   a do túnel, e não `http://localhost:8080`.
-- **A URL do túnel muda a cada `cloudflared`.** O `setWebhook` aponta para a URL
+- **A URL do túnel muda a cada `ngrok`.** O `setWebhook` aponta para a URL
   antiga, e o Telegram segue enviando para ela. Suba o túnel, pegue a URL nova e
-  rode o `setWebhook` de novo.
+  rode o `setWebhook` de novo. Um túnel com domínio próprio tem URL fixa e mata
+  essa etapa; isso é decisão de infraestrutura, fora do escopo da #5.
 - **A resposta a um `setWebhook` errado é silenciosa.** Confira com
   `getWebhookInfo`, que mostra a URL e o erro pendente.
 
