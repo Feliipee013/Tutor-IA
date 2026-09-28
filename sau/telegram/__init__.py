@@ -1,7 +1,6 @@
-"""Sau telegram webhook handler package.
+"""Canal do Telegram do S.A.U.
 
-This package handles Telegram webhook updates for the Tutor-IA bot.
-Receives updates from Telegram, logs them for debugging, and returns
-immediate acknowledgment without LLM dependency.
+Handler do webhook: recebe o update do Telegram, registra o update bruto para
+depuração e entrega ao Aluno o acuse de recibo fixo, sem depender do modelo.
+O turno com inferência é do ticket #8.
 """
-__version__ = "0.1.0"
