@@ -777,6 +777,41 @@ def test_script_avisa_quando_a_placa_caiu_para_cpu(tmp_path: Path) -> None:
     assert "plausível e errado ao mesmo tempo" in resultado.stderr
 
 
+def test_script_nao_confunde_o_nome_do_modelo_com_a_coluna_processor(
+    tmp_path: Path,
+) -> None:
+    """Um modelo chamado `*-cpu` rodando em GPU não pode acusar CPU.
+
+    O casamento antigo lia `/CPU|GPU/` em qualquer campo, inclusive o nome do
+    modelo. A coluna PROCESSOR é porcentagem seguida do processador, e só ela
+    conta.
+    """
+    registro = tmp_path / "pulls.txt"
+    ollama_nome_cpu = (
+        'if [ "$1" = "list" ]; then\n'
+        '  echo "NAME                ID              SIZE      MODIFIED"\n'
+        '  echo "qwen2.5:3b-cpu      357c53fb659c    1.9 GB    now"\n'
+        "fi\n"
+        'if [ "$1" = "pull" ]; then\n'
+        '  echo "$2" > "$PULL_REGISTRADO"\n'
+        "fi\n"
+        'if [ "$1" = "ps" ]; then\n'
+        '  echo "qwen2.5:3b-cpu      357c53fb659c    2.2 GB    100% GPU     4096    29 minutes from now"\n'
+        "fi\n"
+    )
+    ferramentas = _montar_maquina(
+        tmp_path, nvidia_smi="8176", pull_registrado=registro, ollama=ollama_nome_cpu
+    )
+
+    resultado = _rodar_script(
+        tmp_path, ferramentas, registro, {"MODELO": "qwen2.5:3b-cpu"}
+    )
+
+    assert resultado.returncode == 0, resultado.stderr
+    assert "100% GPU" in resultado.stdout
+    assert "coluna PROCESSOR mostra CPU" not in resultado.stderr
+
+
 def test_script_avisa_quando_a_marcao_passa_da_integracao(tmp_path: Path) -> None:
     """`50% CPU/GPU` serve para atender e não serve para medir."""
     registro = tmp_path / "pulls.txt"
