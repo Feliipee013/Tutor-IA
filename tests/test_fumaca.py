@@ -46,6 +46,10 @@ def _config_de_teste(**mudancas: Any) -> Configuracao:
         "bot_port": 8000,
         "bot_env": "test",
         "log_level": "INFO",
+        "telegram_bot_token": None,
+        "telegram_webhook_secret_token": None,
+        "telegram_webhook_port": 8080,
+        "telegram_api_base": "https://api.telegram.org",
     }
     base.update(mudancas)
     return Configuracao(**base)
