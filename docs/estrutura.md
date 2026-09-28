@@ -67,12 +67,12 @@ Pergunta-teste medida contra modelo nenhum não compara nada.
 
 ## `sau/` — o pacote do bot
 
-Nome do pacote é uma proposta. O grafo é a espinha do projeto: classificação da
-intenção, e a 1.2 entra como rota nova **dentro** desse mesmo grafo, não como
-serviço à parte.
+Nome do pacote é decisão fechada junto com a #4. O grafo é a espinha do projeto:
+classificação da intenção, e a 1.2 entra como rota nova **dentro** desse mesmo
+grafo, não como serviço à parte.
 
 | Caminho | O que faz | Ticket | Existe |
-| `sau/config.py` | lê o ambiente: modelo, temperatura, `k` do semáforo, webhook, timeout, portas, VRAM total da máquina e a URL base do Ollama no host | #4 | sim |
+| `sau/config.py` | lê do ambiente o que a #4 precisa: modelo, timeout, porta, a URL base do Ollama no host e a VRAM total da máquina. Temperatura, `k` do semáforo e webhook ainda não são lidos — chegam nos tickets que vão escrevê-los, e a linha cresce aqui quando eles existirem | #4 | sim |
 | `sau/prereqs.py` | checagem rigorosa de pré-requisitos (conectividade, modelo e GPU no host) | #4 | sim |
 | `sau/main.py` | entrypoint do serviço com logs estruturados `[SAU-BOT]` e health server | #4 | sim |
 | `sau/persona.py` | o prompt versionado do S.A.U., com todas as regras de comportamento | #10 | não |

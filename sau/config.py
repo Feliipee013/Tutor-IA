@@ -65,7 +65,14 @@ def carregar_configuracao(origem: Mapping[str, str] | None = None) -> Configurac
     if vram_mib_texto:
         erro_vram = (
             f"Valor inválido para VRAM_TOTAL_MIB: '{vram_mib_bruto}'. "
-            "Esperado inteiro positivo em MiB."
+            "Esperado um inteiro positivo em MiB.\n"
+            "A causa quase sempre é o nvidia-smi: ele imprime UMA LINHA POR GPU, "
+            "então em uma máquina com mais de uma placa o comando precisa ser "
+            "filtrado para entregar um valor só:\n"
+            "  export VRAM_TOTAL_MIB=$(nvidia-smi --query-gpu=memory.total "
+            "--format=csv,noheader,nounits | head -1)\n"
+            "Se a sua máquina tem mais de uma placa, o head -1 pega a primeira: "
+            "informe na mão o total da placa que roda o Ollama."
         )
         try:
             vram_mib = int(vram_mib_texto)

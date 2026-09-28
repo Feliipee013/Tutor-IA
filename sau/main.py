@@ -78,9 +78,26 @@ def rodar_servidor(config: Configuracao, stop_event: threading.Event) -> None:
 
 def main() -> None:
     """Execução principal do serviço."""
-    config = carregar_configuracao()
-    configurar_logging(config.log_level)
+    # O log é configurado ANTES da configuração, e não depois. Uma
+    # VRAM_TOTAL_MIB malformada também é falha alta, e ela precisa sair no
+    # mesmo formato distinguível de todo o resto — um traceback cru não é
+    # "falha alta com mensagem explícita", que é o que o critério da #4 pede.
+    configurar_logging()
     logger = logging.getLogger("sau.main")
+
+    try:
+        config = carregar_configuracao()
+    except ValueError as err:
+        logger.critical(
+            "\n%s\n[ABORTANDO] Configuração inválida:\n%s\n%s",
+            "!" * 60,
+            err,
+            "!" * 60,
+        )
+        sys.exit(1)
+
+    # Reaplica com o nível que a própria configuração pediu.
+    configurar_logging(config.log_level)
 
     logger.info("=" * 60)
     logger.info("S.A.U. - Sistema de Apoio Unopar (Tutor Virtual EaD)")

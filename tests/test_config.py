@@ -59,6 +59,24 @@ def test_configuracao_vram_invalida(valor: str) -> None:
         carregar_configuracao({"VRAM_TOTAL_MIB": valor})
 
 
+def test_configuracao_vram_de_multiplas_gpus_explica_a_causa() -> None:
+    """O nvidia-smi imprime uma linha por GPU, e é essa a causa provável.
+
+    Uma máquina com duas placas entrega "4096\n4096" para o export, que não é
+    um inteiro. A mensagem precisa apontar o motivo, senão quem lê só vê
+    "Esperado um inteiro positivo" e não descobre de onde veio a quebra.
+    """
+    with pytest.raises(ValueError) as exc_info:
+        carregar_configuracao({"VRAM_TOTAL_MIB": "4096\n4096"})
+
+    msg = str(exc_info.value)
+    assert "UMA LINHA POR GPU" in msg
+    assert "head -1" in msg
+    # A causa original do int() fica preservada, para o log do container mostrar
+    # a linha que o nvidia-smi entregou.
+    assert isinstance(exc_info.value.__cause__, ValueError)
+
+
 @pytest.mark.parametrize("valor,esperado", [
     ("1", True),
     ("True", True),

@@ -86,7 +86,7 @@ precisa criar arquivo nenhum.
 ```sh
 # Caminho rápido (recomendado) - não cria .env
 export OLLAMA_HOST=0.0.0.0:11434      # só no host, antes do ollama serve
-export VRAM_TOTAL_MIB=$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits)
+export VRAM_TOTAL_MIB=$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits | head -1)
 docker compose up --build
 
 # Caminho com .env - para fixar valores e sobrescrever
@@ -152,8 +152,12 @@ A VRAM total não é exposta por nenhum endpoint do Ollama — o `/api/ps` só
 relata o `size_vram` de cada modelo — então ela tem de vir do host:
 
 ```sh
-export VRAM_TOTAL_MIB=$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits)
+export VRAM_TOTAL_MIB=$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits | head -1)
 ```
+
+O `head -1` não é decoração: o `nvidia-smi` imprime **uma linha por GPU**, e sem
+o filtro uma máquina com duas placas entrega `"4096\n4096"`, que não é um inteiro.
+Com mais de uma placa, preencha à mão o total da que roda o Ollama.
 
 ### Execução em máquinas sem GPU (Ambiente de Testes / CI)
 

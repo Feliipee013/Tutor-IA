@@ -186,6 +186,7 @@ def test_verificar_alocacao_gpu_falha_spill_parcial() -> None:
         )
 
     msg = str(exc_info.value)
+    assert "FALHA CRÍTICA" in msg
     assert "Spill parcial para CPU" in msg
     assert "50.0% em CPU" in msg
     assert "Queda silenciosa" not in msg
@@ -279,6 +280,50 @@ def test_verificar_alocacao_gpu_falha_dados_contraditorios() -> None:
     msg = str(exc_info.value)
     assert "Dados contraditórios" in msg
     assert "veredito é impossível" in msg
+
+
+def test_verificar_alocacao_gpu_falha_modelo_sem_residencia() -> None:
+    """size zerado não é queda para CPU, e a fração 0/0 não pode virar 0.0%.
+
+    Calcular a fração com size=0 dava "0.0% em CPU", que é a mesma coisa que
+    dizer que o modelo inteiro está na GPU — exatamente o que o ADR-0002
+    proíbe o código de afirmar sem prova.
+    """
+    client = _client_com_ps({"name": _MODELO, "size": 0, "size_vram": 0})
+    with pytest.raises(PreRequisitoError) as exc_info:
+        verificar_alocacao_gpu(
+            "http://host.docker.internal:11434",
+            _MODELO,
+            permitir_cpu=False,
+            vram_total_bytes=_VRAM_4GIB,
+            client=client,
+        )
+
+    msg = str(exc_info.value)
+    assert "size=0" in msg
+    assert "não tem residência" in msg
+    assert "ollama ps" in msg
+    # Nenhuma das leituras que a checagem não pode fazer.
+    assert "em CPU" not in msg
+    assert "Queda silenciosa" not in msg
+    assert "Spill parcial" not in msg
+
+
+def test_verificar_alocacao_gpu_falha_residencia_autocontraditoria() -> None:
+    """size=0 com size_vram>0 é impossível: ninguém ocupa mais VRAM que o todo."""
+    client = _client_com_ps({"name": _MODELO, "size": 0, "size_vram": 2_000_000_000})
+    with pytest.raises(PreRequisitoError) as exc_info:
+        verificar_alocacao_gpu(
+            "http://host.docker.internal:11434",
+            _MODELO,
+            permitir_cpu=False,
+            vram_total_bytes=_VRAM_4GIB,
+            client=client,
+        )
+
+    msg = str(exc_info.value)
+    assert "autocontraditório" in msg
+    assert "em CPU" not in msg
 
 
 def test_verificar_alocacao_gpu_autorizada_via_flag(caplog: pytest.LogCaptureFixture) -> None:

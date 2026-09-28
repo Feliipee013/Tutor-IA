@@ -182,9 +182,10 @@ def _diagnosticar_alocacao(
             "Nenhum endpoint do Ollama reporta o total da placa, então ele tem de "
             "vir do host:\n"
             "  export VRAM_TOTAL_MIB=$(nvidia-smi --query-gpu=memory.total "
-            "--format=csv,noheader,nounits)\n"
-            "Sem esse número a checagem do ADR-0002 não tem contra o que comparar o "
-            "size_vram que o Ollama relata."
+            "--format=csv,noheader,nounits | head -1)\n"
+            "O head -1 evita que uma máquina com várias placas entregue várias "
+            "linhas. Sem esse número a checagem do ADR-0002 não tem contra o que "
+            "comparar o size_vram que o Ollama relata."
         )
 
     if size_vram is None:
@@ -215,7 +216,29 @@ def _diagnosticar_alocacao(
             "for o da placa em uso."
         )
 
-    percentual_cpu = ((size - size_vram) / size * 100.0) if size > 0 else 0.0
+    if size == 0:
+        # O payload de /api/ps trouxe zero bytes no total do modelo. Não dá para
+        # calcular a fração de CPU: a divisão seria 0/0, e o 0.0% que sai dela é
+        # a mesma coisa que dizer que o modelo inteiro está na GPU — que é
+        # justamente o que este código existe para não afirmar.
+        if size_vram > 0:
+            leitura = (
+                f"e size_vram={size_vram}, o que é autocontraditório: não se pode "
+                "ocupar mais VRAM do que o tamanho do modelo."
+            )
+        else:
+            leitura = "e size_vram=0, ou seja, o modelo não tem residência no Ollama."
+        return PreRequisitoError, (
+            f"O /api/ps relata size={size} para o modelo '{modelo}', {leitura}\n"
+            f"A máquina declarou {vram_total_bytes} bytes de VRAM, que é o que "
+            "tornaria a checagem possível se houvesse o que conferir.\n"
+            "Aqueça o modelo no host para que ele ocupe memória "
+            f"('ollama run {modelo}' e interrompa com Ctrl+C), e confira o que "
+            "o Ollama passou a relatar:\n"
+            "  ollama ps"
+        )
+
+    percentual_cpu = (size - size_vram) / size * 100.0
 
     if size_vram == 0:
         return CpuNaoAutorizadaError, (

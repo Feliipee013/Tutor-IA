@@ -171,7 +171,8 @@ Em troca, a GPU da máquina é usada sem instalar driver de container algum.
 ```sh
 # 1. o driver NVIDIA responde, e quanto de VRAM a placa tem?
 nvidia-smi
-nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits
+# O head -1 evita que uma máquina com várias placas entregue várias linhas:
+nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits | head -1
 
 # 2. o Ollama está no ar, escutando em todas as interfaces?
 OLLAMA_HOST=0.0.0.0:11434 ollama serve   # em um terminal
