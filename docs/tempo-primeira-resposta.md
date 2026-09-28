@@ -76,8 +76,8 @@ máquina é 4096. A fumaça pede 2048, e o Ollama recarrega o modelo quando o
 tamanho da janela muda: no `journalctl` são dois `llama-server` seguidos, um com
 `-c 4096` e outro com `-c 2048`. O número do primeiro Aluno é o mesmo dos dois
 jeitos — ele paga a carga uma vez —, mas o motivo não é só "o modelo estava
-descarregado". O `curl` da seção "Para repetir", com `keep_alive: 0`, é o que
-gera de verdade o modelo frio.
+descarregado". O número do modelo frio de verdade está na seção
+[O modelo frio de verdade](#o-modelo-frio-de-verdade).
 
 ## O tempo
 
@@ -114,6 +114,27 @@ que nesta máquina é 30 minutos. Passou disso, o próximo Aluno paga a carga de
 novo. Uma madrugada inteira de plantão cabe folgada nesses 30 minutos, mas
 atender dois Alunos com 40 minutos de intervalo custa a carga outra vez.
 
+## O modelo frio de verdade
+
+A tabela acima mede pela porta da fumaça, e por isso a 1ª geração paga uma
+recarga. O modelo frio de verdade se mede com o Ollama descarregado e uma
+geração só, direto na API:
+
+| Primeiro token | Carga | Prompt | Total | tok/s | Tokens |
+| --- | --- | --- | --- | --- | --- |
+| **1,938 s** | 1,860 s | 0,078 s | 2,246 s | 97,8 | 30 |
+
+É a mesma máquina, o mesmo modelo, o mesmo prompt e o mesmo `num_ctx` 2048, com
+as condições do ADR-0003 (`temperature 0` e `seed 20260926`) — muda só a porta,
+e a fumaça não manda `temperature` nem `seed`.
+
+Os dois números ficam a uns 0,3 s um do outro, e a diferença vem do caminho: a
+fumaça carrega o modelo duas vezes, uma na checagem com 4096 e outra na
+geração com 2048, e a segunda carga vem depois da primeira. Quem pergunta
+"quanto tempo leva a primeira resposta?" leva 1,94 s nesta máquina; quem mede
+pela fumaça vê 2,25 s. Os dois são honestos, e nenhum dos dois é o número de
+produção.
+
 ## A saída, como ela saiu no log
 
 O log vem do cliente de inferência, em INFO, com o prefixo `[SAU-BOT]` do
@@ -147,12 +168,20 @@ respostas é o trabalho da #12, e ela ainda não aconteceu.
 ## Para repetir
 
 ```sh
-# 1. Descarga o modelo, senão a primeira rodada não é a primeira
+# 1. Modelo frio de verdade: descarrega, e manda uma geração só
 curl -s -X POST http://localhost:11434/api/generate \
   -H 'Content-Type: application/json' \
   -d '{"model":"qwen2.5:3b","keep_alive":0}'
 
-# 2. Roda 1 fria + 3 quentes, de dentro do container
+curl -s http://localhost:11434/api/generate \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"qwen2.5:3b","prompt":"Em uma frase, o que você faz por um aluno?","keep_alive":"30m","options":{"temperature":0,"seed":20260926,"num_predict":256,"num_ctx":2048}}'
+
+# 2. Descarga de novo e roda a fumaça: 1 com recarga + 3 quentes, de dentro do container
+curl -s -X POST http://localhost:11434/api/generate \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"qwen2.5:3b","keep_alive":0}'
+
 VRAM_TOTAL_MIB=8176 docker compose run --rm bot python -m sau.inference.fumaca --repeticoes 4
 ```
 
