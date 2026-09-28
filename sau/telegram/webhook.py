@@ -264,7 +264,3 @@ def main() -> None:
     # 0.0.0.0 porque o serviço roda em container, e é o bind que o torna
     # alcançável de fora da máquina que o do compose.
     criar_app(config).run(host="0.0.0.0", port=config.telegram_webhook_port)
-
-
-if __name__ == "__main__":
-    main()
