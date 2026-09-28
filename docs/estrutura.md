@@ -97,7 +97,7 @@ grafo, não como serviço à parte.
 | `perguntas-teste/` | as 10 Perguntas-teste, com o comportamento esperado de cada uma | #6 | sim |
 | `corpus/` | os quatro documentos autorados, um por categoria, com as contradições plantadas | P1 | não |
 | `outputs/` | saída bruta do harness, ignorada pelo git | #12 | não |
-| `tests/` | suíte `pytest`, com `test_config.py` e `test_prereqs.py` da #4 e `test_webhook.py` da #5 | #4, #5 | sim |
+| `tests/` | suíte `pytest`, com `test_config.py` e `test_prereqs.py` da #4, `test_webhook.py` da #5 e `test_ollama.py` e `test_fumaca.py` da #7 | #4, #5, #7 | sim |
 
 O `corpus/` é quebrado em unidades de recuperação pela própria equipe: cada
 `##` dentro de um documento responde a uma Pergunta Frequente, então **o chunk é

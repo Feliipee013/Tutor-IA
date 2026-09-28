@@ -132,8 +132,11 @@ Os dois números ficam a uns 0,3 s um do outro, e a diferença vem do caminho: a
 fumaça carrega o modelo duas vezes, uma na checagem com 4096 e outra na
 geração com 2048, e a segunda carga vem depois da primeira. Quem pergunta
 "quanto tempo leva a primeira resposta?" leva 1,94 s nesta máquina; quem mede
-pela fumaça vê 2,25 s. Os dois são honestos, e nenhum dos dois é o número de
-produção.
+pela fumaça vê 2,25 s. Os dois são honestos — e o da fumaça está mais perto
+da produção do que parece: o serviço roda a mesma `executar_checagens` na
+subida (`sau/main.py`), então a recarga em 2048 acontece em produção também.
+O 1,94 s é o piso, para quando o modelo caiu da VRAM depois do
+`OLLAMA_KEEP_ALIVE`.
 
 ## A saída, como ela saiu no log
 
