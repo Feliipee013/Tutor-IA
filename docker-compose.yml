@@ -21,3 +21,26 @@ services:
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
     extra_hosts:
       - "host.docker.internal:host-gateway"
+
+  # O canal do Telegram, como serviço próprio e não como thread do `bot`. A
+  # issue #5 quer o fio provado sem depender do modelo, e o `bot` não sobe sem o
+  # Ollama na GPU: atrelar o webhook a ele obrigaria quem trabalha no canal a ter
+  # a pilha de inferência no ar para testar uma única mensagem.
+  webhook:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: sau-webhook
+    # Pelo pacote, e não por `sau.telegram.webhook`: `python -m <arquivo>`
+    # carrega o módulo como `__main__` e o log do handler sai sem o nome dele.
+    command: ["python", "-m", "sau.telegram"]
+    # Sem restart automático: sem as credenciais do Telegram o serviço falha
+    # alto na subida, e reiniciar em laço só repete a mesma mensagem de erro.
+    restart: "no"
+    ports:
+      - "${TELEGRAM_WEBHOOK_PORT:-8080}:8080"
+    environment:
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+      - TELEGRAM_WEBHOOK_SECRET_TOKEN=${TELEGRAM_WEBHOOK_SECRET_TOKEN:-}
+      - TELEGRAM_WEBHOOK_PORT=8080
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}

@@ -99,8 +99,8 @@ export CUDA_VISIBLE_DEVICES=GPU-<uuid-que-nvidia-smi-L-imprimiu>
 
 ## O Ollama
 
-O compose **sobe só o bot**; o Ollama é um serviço do host (ADR-0002). Ele
-precisa estar rodando **antes** de qualquer coisa:
+O Ollama é um serviço do **host**, não do compose (ADR-0002). Ele precisa estar
+rodando **antes** de qualquer coisa:
 
 ```sh
 ollama --version

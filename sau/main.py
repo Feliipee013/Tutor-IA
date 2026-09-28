@@ -20,7 +20,7 @@ from sau.prereqs import PreRequisitoError, executar_checagens
 
 def configurar_logging(nivel: str = "INFO") -> None:
     """Configura o formato de log padronizado e distinguível do S.A.U."""
-    formato = "%(asctime)s [SAU-BOT] [%(levelname)s] %(name)s: %(message)s"
+    formato = "%(asctime)s [SAU] [%(levelname)s] %(name)s: %(message)s"
     data_formato = "%Y-%m-%d %H:%M:%S"
     logging.basicConfig(
         level=getattr(logging, nivel.upper(), logging.INFO),

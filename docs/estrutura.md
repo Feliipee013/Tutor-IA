@@ -27,9 +27,9 @@ agente Implementar localizar o ponto de impacto sem varrer o repositório inteir
 | `AGENTS.md` | como o agente trabalha aqui: skills, regras, Context7 | sim |
 | `SETUP.md` | ambiente: `gh`, Context7, e como executar o projeto | sim |
 | `Dockerfile` | imagem do serviço do bot, `python -m sau.main` — **issue #4** | sim |
-| `docker-compose.yml` | sobe só o serviço do bot, com o Ollama no host (ADR-0002) — **issue #4** | sim |
+| `docker-compose.yml` | sobe o serviço `bot` (com o Ollama no host, ADR-0002) e o serviço `webhook`, independentes entre si — **issues #4 e #5** | sim |
 | `pyproject.toml` | pacote `sau`, dependências e config de pytest, ruff e mypy — **issue #4** | sim |
-| `.env.example` | modelo das variáveis de ambiente do compose, com o que é obrigatório — **issue #4** | sim |
+| `.env.example` | modelo das variáveis de ambiente do compose, com o que é obrigatório — **issues #4 e #5** | sim |
 | `opencode.json` | MCP do Context7 e permissões de `bash` por agente | sim |
 | `docs/` | documentação versionada (abaixo) | sim |
 | `.opencode/agents/` | subagentes `criar-pr`, `criar-ticket` e `executor` | sim |
@@ -72,11 +72,12 @@ classificação da intenção, e a 1.2 entra como rota nova **dentro** desse mes
 grafo, não como serviço à parte.
 
 | Caminho | O que faz | Ticket | Existe |
-| `sau/config.py` | lê do ambiente o que a #4 precisa: modelo, timeout, porta, a URL base do Ollama no host e a VRAM total da máquina. Temperatura, `k` do semáforo e webhook ainda não são lidos — chegam nos tickets que vão escrevê-los, e a linha cresce aqui quando eles existirem | #4 | sim |
+| `sau/config.py` | lê do ambiente o que a #4 precisa: modelo, timeout, porta, a URL base do Ollama no host e a VRAM total da máquina; e o que a #5 precisa: as duas credenciais do Telegram, a porta do webhook e a URL da API. Temperatura e `k` do semáforo ainda não são lidos — chegam nos tickets que vão escrevê-los, e a linha cresce aqui quando eles existirem | #4, #5 | sim |
 | `sau/prereqs.py` | checagem rigorosa de pré-requisitos (conectividade, modelo e GPU no host) | #4 | sim |
-| `sau/main.py` | entrypoint do serviço com logs estruturados `[SAU-BOT]` e health server | #4 | sim |
+| `sau/main.py` | entrypoint do serviço com logs estruturados e health server. O prefixo da linha é `[SAU]`, do S.A.U.; o serviço que emitiu a linha é identificado pelo nome do módulo nela mesma (`sau.main` contra `sau.telegram.webhook`), e não pelo prefixo | #4 | sim |
 | `sau/persona.py` | o prompt versionado do S.A.U., com todas as regras de comportamento | #10 | não |
-| `sau/telegram/webhook.py` | handler do webhook, com acuse de recibo antes da inferência | #5 | não |
+| `sau/telegram/webhook.py` | handler do webhook, com acuse de recibo fixo ao Aluno antes de qualquer inferência, registro do update bruto e conferência do `secret_token` | #5 | sim |
+| `sau/telegram/__main__.py` | entrypoint do serviço `webhook`, para o log sair com o nome do módulo e não `__main__` | #5 | sim |
 | `sau/inference/ollama.py` | cliente do Ollama, que roda **no host** e é alcançado por `host.docker.internal:11434` ([ADR-0002](./adr/0002-topologia-do-ollama.md)) | #7 | não |
 | `sau/inference/semaphore.py` | fila com teto e semáforo em frente à inferência | #11 | não |
 | `sau/graph/state.py` | estado da conversa, isolado por Aluno | #9 | não |
@@ -92,7 +93,7 @@ grafo, não como serviço à parte.
 | `perguntas-teste/` | as 10 Perguntas-teste, com o comportamento esperado de cada uma | #6 | sim |
 | `corpus/` | os quatro documentos autorados, um por categoria, com as contradições plantadas | P1 | não |
 | `outputs/` | saída bruta do harness, ignorada pelo git | #12 | não |
-| `tests/` | suíte `pytest` | #4 | sim |
+| `tests/` | suíte `pytest`, com `test_config.py` e `test_prereqs.py` da #4 e `test_webhook.py` da #5 | #4, #5 | sim |
 
 O `corpus/` é quebrado em unidades de recuperação pela própria equipe: cada
 `##` dentro de um documento responde a uma Pergunta Frequente, então **o chunk é

@@ -25,6 +25,10 @@ class Configuracao:
     bot_port: int
     bot_env: str
     log_level: str
+    telegram_bot_token: str | None
+    telegram_webhook_secret_token: str | None
+    telegram_webhook_port: int
+    telegram_api_base: str
 
 
 _MIB_EM_BYTES = 1_048_576
@@ -91,6 +95,25 @@ def carregar_configuracao(origem: Mapping[str, str] | None = None) -> Configurac
     bot_env = env.get("BOT_ENV", "development").strip()
     log_level = env.get("LOG_LEVEL", "INFO").strip().upper()
 
+    # Credenciais do Telegram. Nenhuma das duas tem valor padrão, e nenhuma é
+    # exigida aqui: quem não conversa com o Telegram é o serviço do bot, que
+    # não precisa delas. A obrigatoriedade mora no `sau/telegram/webhook.py`,
+    # que falha alto se subir sem elas — no mesmo estilo da checagem de
+    # pré-requisito do ADR-0002, e não num `ValueError` que derrubaria também
+    # quem não usa o canal. Ausente é None; string vazia também, porque o
+    # compose injeta '${TELEGRAM_BOT_TOKEN:-}'.
+    telegram_bot_token = (env.get("TELEGRAM_BOT_TOKEN") or "").strip() or None
+    telegram_webhook_secret_token = (env.get("TELEGRAM_WEBHOOK_SECRET_TOKEN") or "").strip() or None
+    telegram_api_base = env.get("TELEGRAM_API_BASE", "https://api.telegram.org").strip()
+
+    webhook_port_raw = env.get("TELEGRAM_WEBHOOK_PORT", "8080")
+    try:
+        telegram_webhook_port = int(webhook_port_raw)
+    except ValueError as err:
+        raise ValueError(
+            f"Valor inválido para TELEGRAM_WEBHOOK_PORT: '{webhook_port_raw}'. Esperado inteiro."
+        ) from err
+
     return Configuracao(
         ollama_base_url=ollama_base_url,
         ollama_model=ollama_model,
@@ -100,4 +123,8 @@ def carregar_configuracao(origem: Mapping[str, str] | None = None) -> Configurac
         bot_port=bot_port,
         bot_env=bot_env,
         log_level=log_level,
+        telegram_bot_token=telegram_bot_token,
+        telegram_webhook_secret_token=telegram_webhook_secret_token,
+        telegram_webhook_port=telegram_webhook_port,
+        telegram_api_base=telegram_api_base,
     )
