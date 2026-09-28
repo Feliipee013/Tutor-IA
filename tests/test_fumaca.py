@@ -796,7 +796,7 @@ def test_script_nao_confunde_o_nome_do_modelo_com_a_coluna_processor(
         '  echo "$2" > "$PULL_REGISTRADO"\n'
         "fi\n"
         'if [ "$1" = "ps" ]; then\n'
-        '  echo "qwen2.5:3b-cpu      357c53fb659c    2.2 GB    100% GPU     4096    29 minutes from now"\n'
+        '  echo "qwen2.5:3b-cpu      357c53fb659c    2.2 GB    100% GPU"\n'
         "fi\n"
     )
     ferramentas = _montar_maquina(
@@ -895,7 +895,7 @@ def test_script_baixa_o_modelo_quando_so_a_tag_irma_existe(tmp_path: Path) -> No
         '  echo "$2" > "$PULL_REGISTRADO"\n'
         "fi\n"
         'if [ "$1" = "ps" ]; then\n'
-        '  echo "qwen2.5:3b-instruct    357c53fb659c    2.2 GB    100% GPU     4096    29 minutes from now"\n'
+        '  echo "qwen2.5:3b-instruct    357c53fb659c    2.2 GB    100% GPU"\n'
         "fi\n"
     )
     ferramentas = _montar_maquina(
