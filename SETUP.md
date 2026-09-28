@@ -6,9 +6,10 @@ que ainda vai ser preenchida conforme o código entrar.
 
 > **Estado do repositório:** a §3 já não é contrato — é o que está rodando. A
 > issue #4 entregou o serviço do bot como container, e a §3 descreve o
-> `docker compose up` que o sobe. As partes de conversa do S.A.U. ainda não
-> existem: o serviço sobe, checa os pré-requisitos e responde `/health`, e nada
-> mais. O mapa do que falta está em [`docs/estrutura.md`](./docs/estrutura.md).
+> `docker compose up` que o sobe. A issue #5 entregou o canal do Telegram: o
+> serviço `webhook` recebe o update e manda um acuse de recibo fixo. **O S.A.U.
+> ainda não responde**: a inferência é a #8 e a fila é a #11. O mapa do que falta
+> está em [`docs/estrutura.md`](./docs/estrutura.md).
 
 ## 1. Mapa do repositório
 
@@ -139,6 +140,15 @@ consumindo o **Ollama rodando nativamente no host**, conforme
   - `VRAM_TOTAL_MIB`: sem padrão, **obrigatória** (VRAM total da máquina em MiB, como o `nvidia-smi` imprime; exigida pelo confronto de VRAM do ADR-0002, dispensada com `OLLAMA_ALLOW_CPU=true`)
   - `BOT_PORT`: padrão `8000`
   - `LOG_LEVEL`: padrão `INFO`
+- **Variáveis do webhook (issue #5), obrigatórias para o serviço `webhook`:**
+  - `TELEGRAM_BOT_TOKEN`: **sem padrão**. O token que o `@BotFather` entrega. É o
+    que faz o Aluno achar o S.A.U. pelo `@username` e o que o serviço usa para
+    chamar a API do Telegram
+  - `TELEGRAM_WEBHOOK_SECRET_TOKEN`: **sem padrão**. A chave que o Telegram devolve
+    no header `X-Telegram-Bot-Api-Secret-Token`, e que fecha a porta do endpoint,
+    que é público pelo túnel. Gere com `openssl rand -hex 16`
+  - `TELEGRAM_WEBHOOK_PORT`: padrão `8080` (só o lado do host do mapeamento; o
+    container escuta sempre em 8080)
 - **Variável do host, fora do container:** `OLLAMA_HOST=0.0.0.0:11434`, consumida
   pelo `ollama serve` e não pelo serviço. Ver o passo 2 logo abaixo.
 - **Logs estruturados:** formato padronizado com prefixo `[SAU-BOT]` no stdout.
@@ -159,6 +169,83 @@ docker compose up -d --build
 # Para visualizar os logs
 docker compose logs -f bot
 ```
+
+### Canal do Telegram (issue #5)
+
+O webhook é um serviço separado, `webhook`, e **não** depende do `bot`. Isso é
+deliberado: o `bot` não sobe sem o Ollama na GPU, e a #5 existe para o canal do
+Telegram ser desenvolvido e testado em paralelo com o resto. Para trabalhar só no
+canal, suba só ele:
+
+```sh
+docker compose up --build webhook
+```
+
+As duas credenciais abaixo são **obrigatórias** para esse serviço, e ele falha
+alto na subida sem elas. O `bot` sobe sem nenhuma das duas, porque não conversa
+com o Telegram:
+
+```sh
+# O token que o @BotFather entrega. Fale com ele no Telegram, /newbot, e cole aqui.
+TELEGRAM_BOT_TOKEN=7123456789:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsaw
+
+# A chave que o Telegram devolve no header X-Telegram-Bot-Api-Secret-Token.
+openssl rand -hex 16
+```
+
+**Expor a porta e registrar o webhook.** O Telegram entrega updates por POST numa
+URL pública, então a porta local precisa de um túnel HTTPS. O `cloudflared` serve
+aqui porque a URL sai pronta, sem conta:
+
+```sh
+# 1. suba o serviço
+docker compose up --build webhook
+
+# 2. em outro terminal, abra o túnel para a porta 8080
+cloudflared tunnel --url http://localhost:8080
+# ele imprime algo como: https://aleatorio-1234.trycloudflare.com
+
+# 3. registre a URL pública no Telegram, com a mesma chave do passo anterior
+curl -sS "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook" \
+  -d url="https://aleatorio-1234.trycloudflare.com/webhook" \
+  -d secret_token="${TELEGRAM_WEBHOOK_SECRET_TOKEN}"
+# resposta esperada: {"ok":true,"result":true,"description":"Webhook was set"}
+```
+
+Três coisas que esse caminho impõe, e que valem antes de perder tempo:
+
+- **O Telegram só entrega em 443, 80, 88 e 8443.** O túnel resolve isso porque
+  ele termina em HTTPS e encaminha para a 8080 local; por isso a URL precisa ser
+  a do túnel, e não `http://localhost:8080`.
+- **A URL do túnel muda a cada `cloudflared`.** O `setWebhook` aponta para a URL
+  antiga, e o Telegram segue enviando para ela. Suba o túnel, pegue a URL nova e
+  rode o `setWebhook` de novo.
+- **A resposta a um `setWebhook` errado é silenciosa.** Confira com
+  `getWebhookInfo`, que mostra a URL e o erro pendente.
+
+```sh
+curl -sS "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getWebhookInfo"
+```
+
+Para desmontar, apague o webhook antes de derrubar o túnel — do contrário o
+Telegram fica reentregando update para uma URL morta:
+
+```sh
+curl -sS "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/deleteWebhook"
+```
+
+**O que esperar no log.** O `update_telegram bruto` mostra o update como o
+Telegram enviou, e `Acuse de recibo enviado ao Aluno <id>` confirma que o texto
+fixo saiu:
+
+```sh
+docker compose logs -f webhook
+```
+
+O acuse desta issue é **fixo e sem o modelo**, de propósito: o que se prova aqui
+é o fio. O turno com inferência é a #8 e a posição na fila é a #11. O serviço
+`webhook` ainda **não responde a pergunta do Aluno** — ele confirma o recebimento
+e nada mais.
 
 ### Pré-requisitos de host: o Ollama
 

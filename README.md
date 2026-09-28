@@ -129,6 +129,27 @@ Resposta esperada:
 {"status": "healthy", "servico": "sau-bot", "identidade": "S.A.U. - Sistema de Apoio Unopar"}
 ```
 
+### Canal do Telegram (Webhook)
+
+O serviço `webhook` recebe as mensagens do Aluno e responde com um **acuse de
+recibo fixo**. Ele é separado do `bot` de propósito: o `bot` exige o Ollama na
+GPU, e o canal do Telegram se desenvolve e se testa sem depender do modelo.
+
+```sh
+# as duas credenciais são obrigatórias para o serviço `webhook`
+docker compose up --build webhook
+docker compose logs -f webhook
+```
+
+O Telegram entrega updates por POST numa URL pública, então a porta local
+precisa de um túnel HTTPS, e a URL precisa ser registrada com `setWebhook`. O
+passo a passo completo, com `cloudflared`, está em
+[`SETUP.md` §3](./SETUP.md#canal-do-telegram-issue-5).
+
+> **O S.A.U. ainda não responde.** O acuse desta etapa é fixo e sem modelo, pelo
+> design da issue #5: o que se prova é o fio. A resposta vem com a #8 e a
+> posição na fila com a #11.
+
 ---
 
 ## Variáveis de Ambiente
@@ -145,8 +166,11 @@ não lê `.env` sozinho.
 | `OLLAMA_ALLOW_CPU` | `false` | Não | Se `false`, o serviço falha alto se o modelo for alocado em CPU. Se `true`, autoriza CPU (apenas para testes/dev sem GPU) |
 | `OLLAMA_TIMEOUT` | `30` | Não | Timeout em segundos para requisições ao Ollama |
 | `VRAM_TOTAL_MIB` | — (ausente) | **Sim** | VRAM total da máquina em MiB, exatamente como o `nvidia-smi` imprime. Sem ela a checagem do ADR-0002 não tem contra o que comparar o `size_vram` do Ollama, e o serviço falha alto |
-| `BOT_PORT` | `8000` | Não | Porta HTTP exposta pelo container |
+| `BOT_PORT` | `8000` | Não | Porta HTTP exposta pelo container do serviço `bot` |
 | `LOG_LEVEL` | `INFO` | Não | Nível de detalhamento dos logs (`DEBUG`, `INFO`, `WARNING`, `ERROR`) |
+| `TELEGRAM_BOT_TOKEN` | — (ausente) | **Sim** (só para `webhook`) | Token que o `@BotFather` entrega. É o que faz o Aluno achar o S.A.U. pelo `@username`. Sem ele o serviço `webhook` falha alto na subida; o `bot` sobe sem ele |
+| `TELEGRAM_WEBHOOK_SECRET_TOKEN` | — (ausente) | **Sim** (só para `webhook`) | Chave que o Telegram devolve no header `X-Telegram-Bot-Api-Secret-Token` e que fecha a porta do endpoint. Gere com `openssl rand -hex 16` |
+| `TELEGRAM_WEBHOOK_PORT` | `8080` | Não | Porta do webhook no host. O container escuta sempre em 8080 |
 
 A VRAM total não é exposta por nenhum endpoint do Ollama — o `/api/ps` só
 relata o `size_vram` de cada modelo — então ela tem de vir do host:
