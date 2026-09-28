@@ -653,6 +653,26 @@ def test_script_avisa_quando_nao_encontra_nenhuma_placa(tmp_path: Path) -> None:
     assert "export VRAM_TOTAL_MIB" not in resultado.stdout
 
 
+def test_script_avisa_quando_o_nvidia_smi_e_ilegivel(tmp_path: Path) -> None:
+    """`nvidia-smi` presente e ilegível não é máquina sem placa.
+
+    Sem o caso próprio, a pessoa lia "nem nvidia-smi, nem /sys/class/drm" e
+    concluía que a máquina não tinha placa — quando o problema é o driver ou
+    um wrapper no caminho.
+    """
+    registro = tmp_path / "pulls.txt"
+    ferramentas = _montar_maquina(
+        tmp_path, nvidia_smi="N/A", pull_registrado=registro
+    )
+
+    resultado = _rodar_script(tmp_path, ferramentas, registro)
+
+    assert resultado.returncode == 0, resultado.stderr
+    assert "não devolveu um número" in resultado.stderr
+    assert "sem GPU dedicada" not in resultado.stderr
+    assert "export VRAM_TOTAL_MIB" not in resultado.stdout
+
+
 def test_script_para_quando_a_maquina_tem_duas_placas_com_vram(tmp_path: Path) -> None:
     """Com duas placas o número é ambíguo, e adivinhar seria pior que parar.
 

@@ -117,14 +117,28 @@ descobrir_vram() {
   fi
 
   local valor=""
+  # `nvidia-smi` presente e ilegível não é "máquina sem placa": é wrapper ou
+  # driver em estado ruim, e a mensagem de baixo mandaria a pessoa para a
+  # hipótese errada. É um caso só, com aviso próprio.
+  local nvidia_ilegivel=0
   if command -v nvidia-smi >/dev/null 2>&1; then
     valor="$(vram_por_nvidia_smi || true)"
+    if [[ -z "$valor" ]]; then
+      nvidia_ilegivel=1
+    fi
   fi
   if [[ -z "$valor" ]]; then
     valor="$(vram_por_sysfs || true)"
   fi
 
   if [[ -z "$valor" ]]; then
+    if (( nvidia_ilegivel )); then
+      aviso "o nvidia-smi existe, mas não devolveu um número — wrapper? driver em estado ruim?"
+      aviso "Confira na mão: nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits"
+      aviso "Se a placa estiver visível por outro caminho, informe à mão:"
+      aviso "  VRAM_TOTAL_MIB=<total em MiB> scripts/preparar-host.sh"
+      return 0
+    fi
     aviso "não encontrei a VRAM desta máquina (nem nvidia-smi, nem /sys/class/drm)."
     aviso "Isso é o estado esperado de uma máquina sem GPU dedicada: o Ollama roda"
     aviso "em CPU, e aí quem mede tempo precisa de OLLAMA_ALLOW_CPU=true."
