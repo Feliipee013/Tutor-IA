@@ -112,8 +112,8 @@ def _ligar_ollama_falso(monkeypatch: pytest.MonkeyPatch, cliente: httpx.Client) 
     def fabrica(base_url: str, modelo: str, timeout: float = 60.0, **kwargs: Any) -> Any:
         return ClienteOllama(base_url, modelo, timeout=timeout, client=cliente)
 
-    def checagens(config: Configuracao) -> None:
-        executar_checagens(config, client=cliente)
+    def checagens(config: Configuracao) -> dict[str, Any]:
+        return executar_checagens(config, client=cliente)
 
     monkeypatch.setattr(fumaca, "ClienteOllama", fabrica)
     monkeypatch.setattr(fumaca, "executar_checagens", checagens)
@@ -383,7 +383,7 @@ def test_fumaca_com_permitir_cpu_roda_e_avisa_que_o_numero_e_de_cpu(
 
     saida = capsys.readouterr().out
     assert "TEMPOS DA GERAÇÃO" in saida
-    assert "medido com --permitir-cpu" in saida
+    assert "autorizada por --permitir-cpu" in saida
     assert "não descreve a máquina do ADR-0002" in saida
 
 
@@ -403,16 +403,65 @@ def test_fumaca_com_permitir_cpu_avisa_mesmo_com_uma_geracao_so(
     saida = capsys.readouterr().out
     assert "TEMPOS DA GERAÇÃO" in saida
     assert "TEMPO DE PRIMEIRA RESPOSTA" not in saida
-    assert "medido com --permitir-cpu" in saida
+    assert "autorizada por --permitir-cpu" in saida
     assert "não descreve a máquina do ADR-0002" in saida
+
+
+def test_fumaca_avisa_que_o_numero_e_de_cpu_quando_o_ambiente_autoriza(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """`OLLAMA_ALLOW_CPU=true` no ambiente também é autorização, e também marca.
+
+    A CPU tem duas portas na fumaça: a flag `--permitir-cpu` e a variável de
+    ambiente que o `docker compose` repassa para o container do bot. O comando
+    documentado — `docker compose run --rm bot python -m sau.inference.fumaca` —
+    roda dentro dele, então numa das duas máquinas do time sem placa NVIDIA a
+    segunda porta está aberta por padrão.
+
+    Quando ela está, as checagens passam (é para isso que servem), o modelo é
+    servido em CPU e o bloco de tempos sai inteiro. Sem marca, o número de CPU
+    vai para o documento de produção sem ninguém perceber: é o defeito que o
+    ADR-0004 existe para fechar, e a fumaça é justamente quem fecha.
+    """
+    _ligar_ollama_falso(monkeypatch, _ollama_falso(size_vram=0))
+    monkeypatch.setattr(
+        fumaca,
+        "carregar_configuracao",
+        lambda: _config_de_teste(ollama_allow_cpu=True),
+    )
+
+    assert fumaca.main([]) == 0
+
+    saida = capsys.readouterr().out
+    assert "TEMPOS DA GERAÇÃO" in saida
+    assert "é de CPU" in saida
+    assert "OLLAMA_ALLOW_CPU=true" in saida
+    assert "não descreve a máquina do ADR-0002" in saida
+
+
+def test_fumaca_avisa_pelo_fato_e_nao_pela_flag(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A marca vem do que o Ollama serviced, e não de quem pediu a execução.
+
+    Autorizar CPU numa máquina que tem GPU não transforma a medição em CPU, e
+    avisar que o número é de CPU ali seria um aviso falso — que treina quem lê
+    a ignorar o aviso. A regra é a mesma do `medir.py`: o que decide é o
+    processador, e o `size_vram` é onde ele está escrito.
+    """
+    _ligar_ollama_falso(monkeypatch, _ollama_falso())  # em GPU
+
+    assert fumaca.main(["--permitir-cpu"]) == 0
+
+    assert "é de CPU" not in capsys.readouterr().out
 
 
 def test_fumaca_sem_permitir_cpu_nao_avisa_que_rodou_em_cpu(
     ollama_preso: httpx.Client, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """O aviso é sobre CPU medida, e não sai quando a GPU está em uso."""
+    """A marca é sobre CPU medida, e não sai quando a GPU está em uso."""
     assert fumaca.main([]) == 0
-    assert "medido com --permitir-cpu" not in capsys.readouterr().out
+    assert "é de CPU" not in capsys.readouterr().out
 
 
 def test_fumaca_para_quando_a_vram_da_maquina_nao_e_declarada(

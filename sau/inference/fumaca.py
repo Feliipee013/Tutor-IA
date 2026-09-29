@@ -38,7 +38,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final, NoReturn, Sequence
 
-from sau.config import carregar_configuracao
+from sau.config import Configuracao, carregar_configuracao
 from sau.inference.ollama import (
     MOTIVO_NAO_INFORMADO,
     ClienteOllama,
@@ -47,7 +47,7 @@ from sau.inference.ollama import (
     formatar_numero,
 )
 from sau.main import configurar_logging
-from sau.prereqs import PreRequisitoError, executar_checagens
+from sau.prereqs import PreRequisitoError, executar_checagens, modelo_servido_em_cpu
 
 PERGUNTA_PADRAO: Final = "Em uma frase, o que você faz por um aluno?"
 """A pergunta da fumaça, quando ninguém manda nenhuma.
@@ -222,7 +222,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     print("=" * 72)
 
     try:
-        executar_checagens(config)
+        alocacao = executar_checagens(config)
     except PreRequisitoError as err:
         falhar(
             "a checagem de pré-requisito não passou, e sem ela não há o que "
@@ -244,17 +244,45 @@ def main(argv: Sequence[str] | None = None) -> int:
         respostas.append(resposta)
         imprimir_bloco(resposta, indice, args.repeticoes)
 
-    _imprimir_resumo(respostas, permitir_cpu=args.permitir_cpu)
+    _imprimir_resumo(
+        respostas,
+        em_cpu=modelo_servido_em_cpu(alocacao),
+        origem_da_autorizacao=_origem_da_autorizacao(args, config),
+    )
     return 0
 
 
-def _imprimir_resumo(respostas: list[Resposta], *, permitir_cpu: bool) -> None:
+def _origem_da_autorizacao(args: Opcoes, config: Configuracao) -> str:
+    """Quem abriu a porta da CPU nesta execução: a flag ou o ambiente.
+
+    São duas portas e elas precisam ser nomeadas separadamente, porque agir em
+    uma não significa ter agido na outra: `--permitir-cpu` autoriza só esta
+    execução, e `OLLAMA_ALLOW_CPU=true` é da máquina e atravessa o `docker
+    compose` para dentro do container.
+    """
+    if args.permitir_cpu:
+        return "--permitir-cpu"
+    if config.ollama_allow_cpu:
+        return "OLLAMA_ALLOW_CPU=true no ambiente"
+    return "a checagem de pré-requisito"
+
+
+def _imprimir_resumo(
+    respostas: list[Resposta], *, em_cpu: bool, origem_da_autorizacao: str
+) -> None:
     """Fecha com a régua do ADR-0003: o primeiro token de cada geração.
 
     Quando há mais de uma geração, a primeira carregou o modelo e as outras não.
     A média das duas coisas seria um número que nenhuma delas pagou, então elas
     ficam separadas: a primeira é o que o primeiro Aluno da madrugada espera, e
     as outras são o que os Alunos seguintes esperam.
+
+    O aviso de CPU decide pelo que o Ollama serviu, e não por quem pediu a
+    execução. Autorizar CPU numa máquina com GPU não muda o processador, e
+    marcar ali seria um aviso falso — que treina quem lê a ignorar o aviso, que
+    é o que o aviso existe para evitar. Já abrir a porta por `OLLAMA_ALLOW_CPU`
+    no ambiente, sem a flag, é a segunda rota para o mesmo número de CPU, e
+    também precisa marcar.
     """
     if len(respostas) > 1:
         print("=" * 72)
@@ -265,10 +293,11 @@ def _imprimir_resumo(respostas: list[Resposta], *, permitir_cpu: bool) -> None:
         print(f"  demais gerações, modelo carregado: {media:.3f} s (média de {len(seguintes)})")
         print("=" * 72)
 
-    if permitir_cpu:
+    if em_cpu:
         print(
-            "\nATENÇÃO: isto foi medido com --permitir-cpu. O número acima é de CPU "
-            "e não descreve a máquina do ADR-0002."
+            f"\nATENÇÃO: o modelo foi servido em CPU, e o número acima é de CPU: "
+            f"não descreve a máquina do ADR-0002 e não entra em documento de "
+            f"produção. A execução em CPU foi autorizada por {origem_da_autorizacao}."
         )
 
 
