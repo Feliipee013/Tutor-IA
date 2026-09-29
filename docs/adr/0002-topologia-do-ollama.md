@@ -53,3 +53,53 @@ Quando a #7 criar o cliente do Ollama, ele vai no serviço `bot` e alcança
 `http://host.docker.internal:11434` como este ADR descreve. Se algum dia ele for
 posto no `webhook`, isso reabre a decisão e não é uma conveniência de
 implementação.
+
+## Emenda (issue #8, 2026-09-29): o turno roda no serviço `webhook`
+
+A #8 põe o turno no serviço `webhook` — o grafo LangGraph e a chamada ao modelo
+saem de lá, e não do `bot`. Isso é o que a emenda anterior previu como "reabre a
+decisão", e a emenda é o registro de que ela foi reaberta e resolvida.
+
+A emenda continua **aditiva**: o status deste ADR segue `accepted` e a decisão de
+onde o Ollama roda não muda. O modelo continua **nativo no host**, com a GPU da
+máquina e o `OLLAMA_HOST=0.0.0.0:11434` que a decisão original exige. O que muda é
+**qual serviço o alcança**: o `webhook` passou a alcançar
+`http://host.docker.internal:11434` pelo mesmo `extra_hosts` do `bot`, e a frase
+"só o serviço do bot vai em container" do texto original deixa de valer para o
+acesso ao modelo.
+
+A frase que a emenda da #5 deixou como condição — "se algum dia ele for posto no
+`webhook`, isso reabre a decisão" — é lida aqui como o que era: uma advertência,
+não um veto. O que a decisão original protege é a **GPU**: que o modelo não caia
+para CPU em silêncio, e que ninguém confundisse o `bot` inferindo em container com
+o modelo rodando em container. Nenhum dos dois se altera por um container a mais
+alcançar o host.
+
+**O que não muda:** Ollama nativo no host; GPU da máquina; `OLLAMA_HOST=0.0.0.0`;
+o modelo em `~/.ollama` e não em volume; a porta 11434 fora do compose.
+
+**O que muda, e é a consequência que importa:**
+
+- **O `webhook` continua subindo sem o Ollama, e é o turno que passa a depender
+  dele.** A emenda da #5 dizia que o serviço "sobe numa máquina sem GPU" por não
+  tocar no modelo, e isso segue verdade: ele não roda a checagem de pré-requisito,
+  não checa VRAM e não falha alto quando o Ollama está fora — é o que permite
+  acusejar Aluno com o modelo caído, devolvendo a mensagem amigável em vez de um
+  5xx. O que muda é o **turno**: ele passa a depender do Ollama do mesmo jeito
+  que a geração do `bot` depende. Subir é barato; responder não é.
+- **A `OLLAMA_ALLOW_CPU` e a `VRAM_TOTAL_MIB` continuam fora do `webhook`.** São
+  variáveis da checagem de pré-requisito, e a checagem é do `bot`. A degradação
+  silenciosa para CPU que este ADR existe para fechar é um problema do serviço
+  que **mede**; o `webhook` não mede tempo, e quem mede é `docs/medicao-modelo`.
+  A alternativa seria estender a checagem ao `webhook`, e aí o canal do Telegram
+  passaria a exigir GPU para acusejar Aluno — o oposto do que a #5 comprou ao
+  separá-lo do `bot`.
+- **A thread por turno é dívida assumida.** O `webhook` dispara uma thread por
+  turno para que o acuse não espere o modelo. A fila e o semáforo são da #11, e é
+  a #11 que substitui a thread. Até lá, dois turnos simultâneos para o mesmo
+  Aluno rodam em paralelo, sem ordem entre eles.
+
+O serviço `bot` segue dono da checagem de pré-requisito e do health server, e a
+divisão entre os dois serviços é a mesma que a emenda da #5: o `bot` é o serviço
+de inferência e medição, o `webhook` é o canal do Telegram. O que a #8 acrescenta é
+que o canal também fala com o modelo.
