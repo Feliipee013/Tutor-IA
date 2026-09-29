@@ -100,6 +100,6 @@ o modelo em `~/.ollama` e não em volume; a porta 11434 fora do compose.
   Aluno rodam em paralelo, sem ordem entre eles.
 
 O serviço `bot` segue dono da checagem de pré-requisito e do health server, e a
-divisão entre os dois serviços é a mesma que a emenda da #5%: o `bot` é o serviço
+divisão entre os dois serviços é a mesma que a emenda da #5: o `bot` é o serviço
 de inferência e medição, o `webhook` é o canal do Telegram. O que a #8 acrescenta é
 que o canal também fala com o modelo.

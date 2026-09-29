@@ -115,10 +115,10 @@ class TelegramFalso:
 
     @property
     def textos(self) -> list[str]:
-        """O texto de cada mensagem, na ordem em que a Aluna as receberia.
+        """O texto de cada mensagem, na ordem em que o Aluno as receberia.
 
-        A lista de `text` é a única afirmação que importa sobre o canal: o que a
-        Aluna viu, e em que ordem. Ela aparece em quase todo teste de turno, e
+        A lista de `text` é a única afirmação que importa sobre o canal: o que o
+        Aluno viu, e em que ordem. Ela aparece em quase todo teste de turno, e
         escrevê-la à mão a cada vez era o mesmo `json.loads` repetido seis vezes,
         com uma delas errando o campo e passando sem querer.
         """
@@ -577,7 +577,7 @@ def test_a_mensagem_do_aluno_chega_ao_modelo_e_a_resposta_volta(
 def test_o_texto_do_aluno_e_a_mensagem_que_o_grafo_recebe(
     telegram: TelegramFalso, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A pergunta do modelo é a da Aluna, e não uma constante do grafo.
+    """A pergunta do modelo é a do Aluno, e não uma constante do grafo.
 
     Um turno que respondesse a uma pergunta fixa passaria pelo teste do caminho
     inteiro acima, porque o texto do modelo voltaria igual. Aqui o modelo falso
@@ -662,7 +662,7 @@ def test_resposta_vazia_do_modelo_vira_mensagem_de_falha(
     O `ClienteOllama` trata `response` ausente como erro, mas `response` vazio é
     resposta válida para ele: o Ollama devolve isso quando o modelo para sem
     escrever. Entregar esse vazio ao Telegram é pior que falhar — o `sendMessage`
-    é recusado com 400, o turno não vira erro nenhum, e a Aluna fica com o acuse e
+    é recusado com 400, o turno não vira erro nenhum, e o Aluno fica com o acuse e
     sem nenhum sinal do motivo.
 
     O teste usa um texto só de espaço, e não string vazia, porque é esse o caso
@@ -701,7 +701,7 @@ def test_o_turno_roda_na_thread_de_producao(
     turno terminar, e o caso acabaria com a thread ainda escrevendo depois do fim
     dele. A fixture `threads_do_turno` é quem espera.
 
-    O que a Aluna recebeu não é afirmado aqui, e é de propósito: sob a
+    O que o Aluno recebeu não é afirmado aqui, e é de propósito: sob a
     `destinos_de_saida` o Telegram é respondido pela própria fixture, com uma
     requisição sintetizada e sem corpo, então os textos entregues são de outro
     teste — o `test_a_mensagem_do_aluno_chega_ao_modelo_e_a_resposta_volta`, que
@@ -746,13 +746,13 @@ def test_erro_inesperado_no_turno_vira_mensagem_ao_aluno(
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """Um erro que não é do modelo também vira frase para a Aluna.
+    """Um erro que não é do modelo também vira frase para o Aluno.
 
     `ErroDeInferencia` é o caminho previsto: o `ClienteOllama` transforma timeout,
     conexão, HTTP e JSON inválido nela. Mas o grafo também pode estourar, e um
     `KeyError` de estado faltando não é `ErroDeInferencia`. Quem está do outro
     lado é uma thread, e exceção que sai de uma thread morre com ela: sem log e sem
-    a Aluna saber que o turno nem aconteceu. O `except` largo no executor existe
+    o Aluno saber que o turno nem aconteceu. O `except` largo no executor existe
     para essa borda, e este teste é o que a segura.
 
     A diferença em relação ao teste do `ErroDeInferencia` está no log: aqui a
@@ -781,14 +781,14 @@ def test_telegram_recusando_a_resposta_nao_vira_5xx_e_nao_vira_excecao(
     """O Telegram recusando a resposta é registrado, e o webhook segue de pé.
 
     Este é o furo honesto que sobrou depois do caminho feliz: o acuse sai, o turno
-    roda, e a entrega da resposta é recusada pela API. A Aluna fica com o acuse e
+    roda, e a entrega da resposta é recusada pela API. O Aluno fica com o acuse e
     silêncio. Não há o que fazer no `#8` — a mensagem saiu do sistema e o Telegram
-    não quis —, e devolver 5xx pioraria: faria o update ser reentregue e a Aluna
+    não quis —, e devolver 5xx pioraria: faria o update ser reentregue e o Aluno
     levaria o acuse duas vezes.
 
     O que dá para fazer, e é o que este teste fixa, é o comportamento interno: o
     erro fica registrado para o operador e nada sobe. A reentrega do que falhou é
-    a fila da #11, e é lá que a Aluna volta a receber a resposta.
+    a fila da #11, e é lá que o Aluno volta a receber a resposta.
     """
     telegram.status = 500
 
@@ -831,9 +831,9 @@ def test_mensagem_sem_texto_e_acusejada_e_nao_gera_turno(telegram: TelegramFalso
     """Foto, áudio e comando de teclado são acusejados e não viram turno.
 
     O grafo da #8 recebe mensagem escrita. Um turno sobre uma foto seria o S.A.U.
-    inventando a pergunta da Aluna, e inventar a pergunta é o defeito que a
+    inventando a pergunta do Aluno, e inventar a pergunta é o defeito que a
     persona da #10 vem justamente para fechar. O acuse sai do mesmo jeito, porque
-    o que a Aluna precisa é saber que a mensagem chegou.
+    o que o Aluno precisa é saber que a mensagem chegou.
 
     O caso do `caption` é o que dá nome a este teste: o Telegram manda a legenda
     da foto no campo `caption`, e não em `text`. Ler `text` é o que impede que a

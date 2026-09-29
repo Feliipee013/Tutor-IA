@@ -386,7 +386,7 @@ def criar_app(
     função com esse nome no módulo, a que de fato roda o grafo, e um parâmetro
     homônimo a esconderia dentro desta função. Os dois nomes dizem coisas
     diferentes — `executor` é o callable injetado, `executar_turno` é a função
-    que chama o modelo — e a armadilha éara o bastante para o nome não ser o mesmo.
+    que chama o modelo — e a armadilha é rara o bastante para o nome não ser o mesmo.
 
     `executor` e `agendar` existem para o teste afirmar duas coisas que com a
     thread real não são afirmáveis: que o turno começa depois do acuse, e que o
