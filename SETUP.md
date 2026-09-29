@@ -295,45 +295,124 @@ O compose **não sobe o Ollama**. Ele sobe dois serviços, `bot` e `webhook` (is
 Docker. Em troca, a GPU da máquina é usada sem instalar driver de container
 algum.
 
-**Instalar e verificar, nesta ordem:**
+**O passo inteiro cabe em um comando**, e ele pode ser repetido sem medo — na
+segunda vez ele não baixa o modelo:
 
 ```sh
-# 1. o driver NVIDIA responde, e quanto de VRAM a placa tem?
+scripts/preparar-host.sh
+```
+
+Ele descobre a VRAM, confere que o Ollama responde, baixa o modelo se faltar, e
+imprime a linha `export VRAM_TOTAL_MIB=...` pronta para o `docker compose up`.
+O mesmo passo, escrito à mão:
+
+```sh
+# 1. quanto de VRAM a placa tem? (o número que alimenta o VRAM_TOTAL_MIB)
+#    placa NVIDIA:
 nvidia-smi
-# O head -1 evita que uma máquina com várias placas entregue várias linhas:
 nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits | head -1
+#    qualquer outra placa (AMD, Intel) — o valor vem em bytes:
+cat /sys/class/drm/card*/device/mem_info_vram_total
 
 # 2. o Ollama está no ar, escutando em todas as interfaces?
 OLLAMA_HOST=0.0.0.0:11434 ollama serve   # em um terminal
 curl -s http://localhost:11434/api/version   # em outro
 
-# 3. está mesmo na GPU, e não em CPU?
+# 3. o modelo está baixado?
+ollama pull qwen2.5:3b
+
+# 4. está mesmo na GPU, e não em CPU?
+ollama run qwen2.5:3b   # e interrompa com Ctrl+C, para o modelo ficar carregado
 ollama ps        # a coluna PROCESSOR diz "100% GPU" ou "100% CPU"
 ```
+
+O número do passo 1 é **obrigatório** por padrão: nenhum endpoint do Ollama
+reporta a VRAM total da máquina, então sem ele a checagem do ADR-0002 não tem
+contra o que comparar o `size_vram` que o Ollama relata, e o serviço falha alto.
+Quem está em dev ou CI sem GPU não precisa dele, porque
+`OLLAMA_ALLOW_CPU=true` transforma a falha em aviso.
+
+Duas coisas sobre esse número:
+
+- **Ele não tem nada de NVIDIA.** `VRAM_TOTAL_MIB` é um inteiro em MiB, e a
+  checagem só o compara com o `size_vram` em bytes. O `/sys/class/drm` é o
+  caminho para quem não tem `nvidia-smi`, e a conversão de bytes para MiB
+  arredonda para cima — arredondar para baixo faria a placa parecer menor do que
+  é e reprovaria uma alocação que cabe.
+- **Ele precisa ser o da sua máquina.** Um total errado aprova a checagem errada
+  e não aparece como erro. Confira na primeira vez. Com mais de uma placa, o
+  script para e mostra as duas em vez de escolher por você.
+
+O [ADR-0004](./docs/adr/0004-vram-por-maquina.md) tem o resto das receitas, e
+o caso "sem GPU dedicada" inteiro.
 
 **O passo 2 é o que o compose não consegue fazer por você.** O bind padrão do
 Ollama é `127.0.0.1`, e o container do bot chega no IP da bridge do Docker, não
 no loopback do host: com o bind padrão a conexão é recusada na hora, com
 `Errno 111: Connection refused`, antes de qualquer checagem de pré-requisito. Por
-isso o `OLLAMA_HOST` precisa ser `0.0.0.0:11434` no shell **antes** de subir o
-Ollama. A contrapartida é de segurança: `0.0.0.0` expõe a porta 11434 em todas
-as interfaces da rede, não só na localhost. Em rede confiável, com a máquina de
-inference atrás de firewall, é o preço do bind; em rede não confiável, restrinja
-o bind a uma interface que só a bridge alcance, ou coloque um proxy com
-autenticação na frente.
+isso o `OLLAMA_HOST` precisa ser `0.0.0.0:11434`.
 
-O número do `nvidia-smi --query-gpu=memory.total` é o que alimenta a
-`VRAM_TOTAL_MIB`, e ele é **obrigatório**: nenhum endpoint do Ollama reporta a
-VRAM total da máquina, então sem ele a checagem do ADR-0002 não tem contra o que
-comparar o `size_vram` que o Ollama relata, e o serviço falha alto. Quem está em
-dev ou CI sem GPU não precisa dele, porque `OLLAMA_ALLOW_CPU=true` transforma a
-falha em warning.
+**Onde essa variável mora depende de quem sobe o Ollama.** São dois casos, e
+confundir os dois é o jeito mais comum de o passo 2 não funcionar:
 
-O passo 3 é o que não pode ser pulado. `nvidia-smi` responder e a porta 11434
+- **Ollama de serviço do systemd** (pelo pacote do Arch, do Ubuntu ou pelo
+  instalador oficial). A variável vai no serviço, com um arquivo de override:
+
+  ```sh
+  sudo tee /etc/systemd/system/ollama.service.d/host.conf >/dev/null <<'EOF'
+  [Service]
+  Environment="OLLAMA_HOST=0.0.0.0:11434"
+  EOF
+  sudo systemctl daemon-reload
+  sudo systemctl restart ollama
+  ```
+
+  Confira com `systemctl show ollama --property=Environment` (tem que aparecer
+  `OLLAMA_HOST=0.0.0.0:11434`) e com `ss -ltn | grep 11434` (tem que dar
+  `*:11434`). O primeiro comando diz o que o serviço recebeu, o segundo diz onde
+  ele está escutando. Se o primeiro estiver certo e o segundo mostrar
+  `127.0.0.1:11434`, outro processo está na frente da porta e o `ollama` do seu
+  PATH pode estar falando com ele.
+
+- **Ollama que você mesmo sobe**, no seu terminal, com
+  `OLLAMA_HOST=0.0.0.0:11434 ollama serve`. Aqui a variável no shell basta. Ela
+  não sobrevive ao fechamento do terminal, e o comando `ollama` do seu PATH
+  precisa apontar para o mesmo binário do serviço — senão você mede um Ollama e
+  o compose fala com outro.
+
+A contrapartida é de segurança nos dois casos: `0.0.0.0` expõe a porta 11434 em
+todas as interfaces da rede, não só na localhost. Em rede confiável, com a
+máquina de inference atrás de firewall, é o preço do bind; em rede não
+confiável, restrinja o bind a uma interface que só a bridge alcance, ou coloque
+um proxy com autenticação na frente.
+
+O passo 4 é o que não pode ser pulado. `nvidia-smi` responder e a porta 11434
 devolver JSON **são compatíveis com o Ollama servindo em CPU** — e nesse estado
 todo o stack sobe parecendo saudável, com o modelo absurdamente lento. É
 exatamente o defeito que o ADR-0002 existe para fechar, e o motivo de a issue
 #4 exigir falha alta na checagem de pré-requisito em vez de uma espera silenciosa.
+
+### Medindo o tempo de primeira resposta
+
+Depois do stack no ar, dá para medir o que o primeiro Aluno da madrugada espera:
+
+```sh
+VRAM_TOTAL_MIB=<o da sua máquina> docker compose run --rm bot python -m sau.inference.fumaca
+```
+
+Com `--repeticoes 4`, a primeira rodada sai com o modelo descarregado e as três
+seguintes com ele carregado — que é a diferença entre o primeiro Aluno e os
+outros. Para mandar outra pergunta:
+
+```sh
+python -m sau.inference.fumaca --pergunta "sua pergunta aqui"
+python -m sau.inference.fumaca --de-arquivo pergunta.txt
+```
+
+O resultado desta máquina está em
+[`docs/tempo-primeira-resposta.md`](./docs/tempo-primeira-resposta.md) — e ele
+é o número da máquina do ADR-0002, a GTX 1650 de 4 GB. O seu não vai ser igual:
+placa diferente é outro tempo, e a pergunta e a persona mudam o número também.
 
 **Dois detalhes de laptop híbrido.** A máquina da decisão tem Intel UHD e NVIDIA
 integrada: ao medir, fixe `CUDA_VISIBLE_DEVICES` para a placa discreta, senão a

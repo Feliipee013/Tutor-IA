@@ -12,22 +12,56 @@ Conforme definido no [ADR-0002](docs/adr/0002-topologia-do-ollama.md), adotamos 
 
 ## Pré-requisitos no Host
 
-Antes de subir os containers, prepare o host seguindo estes passos:
+O passo inteiro cabe em um comando, e ele pode ser repetido à vontade — não
+baixa o modelo duas vezes:
 
-### 1. Verificar Driver NVIDIA e GPU
+```sh
+scripts/preparar-host.sh
+```
+
+O script descobre a VRAM da sua placa, confere que o Ollama responde, baixa o
+modelo se ele ainda não estiver no host, e imprime no final a linha
+`export VRAM_TOTAL_MIB=...` para você usar no `docker compose up`. Se algo
+estiver errado, ele para e diz o quê.
+
+Abaixo está o mesmo passo escrito à mão, para quando algo der errado e você
+precisar entender o que o script fez.
+
+### 1. Verificar a GPU e anotar a VRAM
+
+O número que o serviço confronta é a **VRAM total da placa**, em MiB. Ele não
+vem de nenhum endpoint do Ollama — o `/api/ps` só diz o quanto cada modelo
+ocupou — então sai do sistema:
+
+**Placa NVIDIA:**
 
 ```sh
 nvidia-smi
+nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits | head -1
 ```
 
-Certifique-se de que a GPU é reconhecida e o driver está operante.
-
-Anote também a VRAM total da placa, que é o número que o serviço confronta com o
-que o Ollama relata:
+**Placa de qualquer outra marca** (AMD, Intel): o `nvidia-smi` não existe, e o
+kernel publica a mesma informação em `/sys/class/drm`:
 
 ```sh
-nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits
+cat /sys/class/drm/card*/device/mem_info_vram_total
 ```
+
+Esse número vem em **bytes**. Divida por 1048576 para ter MiB, arredondando
+**para cima** — é assim que o script faz. Uma GPU integrada costuma não ter esse
+arquivo, e tudo bem: ela não tem VRAM para declarar.
+
+Se a máquina tem mais de uma placa, o `head -1` no comando do `nvidia-smi` é o
+que evita que o script receba duas linhas e não saiba qual usar. Com o
+`/sys/class/drm`, o script para e mostra as duas em vez de escolher por você.
+Detalhes e o resto das receitas, no
+[ADR-0004](docs/adr/0004-vram-por-maquina.md).
+
+**Sem GPU dedicada?** Tudo acima não se aplica, e o serviço sobe assim mesmo —
+com `OLLAMA_ALLOW_CPU=true`. Ele roda em CPU, e nesse caso **não mede tempo**: um
+número de CPU é plausível e errado ao mesmo tempo. Ver
+[Execução em máquinas sem GPU](#execução-em-máquinas-sem-gpu-ambiente-de-testes--ci)
+abaixo.
 
 ### 2. Iniciar o Ollama no Host
 
@@ -42,6 +76,39 @@ OLLAMA_HOST=0.0.0.0:11434 ollama serve
 loopback do host. Sem esta variável, a conexão é recusada na hora
 (`Errno 111: Connection refused`) e o serviço nem chega à checagem de
 pré-requisito.
+
+**Se o seu Ollama é um serviço do systemd** — é o que sobra depois de instalar
+pelo pacote do Arch, do Ubuntu ou pelo instalador oficial — o comando acima não
+resolve. Ele sobe um Ollama a mais, no seu terminal, e some quando você fecha o
+terminal; o serviço do sistema, que é o que o `docker compose` encontra, continua
+no `127.0.0.1`. Nesse caso a variável vai no serviço:
+
+```sh
+sudo tee /etc/systemd/system/ollama.service.d/host.conf >/dev/null <<'EOF'
+[Service]
+Environment="OLLAMA_HOST=0.0.0.0:11434"
+EOF
+sudo systemctl daemon-reload
+sudo systemctl restart ollama
+```
+
+São três comandos, e o último reinicia o Ollama: some com o que já estava
+carregado. Dá para conferir se pegou com estes dois:
+
+```sh
+systemctl show ollama --property=Environment   # tem que aparecer OLLAMA_HOST=0.0.0.0:11434
+ss -ltn | grep 11434                           # tem que dar *:11434, e não 127.0.0.1:11434
+```
+
+O primeiro diz o que o serviço recebeu; o segundo diz em que endereço ele está
+escutando de verdade. Se o primeiro tiver a variável e o segundo mostrar
+`127.0.0.1:11434`, o que está na frente da porta é outro processo — e o comando
+`ollama` do seu PATH pode estar apontando para o outro, o que faz a alteração
+parecer funcionar sem ter funcionado.
+
+O `export OLLAMA_HOST=0.0.0.0:11434` no seu shell só vale se **você** for subir o
+Ollama com `ollama serve`. Com serviço do systemd, quem precisa da variável é o
+serviço.
 
 > **Ressalva de segurança:** `0.0.0.0` expõe a porta 11434 em **todas** as
 > interfaces da rede, não só na localhost. Em rede confiável, com a máquina de
@@ -63,7 +130,24 @@ Conforme o [ADR-0003](docs/adr/0003-modelo-do-ollama.md), o modelo padrão é o 
 ollama pull qwen2.5:3b
 ```
 
-O modelo fica persistido no diretório padrão do host (`~/.ollama`), sobrevivendo a `docker compose down` e `docker compose up`.
+O modelo fica no diretório que o `OLLAMA_MODELS` apontar, e **não
+necessariamente em `~/.ollama`**. O `OLLAMA_MODELS` do serviço é quem decide, e o
+padrão dele muda de instalação para instalação. Numa máquina com pouco espaço na
+home, é comum apontar para um disco maior:
+
+```sh
+# no serviço do Ollama, antes de subir
+OLLAMA_MODELS=/mnt/data/ollama/models
+```
+
+Para ver onde os modelos estão nesta máquina:
+
+```sh
+systemctl show ollama --property=Environment | grep OLLAMA_MODELS
+```
+
+O modelo sobrevive a `docker compose down` e `docker compose up` porque vive no
+host, não em volume do compose.
 
 ### 4. Confirmar Alocação em GPU
 
@@ -72,6 +156,10 @@ ollama ps
 ```
 
 Verifique a coluna `PROCESSOR`. Ela deve indicar `100% GPU`.
+
+O `ollama ps` só lista o que está **carregado**. Se a tabela estiver vazia, rode
+`ollama run qwen2.5:3b` e interrompa com Ctrl+C, e olhe de novo. O
+`scripts/preparar-host.sh` faz essa carga por você.
 
 ---
 
@@ -85,8 +173,8 @@ precisa criar arquivo nenhum.
 
 ```sh
 # Caminho rápido (recomendado) - não cria .env
-export OLLAMA_HOST=0.0.0.0:11434      # só no host, antes do ollama serve
-export VRAM_TOTAL_MIB=$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits | head -1)
+scripts/preparar-host.sh
+# ele imprime a linha "export VRAM_TOTAL_MIB=..." — copie e rode ela
 docker compose up --build
 
 # Caminho com .env - para fixar valores e sobrescrever
@@ -97,6 +185,13 @@ docker compose up --build
 
 Note que `OLLAMA_HOST` não entra no `.env`: ele é consumido pelo `ollama serve`,
 que roda no host, e não pelo container.
+
+Para medir o tempo de primeira resposta, ou só para conferir que o modelo
+responde de dentro do container:
+
+```sh
+VRAM_TOTAL_MIB=<o da sua máquina> docker compose run --rm bot python -m sau.inference.fumaca
+```
 
 Para executar em segundo plano:
 
@@ -177,12 +272,22 @@ A VRAM total não é exposta por nenhum endpoint do Ollama — o `/api/ps` só
 relata o `size_vram` de cada modelo — então ela tem de vir do host:
 
 ```sh
+# placa NVIDIA
 export VRAM_TOTAL_MIB=$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits | head -1)
+
+# qualquer outra placa: o valor vem em bytes, divida por 1048576 arredondando para cima
+export VRAM_TOTAL_MIB=$(( ($(cat /sys/class/drm/card*/device/mem_info_vram_total | head -1) + 1048575) / 1048576 ))
 ```
+
+Ou, mais simples, deixe o `scripts/preparar-host.sh` fazer isso e imprimir a
+linha pronta.
 
 O `head -1` não é decoração: o `nvidia-smi` imprime **uma linha por GPU**, e sem
 o filtro uma máquina com duas placas entrega `"4096\n4096"`, que não é um inteiro.
-Com mais de uma placa, preencha à mão o total da que roda o Ollama.
+Com mais de uma placa, preencha à mão o total da que roda o Ollama. E confira o
+valor na primeira vez de cada máquina: um total errado aprova a checagem errada,
+e isso não aparece como erro. O [ADR-0004](docs/adr/0004-vram-por-maquina.md)
+tem o resto das receitas.
 
 ### Execução em máquinas sem GPU (Ambiente de Testes / CI)
 
@@ -195,6 +300,15 @@ OLLAMA_ALLOW_CPU=true docker compose up --build
 Com `OLLAMA_ALLOW_CPU=true`, a `VRAM_TOTAL_MIB` deixa de ser obrigatória: a
 checagem de VRAM passa a registrar warning e a execução segue, porque em máquina
 sem GPU não há VRAM para conferir.
+
+**Rodar em CPU não é medir em CPU.** O serviço sobe e atende, e o número de
+tempo que sair daí descreve o processador da sua máquina, não a placa de
+produção. Para medir tempo, é preciso GPU dedicada. A fumaça e o
+[`medir.py`](docs/medicao-modelo/medir.py) param com erro antes de gerar
+qualquer tempo quando o modelo está em CPU, a não ser que a CPU esteja
+autorizada — pela flag `--permitir-cpu` ou pelo `OLLAMA_ALLOW_CPU=true` que o
+compose repassa para o container. Nas duas o número sai marcado como número de
+CPU, e o aviso diz qual das duas portas foi aberta.
 
 ---
 

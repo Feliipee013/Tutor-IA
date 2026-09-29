@@ -14,6 +14,7 @@ from typing import Any
 import httpx
 
 from sau.config import Configuracao
+from sau.inference.ollama import NUM_CTX_PADRAO
 
 logger = logging.getLogger("sau.prereqs")
 
@@ -36,6 +37,21 @@ class CpuNaoAutorizadaError(PreRequisitoError):
 
 class VramNaoInformadaError(PreRequisitoError):
     """Lançada quando o host não declarou a VRAM total que a checagem confronta."""
+
+
+def modelo_servido_em_cpu(item_ps: dict[str, Any]) -> bool:
+    """O `/api/ps` diz que este modelo foi servido sem residência na VRAM?
+
+    `size_vram` zerado é a queda silenciosa que o ADR-0002 nomeia: o Ollama
+    aceitou a requisição e serviu o modelo inteiro em CPU. O campo ausente é o
+    mesmo veredito para quem precisa decidir se marca um número — não deu para
+    confirmar a GPU, e número não confirmado não é número de GPU.
+
+    A regra mora aqui e não no consumidor porque `_diagnosticar_alocacao` já a
+    aplica: quem pergunta se o modelo está na GPU e quem decide se o tempo sai
+    marcado como CPU precisam responder a mesma pergunta, com a mesma resposta.
+    """
+    return not int(item_ps.get("size_vram") or 0)
 
 
 def verificar_conectividade(
@@ -134,13 +150,18 @@ def aquecer_modelo(
     timeout: float = 30.0,
     client: httpx.Client | None = None,
 ) -> None:
-    """Dispara uma geração mínima para que o Ollama carregue o modelo na memória."""
+    """Dispara uma geração mínima para que o Ollama carregue o modelo na memória.
+
+    O `num_ctx` é o mesmo da geração (`NUM_CTX_PADRAO` do cliente): sem ele o
+    Ollama carregaria com o default do servidor (4096) e a geração seguinte,
+    com 2048, recarregaria — o primeiro Aluno pagaria duas cargas.
+    """
     url = f"{base_url.rstrip('/')}/api/generate"
     payload: dict[str, Any] = {
         "model": modelo,
         "prompt": "",
         "keep_alive": "5m",
-        "options": {"num_predict": 1},
+        "options": {"num_predict": 1, "num_ctx": NUM_CTX_PADRAO},
     }
     try:
         if client is not None:
@@ -363,8 +384,15 @@ def verificar_alocacao_gpu(
 def executar_checagens(
     config: Configuracao,
     client: httpx.Client | None = None,
-) -> None:
-    """Executa todas as checagens de pré-requisito sequencialmente."""
+) -> dict[str, Any]:
+    """Executa todas as checagens de pré-requisito sequencialmente.
+
+    Devolve o item do `/api/ps` que a checagem de alocação leu. Quem só quer o
+    veredito — o serviço, na subida — ignora o retorno; quem vai medir precisa
+    da evidência, e a evidência já estava na mão: as checagens leram o
+    processador do modelo para decidir se passam, e essa leitura não ia para
+    lugar nenhum. `modelo_servido_em_cpu` é o veredito sobre esse item.
+    """
     logger.info("Iniciando verificação de pré-requisitos do S.A.U....")
     vram_declarada = (
         f"{config.vram_total_bytes} bytes" if config.vram_total_bytes else "não declarada"
@@ -394,7 +422,7 @@ def executar_checagens(
     logger.info("Modelo '%s' encontrado no repositório local do host.", config.ollama_model)
 
     # 3. GPU / Ausência de CPU não autorizada
-    verificar_alocacao_gpu(
+    alocacao = verificar_alocacao_gpu(
         config.ollama_base_url,
         config.ollama_model,
         permitir_cpu=config.ollama_allow_cpu,
@@ -404,3 +432,4 @@ def executar_checagens(
     )
 
     logger.info("Todos os pré-requisitos foram validados com sucesso.")
+    return alocacao
