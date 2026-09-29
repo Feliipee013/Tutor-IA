@@ -23,7 +23,7 @@ import pytest
 
 from sau.config import Configuracao
 from sau.inference import fumaca
-from sau.inference.ollama import ClienteOllama
+from sau.inference.ollama import NUM_CTX_PADRAO, ClienteOllama
 from sau.prereqs import executar_checagens
 
 _MODELO = "qwen2.5:3b"
@@ -529,10 +529,15 @@ def _exec(caminho: Path, corpo: str) -> None:
 
 
 def _linha_ps(processador: str, modelo: str = _MODELO) -> str:
-    # A coluna CONTEXT é 2048 porque é a janela que a geração pede, e é ela que
-    # prova que o modelo não recarregou: o 4096 seria o default do servidor, que
-    # é justamente o que o aquecimento sem `num_ctx` traz.
-    return f"{modelo}    357c53fb659c    2.2 GB    {processador}     2048    29 minutes from now"
+    # A coluna CONTEXT é a janela que a geração pede, e é ela que prova que o
+    # modelo não recarregou: o 4096 seria o default do servidor, que é
+    # justamente o que o aquecimento sem `num_ctx` traz. O valor vem da
+    # constante do cliente pelo mesmo motivo do payload acima — se um muda sem
+    # o outro, a fixture mente sobre a linha que o script imprime.
+    return (
+        f"{modelo}    357c53fb659c    2.2 GB    {processador}     "
+        f"{NUM_CTX_PADRAO}    29 minutes from now"
+    )
 
 
 # A linha do `ps` é a do modelo que o SCRIPT pediu, e o script não exporta o
@@ -1020,11 +1025,11 @@ def test_script_aquece_com_o_num_ctx_da_geracao(tmp_path: Path) -> None:
     """O aquecimento do script manda a janela da geração, e não a do servidor.
 
     Sem `num_ctx` o Ollama carrega com o default do servidor (4096 na máquina
-    medida), a checagem do serviço pede 2048 e o modelo recarrega — que é a
-    carga dupla que o primeiro Aluno paga. E a linha do `ollama ps` que este
-    script imprime é justamente a evidência de que não recarregou: ela saía com
-    `CONTEXT 4096`, a marca da recarga que `docs/tempo-primeira-resposta.md` diz
-    que não pode aparecer.
+    medida), a checagem do serviço pede a janela do cliente e o modelo recarrega
+    — que é a carga dupla que o primeiro Aluno paga. E a linha do `ollama ps`
+    que este script imprime é justamente a evidência de que não recarregou: ela
+    saía com `CONTEXT 4096`, a marca da recarga que
+    `docs/tempo-primeira-resposta.md` diz que não pode aparecer.
     """
     pagina = tmp_path / "pagina.json"
     registro = tmp_path / "pulls.txt"
@@ -1034,10 +1039,16 @@ def test_script_aquece_com_o_num_ctx_da_geracao(tmp_path: Path) -> None:
 
     assert resultado.returncode == 0, resultado.stderr
     corpo = json.loads(pagina.read_text(encoding="utf-8"))
-    assert corpo["options"]["num_ctx"] == 2048
+    # Contra a constante do cliente, e não contra o literal: o script tem a
+    # janela num `NUM_CTX` que o bash não importa do Python, e o literal aqui
+    # era o que deixou a costura sem verificação. Com `NUM_CTX_PADRAO` mudado,
+    # este teste é o que avisa que o `NUM_CTX="${NUM_CTX:-2048}"` do script
+    # ficou para trás — que é o mesmo caminho que o `4c58f92` e o `a972623`
+    # fecharam para o `ollama ps` e para o `prereqs.py`.
+    assert corpo["options"]["num_ctx"] == NUM_CTX_PADRAO
     # A linha que o script imprime é a prova de onde o modelo roda, e a janela
     # dela é o que diz que o modelo já estava carregado no tamanho certo.
-    assert "2048" in resultado.stdout
+    assert str(NUM_CTX_PADRAO) in resultado.stdout
 
 
 def test_script_nao_baixa_de_novo_quando_o_modelo_ja_existe(tmp_path: Path) -> None:
