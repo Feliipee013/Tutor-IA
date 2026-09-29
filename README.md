@@ -305,8 +305,10 @@ sem GPU não há VRAM para conferir.
 tempo que sair daí descreve o processador da sua máquina, não a placa de
 produção. Para medir tempo, é preciso GPU dedicada. A fumaça e o
 [`medir.py`](docs/medicao-modelo/medir.py) param com erro antes de gerar
-qualquer tempo quando o modelo está em CPU, a não ser que alguém passe
-`--permitir-cpu` na mão — e aí o número sai marcado como número de CPU.
+qualquer tempo quando o modelo está em CPU, a não ser que a CPU esteja
+autorizada — pela flag `--permitir-cpu` ou pelo `OLLAMA_ALLOW_CPU=true` que o
+compose repassa para o container. Nas duas o número sai marcado como número de
+CPU, e o aviso diz qual das duas portas foi aberta.
 
 ---
 

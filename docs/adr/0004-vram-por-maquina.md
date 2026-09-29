@@ -78,7 +78,11 @@ Então são dois estados, e eles não se confundem:
 Roda em CPU é para desenvolver, para CI e para medir a **qualidade** das
 respostas, que é medida válida em qualquer máquina. Tempo em CPU não é
 produção, e a fumaça e o `medir.py` param com erro antes de gerar qualquer tempo
-a não ser que alguém passe `--permitir-cpu` na mão.
+a não ser que a CPU esteja autorizada — o que se faz de duas maneiras: a flag
+`--permitir-cpu` na mão, ou `OLLAMA_ALLOW_CPU=true` no ambiente, que é o que
+`docker compose` repassa para dentro do container. Por qualquer das duas o
+número sai marcado como número de CPU; o que a marca nunca faz é aparecer sem
+que a porta tenha sido aberta.
 
 O aviso importa tanto quanto o caminho. Uma pessoa que roda em CPU e não sabe
 que está rodando em CPU vai colar um número de CPU num documento de produção, e

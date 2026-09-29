@@ -10,8 +10,10 @@ Três decisões que valem entrar no código:
 - **Falha alta em CPU, por padrão.** Um Ollama servindo em CPU devolve um tempo
   médio plausível, e é por isso que a medição da #3 chama o número de
   velocidade de "o critério mais fácil de cumprir errado". Sem GPU, o script
-  para. Quem realmente quiser medir em CPU passa `--permitir-cpu` e o número
-  sai marcado como número de CPU — o mesmo caminho do `medir.py`.
+  para. A CPU só é autorizada por duas portas, `--permitir-cpu` e
+  `OLLAMA_ALLOW_CPU=true` no ambiente, e pelas duas o número sai marcado como
+  número de CPU — o mesmo caminho do `medir.py`, que também decide pelo
+  processador e não por quem pediu a execução.
 - **Não lê `perguntas-teste/`.** As 10 Perguntas-teste são a régua da #12 e o
   arquivo está congelado; a fumaça só precisa provar que volta texto. Para
   mandar uma Pergunta-teste de verdade, use `--de-arquivo` com o texto dela
