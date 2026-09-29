@@ -211,8 +211,11 @@ mostrar_ps() {
   local linha
   linha="$(ollama ps 2>/dev/null | awk -v alvo="$MODELO" '$1 == alvo' | head -1)"
   if [[ -z "$linha" ]]; then
-    aviso "\`ollama ps\` não mostrou ${MODELO} depois de carregar. Confira na mão."
-    return 0
+    # Mesmo tratamento dos dois caminhos acima: sem a linha do modelo a GPU não
+    # está verificada, e um "Pronto" aqui seria aprovação sem evidência. A carga
+    # ter respondido não prova que o modelo ficou carregado — só que a
+    # requisição voltou.
+    falhar "\`ollama ps\` não mostrou ${MODELO} depois de carregar — e sem essa linha a GPU não está verificada. Confira na mão se ele roda na GPU: \`ollama run ${MODELO}\` e depois Ctrl+C."
   fi
 
   # A coluna PROCESSOR é a autoridade. Ela precisa ser dita em voz alta porque

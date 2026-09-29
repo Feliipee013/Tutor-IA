@@ -459,8 +459,16 @@ def _exec(caminho: Path, corpo: str) -> None:
     caminho.chmod(caminho.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
 
 
-def _linha_ps(processador: str) -> str:
-    return f"{_MODELO}    357c53fb659c    2.2 GB    {processador}     4096    29 minutes from now"
+def _linha_ps(processador: str, modelo: str = _MODELO) -> str:
+    return f"{modelo}    357c53fb659c    2.2 GB    {processador}     4096    29 minutes from now"
+
+
+# A linha do `ps` é a do modelo que o SCRIPT pediu, e o script não exporta o
+# MODELO: o falso lê do ambiente quando o teste passou um e cai no padrão quando
+# não passou. Com a tag fixa, um teste que pedia outra tag recebia uma linha que
+# o passo 4 não achava — e o passo 4 só reagia com um `aviso`, então o script
+# seguia e o "Pronto" saía sem ninguém ter visto a prova.
+_MODELO_DO_PS = _linha_ps("100% GPU", modelo=f"${{MODELO:-{_MODELO}}}")
 
 
 # O `ollama` falso cobre `list` (o modelo já está ou não), `pull` (marca um
@@ -488,7 +496,24 @@ if [ "$1" = "pull" ]; then
   echo "$2" > "$PULL_REGISTRADO"
 fi
 if [ "$1" = "ps" ]; then
-  echo "{_linha_ps('100% GPU')}"
+  echo "{_MODELO_DO_PS}"
+fi
+"""
+
+# O modelo está no host e a carga responde, mas a tabela do `ollama ps` volta sem
+# a linha dele. É o terceiro caminho sem evidência, e o único em que o script
+# ainda ia adiante.
+_OLLAMA_MODELO_PRESENTE_SEM_LINHA = f"""
+if [ "$1" = "list" ]; then
+  echo "NAME                ID              SIZE      MODIFIED"
+  echo "{_MODELO}    357c53fb659c    1.9 GB    now"
+fi
+if [ "$1" = "pull" ]; then
+  echo "pull" >> "$PULL_REGISTRADO"
+  exit 1
+fi
+if [ "$1" = "ps" ]; then
+  echo "NAME          ID              SIZE      PROCESSOR    CONTEXT    UNTIL"
 fi
 """
 
@@ -881,6 +906,32 @@ def test_script_para_quando_nao_consegue_carregar_o_modelo(tmp_path: Path) -> No
     assert "Pronto" not in resultado.stdout
 
 
+def test_script_para_quando_o_ollama_ps_nao_mostra_o_modelo(tmp_path: Path) -> None:
+    """A carga respondeu, mas a tabela do `ollama ps` não traz a linha do modelo.
+
+    É a mesma aprovação sem evidência dos outros dois caminhos da função — sem
+    `curl` e com o `curl` que falha — e o único em que o script seguia: o
+    "Pronto" final dizia que a máquina estava pronta sem ninguém ter visto onde
+    o modelo está rodando, que é o que o passo 4 existe para provar.
+    """
+    registro = tmp_path / "pulls.txt"
+    ferramentas = _montar_maquina(
+        tmp_path,
+        nvidia_smi="8176",
+        pull_registrado=registro,
+        ollama=_OLLAMA_MODELO_PRESENTE_SEM_LINHA,
+    )
+
+    resultado = _rodar_script(tmp_path, ferramentas, registro)
+
+    assert resultado.returncode != 0
+    assert "FALHA" in resultado.stderr
+    assert "não mostrou" in resultado.stderr
+    assert "ollama run" in resultado.stderr
+    assert "ollama ps:" not in resultado.stdout
+    assert "Pronto" not in resultado.stdout
+
+
 def test_script_nao_baixa_de_novo_quando_o_modelo_ja_existe(tmp_path: Path) -> None:
     """O primeiro critério da #7: a segunda execução não baixa nada."""
     registro = tmp_path / "pulls.txt"
@@ -926,7 +977,7 @@ def test_script_baixa_o_modelo_quando_so_a_tag_irma_existe(tmp_path: Path) -> No
         '  echo "$2" > "$PULL_REGISTRADO"\n'
         "fi\n"
         'if [ "$1" = "ps" ]; then\n'
-        '  echo "qwen2.5:3b-instruct    357c53fb659c    2.2 GB    100% GPU"\n'
+        f"  echo \"{_MODELO_DO_PS}\"\n"
         "fi\n"
     )
     ferramentas = _montar_maquina(
