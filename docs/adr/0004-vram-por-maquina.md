@@ -106,12 +106,12 @@ fechar. Por isso o "sem GPU" é sempre dito: no script, na fumaça, no README.
   autoriza CPU diz isso na mão, com `OLLAMA_ALLOW_CPU=true`.
 - **O `nvidia-smi` sai do caminho obrigatório.** Ele vira uma das duas formas de
   achar o número, e a outra cobre quem não tem NVIDIA.
-- **Nenhum número de tempo é transferível entre máquinas.** A máquina do
-  ADR-0002 é a GTX 1650 de 4 GB; a da medição do
-  [tempo de primeira resposta](./../tempo-primeira-resposta.md) é uma Radeon
-  RX 7600 de 8 GB com backend Vulkan. O
-  [ADR-0003](./0003-modelo-do-ollama.md) mediu na primeira, e o número da
-  segunda não substitui o da primeira. Cada máquina tem a sua página.
+- **Nenhum número de tempo é transferível entre máquinas.** A
+  [medição do tempo de primeira resposta](./../tempo-primeira-resposta.md) saiu
+  da GTX 1650 de 4 GB, a mesma máquina que o ADR-0002 assume. Os números
+  anteriores da própria página saíram de uma Radeon RX 7600 de 8 GB com backend
+  Vulkan, e eles não são comparáveis com os de agora: placa diferente e código
+  diferente. Cada máquina tem a sua página.
 - **`nvidia-smi` responder não prova que há GPU em uso.** Ele prova que há driver
   NVIDIA na máquina. Quem prova é o `ollama ps`, na coluna `PROCESSOR`, e é por
   isso que o script imprime essa linha.

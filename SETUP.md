@@ -411,7 +411,8 @@ python -m sau.inference.fumaca --de-arquivo pergunta.txt
 
 O resultado desta máquina está em
 [`docs/tempo-primeira-resposta.md`](./docs/tempo-primeira-resposta.md) — e ele
-**não** é o número da máquina do ADR-0002, que é outra placa.
+é o número da máquina do ADR-0002, a GTX 1650 de 4 GB. O seu não vai ser igual:
+placa diferente é outro tempo, e a pergunta e a persona mudam o número também.
 
 **Dois detalhes de laptop híbrido.** A máquina da decisão tem Intel UHD e NVIDIA
 integrada: ao medir, fixe `CUDA_VISIBLE_DEVICES` para a placa discreta, senão a
