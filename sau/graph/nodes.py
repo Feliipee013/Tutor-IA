@@ -5,9 +5,10 @@ texto. O grafo tem um único caminho (issue #8) — a classificação de intenç
 recuperação da 1.2 e o encaminhamento entram como nós e arestas novos aqui
 dentro, não como serviço à parte.
 
-O prompt do turno mora em `montar_prompt`, e é de propósito uma costura isolada:
-a #8 não tem persona, e é a #10 que troca este texto pelo prompt versionado do
-S.A.U. sem tocar no resto do grafo.
+O prompt do turno vem de `sau.persona.montar_prompt`, e a costura é de
+propósito isolada: a persona do S.A.U. (issue #10) entra por esta função, e o
+resto do grafo não precisa saber que o texto mudou. Reexportada aqui para que
+quem importa o caminho do prompt continue resolvendo a partir deste módulo.
 """
 
 from __future__ import annotations
@@ -16,6 +17,7 @@ import logging
 from typing import Callable, NotRequired, TypedDict
 
 from sau.inference.ollama import ClienteOllama, Resposta
+from sau.persona import montar_prompt as montar_prompt
 
 logger = logging.getLogger("sau.graph.nodes")
 
@@ -32,25 +34,6 @@ class EstadoTurno(TypedDict):
     resposta: NotRequired[str]
 
 
-PROMPT_SEM_PERSONA = "Responda à mensagem do Aluno:\n\n{mensagem}"
-"""O corpo do prompt do turno, ainda sem persona.
-
-A #10 substitui este texto pelo prompt versionado do S.A.U. (tom, regras de
-comportamento, o que recusar). Até lá, o modelo recebe a mensagem crua do Aluno
-com a instrução mínima de respondê-la — nada de tom ou de regra aqui, para que a
-troca da #10 seja uma troca de texto e não uma reescrita do grafo.
-"""
-
-
-def montar_prompt(mensagem: str) -> str:
-    """Monta o prompt do turno a partir da mensagem do Aluno.
-
-    É a costura da persona (#10): quem for injetar o prompt versionado troca
-    esta função, e o grafo não precisa saber que o texto mudou.
-    """
-    return PROMPT_SEM_PERSONA.format(mensagem=mensagem)
-
-
 def criar_no_responder(cliente: ClienteOllama) -> Callable[[EstadoTurno], dict[str, str]]:
     """Cria o nó `responder`, que leva o turno ao modelo e devolve o texto.
 
@@ -61,7 +44,7 @@ def criar_no_responder(cliente: ClienteOllama) -> Callable[[EstadoTurno], dict[s
     Aqui entra no log só o **prompt**. O texto do modelo já sai em dois outros
     lugares, e nenhum deles é este: o `ClienteOllama` grava a resposta com os
     tempos que a mediram, e o `grafo` grava a saída do turno. O prompt é a única
-    coisa que só este módulo sabe — depois da #10 ele deixa de ser a mensagem
+    coisa que só este módulo sabe — a persona do S.A.U., não mais a mensagem
     crua do Aluno — e é por isso que ele fica registrado aqui.
     """
 
