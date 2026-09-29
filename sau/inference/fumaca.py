@@ -39,7 +39,12 @@ from pathlib import Path
 from typing import Final, NoReturn, Sequence
 
 from sau.config import carregar_configuracao
-from sau.inference.ollama import ClienteOllama, ErroDeInferencia, Resposta, _numero
+from sau.inference.ollama import (
+    ClienteOllama,
+    ErroDeInferencia,
+    Resposta,
+    formatar_numero,
+)
 from sau.main import configurar_logging
 from sau.prereqs import PreRequisitoError, executar_checagens
 
@@ -173,8 +178,8 @@ def imprimir_bloco(resposta: Resposta, indice: int, total: int) -> None:
     print(f"  carga do modelo:         {resposta.carga_segundos:.3f} s")
     print(f"  leitura do prompt:      {resposta.avaliacao_prompt_segundos:.3f} s")
     print(f"  total:                  {resposta.segundos_totais:.3f} s")
-    print(f"  velocidade:             {_numero(resposta.tokens_por_segundo)} tok/s")
-    print(f"  tokens gerados:         {_numero(resposta.tokens_gerados)}")
+    print(f"  velocidade:             {formatar_numero(resposta.tokens_por_segundo)} tok/s")
+    print(f"  tokens gerados:         {formatar_numero(resposta.tokens_gerados)}")
     print(f"  parou porque:           {resposta.motivo_de_parada or '(o Ollama não informado)'}")
     if not resposta.concluida:
         # Uma geração que não terminou devolve texto pela metade, e texto pela

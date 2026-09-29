@@ -248,19 +248,23 @@ class ClienteOllama:
             resposta.carga_segundos,
             resposta.avaliacao_prompt_segundos,
             resposta.segundos_totais,
-            _numero(resposta.tokens_por_segundo),
-            _numero(resposta.tokens_gerados),
+            formatar_numero(resposta.tokens_por_segundo),
+            formatar_numero(resposta.tokens_gerados),
             resposta.motivo_de_parada or "(o Ollama não informou)",
             resposta.texto,
         )
 
 
-def _numero(valor: float | int | None) -> str:
+def formatar_numero(valor: float | int | None) -> str:
     """Formata um número que pode não existir, sem estourar o log.
 
     O `tok/s` é `None` quando a geração não reportou duração, e imprimir
     "None" no log é ruído que esconde o resto. O campo continua aparecendo
     como "n/d", que é a forma que o ADR-0003 já usa.
+
+    É pública porque a fumaça escreve os mesmos campos na mesma régua do
+    ADR-0003: quem formata é o mesmo, e um `_` importado de fora acopla o
+    formato do log dos dois arquivos sem nenhum dos dois declarar isso.
     """
     if valor is None:
         return "n/d"
