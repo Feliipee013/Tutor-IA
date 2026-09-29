@@ -7,9 +7,12 @@ que ainda vai ser preenchida conforme o código entrar.
 > **Estado do repositório:** a §3 já não é contrato — é o que está rodando. A
 > issue #4 entregou o serviço do bot como container, e a §3 descreve o
 > `docker compose up` que o sobe. A issue #5 entregou o canal do Telegram: o
-> serviço `webhook` recebe o update e manda um acuse de recibo fixo. **O S.A.U.
-> ainda não responde**: a inferência é a #8 e a fila é a #11. O mapa do que falta
-> está em [`docs/estrutura.md`](./docs/estrutura.md).
+> serviço `webhook` recebe o update e manda um acuse de recibo fixo. A issue #8
+> entregou o **primeiro turno ponta a ponta**: o mesmo serviço `webhook` roda o
+> grafo LangGraph e responde o Aluno com o texto do modelo, logo depois do acuse.
+> O que ainda falta é a persona (#10), o histórico por conversa (#9) e a fila
+> (#11). O mapa do que falta está em
+> [`docs/estrutura.md`](./docs/estrutura.md).
 
 ## 1. Mapa do repositório
 
@@ -276,17 +279,40 @@ curl -sS "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/deleteWebhook"
 ```
 
 **O que esperar no log.** O `update_telegram bruto` mostra o update como o
-Telegram enviou, e `Acuse de recibo enviado ao Aluno <id>` confirma que o texto
-fixo saiu:
+Telegram enviou, e `Mensagem enviada ao Aluno <id>` confirma cada texto que saiu
+— o acuse primeiro, a resposta do modelo depois:
 
 ```sh
 docker compose logs -f webhook
 ```
 
-O acuse desta issue é **fixo e sem o modelo**, de propósito: o que se prova aqui
-é o fio. O turno com inferência é a #8 e a posição na fila é a #11. O serviço
-`webhook` ainda **não responde a pergunta do Aluno** — ele confirma o recebimento
-e nada mais.
+O turno aparece com `Entrada do grafo: mensagem do Aluno`, o
+`Resposta do modelo '<modelo>'` com os tempos e o `Saída do grafo: resposta ao
+Aluno`. Se o Ollama estiver fora, o que aparece é `O turno do Aluno <id> falhou:`
+com o motivo inteiro, e o Aluno recebe a mensagem amigável em vez da resposta.
+
+**O tempo do turno.** `Turno do Aluno <id> entregue em <s>s (<desfecho>)` é o
+número do critério "a resposta chega em tempo aceitável para alguém acordado às
+2h da manhã", e ele é do turno inteiro — do começo à entrega —, não só da
+geração. O desfecho entre parênteses diz o que aconteceu (`resposta do modelo`,
+`falha do modelo`, `erro inesperado`, `resposta vazia`), e é o que separa "levou
+30s e respondeu" de "levou 30s e pediu desculpa". O `total` do
+`Resposta do modelo` é só a geração, e ele fica dentro do turno.
+
+Esse tempo depende da máquina, e o número medido da máquina do ADR-0002 está em
+[`docs/tempo-primeira-resposta.md`](./docs/tempo-primeira-resposta.md). O log do
+`webhook` é o número do turno a turno; a medição é a da máquina, com as
+condições e os limites dela.
+
+O acuse e a resposta continuam sendo **duas mensagens separadas**, e é assim que
+o `webhook` garante o que o ADR-0001 pede: o Aluno leva o primeiro retorno antes
+de qualquer inferência. O turno é executado em uma thread, fora do request — a
+fila e o semáforo são da #11.
+
+O `webhook` **não responde a pergunta do Aluno com a persona do S.A.U.** ainda: o
+prompt do turno é a mensagem com a instrução mínima de respondê-la, e é a #10 que
+troca esse texto. Também ainda não há histórico por conversa (#9), então o turno
+não enxerga mensagens anteriores do mesmo Aluno.
 
 ### Pré-requisitos de host: o Ollama
 
@@ -351,6 +377,12 @@ Ollama é `127.0.0.1`, e o container do bot chega no IP da bridge do Docker, nã
 no loopback do host: com o bind padrão a conexão é recusada na hora, com
 `Errno 111: Connection refused`, antes de qualquer checagem de pré-requisito. Por
 isso o `OLLAMA_HOST` precisa ser `0.0.0.0:11434`.
+
+Esse bind vale para os **dois** serviços desde a #8: o `bot` na checagem e na
+fumaça, o `webhook` no turno. A diferença é o que acontece quando ele falta. No
+`bot` a falha é alta, na subida. No `webhook` o serviço sobe normalmente, o Aluno
+recebe o acuse e uma segunda mensagem dizendo que houve um problema — porque o
+canal do Telegram não pode sair do ar por causa do modelo.
 
 **Onde essa variável mora depende de quem sobe o Ollama.** São dois casos, e
 confundir os dois é o jeito mais comum de o passo 2 não funcionar:

@@ -22,10 +22,12 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
-  # O canal do Telegram, como serviço próprio e não como thread do `bot`. A
-  # issue #5 quer o fio provado sem depender do modelo, e o `bot` não sobe sem o
-  # Ollama na GPU: atrelar o webhook a ele obrigaria quem trabalha no canal a ter
-  # a pilha de inferência no ar para testar uma única mensagem.
+  # O canal do Telegram, como serviço próprio e não como thread do `bot`. Ele
+  # virou o dono do turno na #8: o acuse sai primeiro e o grafo responde depois,
+  # com o modelo alcançado no host pelo mesmo caminho que o `bot` usa. Continua
+  # sem a checagem de pré-requisito do `bot` de propósito: este serviço é o canal
+  # do Telegram, e ele tem que ficar no ar para acusejar Aluno mesmo com o Ollama
+  # fora.
   webhook:
     build:
       context: .
@@ -43,4 +45,14 @@ services:
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
       - TELEGRAM_WEBHOOK_SECRET_TOKEN=${TELEGRAM_WEBHOOK_SECRET_TOKEN:-}
       - TELEGRAM_WEBHOOK_PORT=8080
+      # Mesmo modelo e mesmo relógio do `bot`. A `OLLAMA_ALLOW_CPU` e a
+      # `VRAM_TOTAL_MIB` ficam de fora de propósito: a checagem de pré-requisito
+      # é do `bot` (ADR-0002), e ela não pega o `webhook` junto. O
+      # `OLLAMA_HOST=0.0.0.0` do host continua obrigatório e o `extra_hosts`
+      # abaixo é o mesmo alias que o `bot` usa.
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2.5:3b}
+      - OLLAMA_TIMEOUT=${OLLAMA_TIMEOUT:-30}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

@@ -7,8 +7,9 @@ Tutor virtual 24/7 para atendimento a dúvidas de rotina dos alunos de cursos Ea
 Conforme definido no [ADR-0002](docs/adr/0002-topologia-do-ollama.md), adotamos uma arquitetura híbrida de execução:
 
 - **Ollama no Host:** Executa nativamente no sistema operacional da máquina servidora para utilizar diretamente os drivers NVIDIA e a GPU sem complexidade de container runtime passthrough.
-- **Bot no Container Docker:** O serviço do bot S.A.U. é executado via Docker Compose e comunica-se com a API do Ollama no host através de `http://host.docker.internal:11434` (viabilizado pelo mapeamento `extra_hosts: ["host.docker.internal:host-gateway"]` no Linux).
+- **Bot no Container Docker:** O serviço do bot S.A.U. é executado via Docker Compose e comunica-se com a API do Ollama no host através de `http://host.docker.internal:11434` (viabilizado pelo mapeamento `extra_hosts: ["host.docker.internal:host-gateway"]` no Linux). O serviço `webhook` usa o mesmo caminho desde a #8, porque é ele que roda o turno de resposta.
 - **Falha Alta (Fail-fast):** O serviço do bot verifica rigorosamente na inicialização a conectividade com o Ollama, a disponibilidade do modelo e a alocação em GPU (VRAM). O confronto é entre o `size_vram` que o Ollama relata e a VRAM total que a máquina declara, porque nenhum dos dois lados sozinho prova GPU. O serviço falha imediatamente se o modelo cair silenciosamente para CPU, protegendo a experiência do Aluno contra lentidão excessiva.
+- **O `webhook` não falha alto, e é de propósito:** ele é o canal do Telegram, e precisa continuar no ar para acusejar o Aluno mesmo com o modelo fora. Ollama indisponível vira uma mensagem amigável ao Aluno, não um serviço fora do ar.
 
 ## Pré-requisitos no Host
 
@@ -226,9 +227,11 @@ Resposta esperada:
 
 ### Canal do Telegram (Webhook)
 
-O serviço `webhook` recebe as mensagens do Aluno e responde com um **acuse de
-recibo fixo**. Ele é separado do `bot` de propósito: o `bot` exige o Ollama na
-GPU, e o canal do Telegram se desenvolve e se testa sem depender do modelo.
+O serviço `webhook` recebe as mensagens do Aluno e responde. São **duas**
+mensagens, nesta ordem: um **acuse de recibo fixo**, imediato, e a **resposta do
+modelo**, logo depois. O turno roda no próprio `webhook` (o grafo LangGraph está
+em [`sau/graph/`](sau/graph/)), que é o que a [emenda da #8 ao ADR-0002](docs/adr/0002-topologia-do-ollama.md)
+registra.
 
 ```sh
 # as duas credenciais são obrigatórias para o serviço `webhook`
@@ -241,9 +244,18 @@ precisa de um túnel HTTPS, e a URL precisa ser registrada com `setWebhook`. O
 passo a passo completo, com `cloudflared`, está em
 [`SETUP.md` §3](./SETUP.md#canal-do-telegram-issue-5).
 
-> **O S.A.U. ainda não responde.** O acuse desta etapa é fixo e sem modelo, pelo
-> design da issue #5: o que se prova é o fio. A resposta vem com a #8 e a
-> posição na fila com a #11.
+O `webhook` não roda a checagem de pré-requisito do `bot`, e isso é de propósito:
+se o Ollama estiver fora, o serviço continua no ar, o Aluno recebe o acuse e uma
+segunda mensagem dizendo que houve um problema — nunca um stack trace, e nunca um
+5xx que faria o Telegram reentregar o update. O motivo da falha fica inteiro no
+log do serviço.
+
+> **O que ainda não existe.** O prompt do turno ainda não tem a persona do S.A.U.:
+> ele é a mensagem do Aluno com a instrução mínima de respondê-la, e é isso que a
+> #10 substitui. A posição na fila e o semáforo são da #11, que também substitui
+> a thread por turno — até lá, duas mensagens seguidas do mesmo Aluno podem ser
+> respondidas fora de ordem. O histórico por conversa e o isolamento entre Alunos
+> são da #9.
 
 ---
 
@@ -256,7 +268,7 @@ não lê `.env` sozinho.
 
 | Variável | Padrão | Obrigatória | Descrição |
 | --- | --- | --- | --- |
-| `OLLAMA_BASE_URL` | `http://host.docker.internal:11434` | Não | URL da API do Ollama acessível a partir do container |
+| `OLLAMA_BASE_URL` | `http://host.docker.internal:11434` | Não | URL da API do Ollama acessível a partir do container. Vale para o `bot` e para o `webhook` desde a #8 |
 | `OLLAMA_MODEL` | `qwen2.5:3b` | Não | Nome do modelo de linguagem a ser utilizado |
 | `OLLAMA_ALLOW_CPU` | `false` | Não | Se `false`, o serviço falha alto se o modelo for alocado em CPU. Se `true`, autoriza CPU (apenas para testes/dev sem GPU) |
 | `OLLAMA_TIMEOUT` | `30` | Não | Timeout em segundos para requisições ao Ollama |
