@@ -47,7 +47,7 @@ agente Implementar localizar o ponto de impacto sem varrer o repositório inteir
 | `docs/adr/0004-vram-por-maquina.md` | a VRAM é declarada por máquina: o contrato, como descobrir o valor e o que fazer sem GPU dedicada — **issue #7** | sim |
 | `docs/sprints/` | plano legível da 1.1 e da 1.2 | sim |
 | `docs/medicao-modelo/` | a sondagem, o script de medição e a saída de cada máquina — **issue #3** | sim |
-| `docs/tempo-primeira-resposta.md` | o tempo de primeira resposta nesta máquina, com as condições e o aviso de que não é a do ADR-0002 — **issue #7** | sim |
+| `docs/tempo-primeira-resposta.md` | o tempo de primeira resposta na GTX 1650 do ADR-0002, com as condições e a nota dos números antigos da RX 7600 — **issue #7** | sim |
 | `docs/limitacoes.md` | documento de limitações do modelo — **issue #14** | não |
 
 ## `docs/medicao-modelo/` — a evidência da escolha do modelo
