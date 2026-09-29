@@ -40,6 +40,7 @@ from typing import Final, NoReturn, Sequence
 
 from sau.config import carregar_configuracao
 from sau.inference.ollama import (
+    MOTIVO_NAO_INFORMADO,
     ClienteOllama,
     ErroDeInferencia,
     Resposta,
@@ -180,7 +181,7 @@ def imprimir_bloco(resposta: Resposta, indice: int, total: int) -> None:
     print(f"  total:                  {resposta.segundos_totais:.3f} s")
     print(f"  velocidade:             {formatar_numero(resposta.tokens_por_segundo)} tok/s")
     print(f"  tokens gerados:         {formatar_numero(resposta.tokens_gerados)}")
-    print(f"  parou porque:           {resposta.motivo_de_parada or '(o Ollama não informado)'}")
+    print(f"  parou porque:           {resposta.motivo_de_parada or MOTIVO_NAO_INFORMADO}")
     if not resposta.concluida:
         # Uma geração que não terminou devolve texto pela metade, e texto pela
         # metade é o jeito mais fácil de um modelo parecer que respondeu.

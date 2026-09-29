@@ -210,6 +210,25 @@ def test_fumaca_avisa_geracao_nao_concluida(
     assert "parou porque:           length" in saida
 
 
+def test_fumaca_diz_o_motivo_vazio_da_mesma_forma_que_o_log(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """O campo vazio não pode ficar vazio, nem com uma frase só no log.
+
+    A fumaça e o log escrevem a mesma linha de tempos, então a frase do motivo
+    ausente é a mesma nos dois. Quando eram diferentes, a suíte não pegou: o
+    teste do log guardava a frase dele e o da fumaça só olhava a geração com
+    `stop`.
+    """
+    _ligar_ollama_falso(monkeypatch, _ollama_falso(geracao=_geracao(done_reason="")))
+
+    assert fumaca.main([]) == 0
+
+    saida = capsys.readouterr().out
+    assert "parou porque:           (o Ollama não informou)" in saida
+    assert "parada: (o Ollama não informou)" in saida
+
+
 # --------------------------------------------------------------------------- #
 # De onde vem a pergunta
 # --------------------------------------------------------------------------- #

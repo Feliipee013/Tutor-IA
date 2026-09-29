@@ -48,6 +48,15 @@ checagem usam o mesmo relógio. Sessenta segundos aqui é a rede de segurança
 para quem chama o cliente na mão.
 """
 
+MOTIVO_NAO_INFORMADO = "(o Ollama não informou)"
+"""O que se escreve quando a geração não diz por que parou.
+
+O campo volta vazio em parte dos Responses do Ollama, e um campo vazio na linha
+do log é um número sem nome. A frase é uma só porque a fumaça escreve a mesma
+linha: duas frases para o mesmo vazio só faz a divergência aparecer quando
+alguém compara os dois logs.
+"""
+
 NANOSEGUNDOS_POR_SEGUNDO = 1e9
 """O Ollama reporta durações em nanossegundos, e a pessoa que lê o log pensa em segundos."""
 
@@ -250,7 +259,7 @@ class ClienteOllama:
             resposta.segundos_totais,
             formatar_numero(resposta.tokens_por_segundo),
             formatar_numero(resposta.tokens_gerados),
-            resposta.motivo_de_parada or "(o Ollama não informou)",
+            resposta.motivo_de_parada or MOTIVO_NAO_INFORMADO,
             resposta.texto,
         )
 
