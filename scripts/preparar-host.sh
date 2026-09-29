@@ -14,6 +14,7 @@
 # Uso:
 #   scripts/preparar-host.sh
 #   MODELO=llama3.2:3b scripts/preparar-host.sh
+#   NUM_CTX=4096 scripts/preparar-host.sh
 #
 # Ao final, ele imprime a linha do VRAM_TOTAL_MIB para exportar antes de
 # `docker compose up`.
@@ -23,6 +24,14 @@ set -euo pipefail
 MODELO="${MODELO:-qwen2.5:3b}"
 OLLAMA_URL="${OLLAMA_URL:-http://localhost:11434}"
 DRM_DIR="${DRM_DIR:-/sys/class/drm}"
+# A janela de contexto é a mesma da geração, e o valor vem de fora pelo mesmo
+# motivo de `MODELO` e `DRM_DIR`: mudar a janela muda o consumo de memória da
+# placa, e quem muda precisa conferir a VRAM da máquina de novo (ADR-0003).
+# Sem este `num_ctx` o Ollama carregaria com o default do servidor — 4096 na
+# máquina medida — e a checagem do serviço, que pede 2048, recarregaria o
+# modelo. A linha do `ollama ps` que este script imprime sairia com
+# `CONTEXT 4096`, que é a marca da recarga.
+NUM_CTX="${NUM_CTX:-2048}"
 MIB_EM_BYTES=1048576
 
 # `DRM_DIR` é o caminho onde o kernel publica as placas. Está em variável só
@@ -205,7 +214,7 @@ mostrar_ps() {
 
   curl -sS --max-time 120 "${OLLAMA_URL}/api/generate" \
     -H 'Content-Type: application/json' \
-    -d "{\"model\":\"${MODELO}\",\"prompt\":\"\",\"stream\":false,\"options\":{\"num_predict\":1}}" \
+    -d "{\"model\":\"${MODELO}\",\"prompt\":\"\",\"stream\":false,\"options\":{\"num_predict\":1,\"num_ctx\":${NUM_CTX}}}" \
     >/dev/null 2>&1 || falhar "não consegui carregar o modelo para ver a linha do \`ollama ps\` — e sem ela a GPU não está verificada. Confira na mão se ele roda na GPU: \`ollama run ${MODELO}\` e depois Ctrl+C."
 
   local linha

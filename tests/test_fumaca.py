@@ -10,6 +10,7 @@ depende da máquina em que roda, não baixa nada e não fala com o Ollama real.
 from __future__ import annotations
 
 import ast
+import json
 import os
 import re
 import stat
@@ -460,7 +461,10 @@ def _exec(caminho: Path, corpo: str) -> None:
 
 
 def _linha_ps(processador: str, modelo: str = _MODELO) -> str:
-    return f"{modelo}    357c53fb659c    2.2 GB    {processador}     4096    29 minutes from now"
+    # A coluna CONTEXT é 2048 porque é a janela que a geração pede, e é ela que
+    # prova que o modelo não recarregou: o 4096 seria o default do servidor, que
+    # é justamente o que o aquecimento sem `num_ctx` traz.
+    return f"{modelo}    357c53fb659c    2.2 GB    {processador}     2048    29 minutes from now"
 
 
 # A linha do `ps` é a do modelo que o SCRIPT pediu, e o script não exporta o
@@ -546,19 +550,29 @@ def _montar_maquina(
     # `CURL_FALHO` derruba toda chamada; `CURL_GERAR_FALHO` derruba só a carga do
     # modelo, o que é o caminho de "conferi que está no ar, mas não consegui
     # carregar" — um estado que precisa de aviso próprio.
+    # O corpo do `-d` vai para `$PAGINA_REGISTRADA`: sem isso o payload da carga
+    # era descartado e nada na suíte podia dizer o que o script manda carregar.
     _exec(
         ferramentas / "curl",
         'if [ -n "$CURL_FALHO" ]; then echo "curl: (7) Failed to connect" >&2; exit 7; fi\n'
         'case "$*" in\n'
         '  *api/generate*)\n'
+        '    anterior=""\n'
+        '    for argumento in "$@"; do\n'
+        '      if [ "$anterior" = "-d" ]; then\n'
+        '        printf "%s" "$argumento" > "$PAGINA_REGISTRADA"\n'
+        "      fi\n"
+        '      anterior="$argumento"\n'
+        "    done\n"
         '    if [ -n "$CURL_GERAR_FALHO" ]; then\n'
         '      echo "curl: (28) Operation timed out" >&2\n'
-        '      exit 28\n'
-        '    fi\n'
-        '    ;;\n'
-        'esac\n'
-        'exit 0',
+        "      exit 28\n"
+        "    fi\n"
+        "    ;;\n"
+        "esac\n"
+        "exit 0",
     )
+
 
     (pasta / "drm").mkdir(parents=True, exist_ok=True)
     return ferramentas
@@ -575,6 +589,7 @@ def _rodar_script(
     ferramentas: Path,
     pull_registrado: Path,
     env_extra: dict[str, str] | None = None,
+    pagina_registrada: Path | None = None,
 ) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
     # Só o PATH é trocado, e o `DRM_DIR` aponta para o `/sys/class/drm` falso.
@@ -582,6 +597,7 @@ def _rodar_script(
     env["PATH"] = f"{ferramentas}:{env['PATH']}"
     env["DRM_DIR"] = str(pasta / "drm")
     env["PULL_REGISTRADO"] = str(pull_registrado)
+    env["PAGINA_REGISTRADA"] = str(pagina_registrada or pasta / "pagina.json")
     # A guarda do valor informado à mão lê o ambiente: sem isto, uma
     # VRAM_TOTAL_MIB exportada na máquina de quem roda a suíte (o próprio
     # SETUP manda exportar) faria os testes de descoberta passarem pela
@@ -930,6 +946,30 @@ def test_script_para_quando_o_ollama_ps_nao_mostra_o_modelo(tmp_path: Path) -> N
     assert "ollama run" in resultado.stderr
     assert "ollama ps:" not in resultado.stdout
     assert "Pronto" not in resultado.stdout
+
+
+def test_script_aquece_com_o_num_ctx_da_geracao(tmp_path: Path) -> None:
+    """O aquecimento do script manda a janela da geração, e não a do servidor.
+
+    Sem `num_ctx` o Ollama carrega com o default do servidor (4096 na máquina
+    medida), a checagem do serviço pede 2048 e o modelo recarrega — que é a
+    carga dupla que o primeiro Aluno paga. E a linha do `ollama ps` que este
+    script imprime é justamente a evidência de que não recarregou: ela saía com
+    `CONTEXT 4096`, a marca da recarga que `docs/tempo-primeira-resposta.md` diz
+    que não pode aparecer.
+    """
+    pagina = tmp_path / "pagina.json"
+    registro = tmp_path / "pulls.txt"
+    ferramentas = _montar_maquina(tmp_path, nvidia_smi="8176", pull_registrado=registro)
+
+    resultado = _rodar_script(tmp_path, ferramentas, registro, pagina_registrada=pagina)
+
+    assert resultado.returncode == 0, resultado.stderr
+    corpo = json.loads(pagina.read_text(encoding="utf-8"))
+    assert corpo["options"]["num_ctx"] == 2048
+    # A linha que o script imprime é a prova de onde o modelo roda, e a janela
+    # dela é o que diz que o modelo já estava carregado no tamanho certo.
+    assert "2048" in resultado.stdout
 
 
 def test_script_nao_baixa_de_novo_quando_o_modelo_ja_existe(tmp_path: Path) -> None:
