@@ -14,6 +14,7 @@ from typing import Any
 import httpx
 
 from sau.config import Configuracao
+from sau.inference.ollama import NUM_CTX_PADRAO
 
 logger = logging.getLogger("sau.prereqs")
 
@@ -134,13 +135,18 @@ def aquecer_modelo(
     timeout: float = 30.0,
     client: httpx.Client | None = None,
 ) -> None:
-    """Dispara uma geração mínima para que o Ollama carregue o modelo na memória."""
+    """Dispara uma geração mínima para que o Ollama carregue o modelo na memória.
+
+    O `num_ctx` é o mesmo da geração (`NUM_CTX_PADRAO` do cliente): sem ele o
+    Ollama carregaria com o default do servidor (4096) e a geração seguinte,
+    com 2048, recarregaria — o primeiro Aluno pagaria duas cargas.
+    """
     url = f"{base_url.rstrip('/')}/api/generate"
     payload: dict[str, Any] = {
         "model": modelo,
         "prompt": "",
         "keep_alive": "5m",
-        "options": {"num_predict": 1},
+        "options": {"num_predict": 1, "num_ctx": NUM_CTX_PADRAO},
     }
     try:
         if client is not None:

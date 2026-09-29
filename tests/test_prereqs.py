@@ -10,12 +10,14 @@ import httpx
 import pytest
 
 from sau.config import Configuracao
+from sau.inference.ollama import NUM_CTX_PADRAO
 from sau.prereqs import (
     CpuNaoAutorizadaError,
     ModeloNaoEncontradoError,
     OllamaIndisponivelError,
     PreRequisitoError,
     VramNaoInformadaError,
+    aquecer_modelo,
     executar_checagens,
     verificar_alocacao_gpu,
     verificar_conectividade,
@@ -374,6 +376,26 @@ def test_verificar_alocacao_gpu_aquecimento_quando_nao_carregado() -> None:
     )
     assert chamadas_ps == 2
     assert resultado["name"] == _MODELO
+
+
+def test_aquecer_modelo_usa_o_mesmo_num_ctx_da_geracao() -> None:
+    """O aquecimento carrega com a janela da geração, e não com o default do servidor.
+
+    Sem o `num_ctx`, o Ollama carrega com 4096 e a geração seguinte (2048, o
+    `NUM_CTX_PADRAO` do cliente) recarrega: o primeiro Aluno paga duas cargas,
+    na fumaça e em produção.
+    """
+    cargas: list[dict[str, Any]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        cargas.append(json.loads(request.content.decode("utf-8")))
+        return httpx.Response(200, json={"response": "ok"}, request=request)
+
+    cliente = httpx.Client(transport=httpx.MockTransport(handler))
+
+    aquecer_modelo("http://host.docker.internal:11434", _MODELO, client=cliente)
+
+    assert cargas[0]["options"]["num_ctx"] == NUM_CTX_PADRAO
 
 
 # --- Teste de Execução Completa ---
