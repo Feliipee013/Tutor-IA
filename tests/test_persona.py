@@ -237,6 +237,22 @@ def test_a_regra_de_encaminhamento_chega_ao_modelo(
     assert prompt.count(ENCAMINHAMENTO.instrucao) == 1
 
 
+def test_o_titulo_de_cada_regra_chega_ao_modelo(fazer_cliente: FabricaCliente) -> None:
+    """O `titulo` de cada regra vai no prompt junto da instrução.
+
+    Os sete testes acima conferem a `instrucao` e não o `titulo`, então um
+    `PERSONA` montado só com as instruções passaria por todos eles — que é
+    exatamente o estado em que a persona estava, com sete parágrafos sem
+    cabeçalho entregues a um modelo de 3B. Este teste é o que fecha a porta: o
+    título nomeia a regra para quem lê o prompt, que é o modelo.
+    """
+    prompt = _prompt_do_turno(fazer_cliente)
+
+    for regra in REGRAS:
+        assert regra.titulo in prompt, f"o título da regra {regra.id!r} não chegou ao modelo"
+        assert prompt.count(regra.titulo) == 1
+
+
 # --- A mensagem: verbatim, depois das regras, com rótulo próprio ---
 
 

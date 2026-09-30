@@ -197,8 +197,15 @@ A tupla cresce uma regra por vez até as sete da issue #10, e
 regra nova entra ali junto, regra derrubada quebra ali primeiro.
 """
 
-PERSONA: str = "\n\n".join(regra.instrucao for regra in REGRAS)
-"""O prompt versionado do S.A.U.: as regras, inteiras, em um lugar só."""
+PERSONA: str = "\n\n".join(f"{regra.titulo}\n{regra.instrucao}" for regra in REGRAS)
+"""O prompt versionado do S.A.U.: as regras, inteiras, em um lugar só.
+
+O `titulo` entra com a `instrucao`, e não fica de fora do prompt. Um campo que
+nenhum código nem teste lia não é metadado, é resto — e sete parágrafos sem
+cabeçalho entregam ao modelo sete blocos de que tratar sem dizer qual regra é
+cada um. O cabeçalho nomeia a regra para quem lê o prompt, que é o modelo, e é o
+que torna `titulo` um campo em vez de uma coluna morta.
+"""
 
 
 ROTULO_MENSAGEM = "Mensagem do Aluno:"
