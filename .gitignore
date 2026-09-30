@@ -15,5 +15,13 @@ __pycache__/
 # Saída do harness das Perguntas-teste (issue #12)
 outputs/
 
+# Arquivo de conversas quando o serviço roda no host, sem container (issue #9).
+# O padrão de CONVERSA_CAMINHO é relativo ao diretório de trabalho, e quem roda
+# `python -m sau.telegram` na mão cria o arquivo onde está. Com container o
+# caminho é o do volume nomeado, e este padrão não alcança lá dentro.
+*.db
+*.db-wal
+*.db-shm
+
 # Rascunho temporário de agente
 .scratch/
