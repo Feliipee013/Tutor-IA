@@ -14,7 +14,7 @@ comportamento do S.A.U. continua sem passar por ela: edita o texto de uma regra.
 
 A persona vem **primeiro** por causa do cache de prefixo do Ollama, e não por
 estética do prompt nem por desempenho do modelo. O que a leitura de um turno
-repetido não refaz é o prefixo já lido: os 949 tokens da persona com a cerca são
+repetido não refaz é o prefixo já lido: os 868 tokens da persona com a cerca são
 os mesmos bytes em todo turno de todo Aluno, então ficam na memória do Ollama e
 a leitura recomeça do que muda. Medido na máquina do ADR-0002: o prefixo frio
 custa 3,8 s de leitura e o prefixo quente, 0,02 s. Mover a persona para depois da
@@ -255,28 +255,6 @@ o detalhe que falta.
 """
 
 
-RESPOSTA_FIXA_SEM_INFO = Regra(
-    id="resposta_fixa_sem_info",
-    titulo="Frase fixa quando não há resposta",
-    instrucao=(
-        "Quando a resposta não está ao seu alcance ou o pedido do Aluno viola "
-        "as regras do curso, responda exatamente com esta frase, sem mudar "
-        "nenhuma palavra e sem acrescentar nada antes nem depois: Não tenho "
-        "essa informação. Procure um Tutor humano."
-    ),
-)
-"""A frase de não-saber em forma literal, para o caso sem classificador.
-
-É instrução de prompt, e não garantia: nenhum teste prova que o modelo
-obedece, e a frase pode sair parafraseada — que continua conforme, desde que
-diga que não sabe e encaminhe sem inventar. A garantia verbatim é o nó
-classificador com resposta fixa em código, que ainda não existe: quando ele
-chegar, esta regra vira o marcador que o roteador lê, e a frase passa a sair
-do `webhook`, não do modelo. Até lá, a compatibilidade é de graça — a frase
-que ela manda dizer é a que o `ENCAMINHAMENTO` já exigia.
-"""
-
-
 REGRAS: tuple[Regra, ...] = (
     IDENTIDADE,
     TOM,
@@ -287,13 +265,15 @@ REGRAS: tuple[Regra, ...] = (
     ENCAMINHAMENTO,
     USAR_HISTORICO,
     SEM_CATALOGO,
-    RESPOSTA_FIXA_SEM_INFO,
 )
 """As regras de comportamento, na ordem em que o modelo as lê.
 
-A tupla cresceu uma regra por vez até as sete da issue #10, ganhou as duas
-do caso à parte (usar o histórico, sem catálogo) e agora a da frase fixa,
-totalizando dez.
+A tupla cresceu uma regra por vez até as sete da issue #10 e ganhou as duas
+do caso à parte (usar o histórico, sem catálogo), totalizando nove. A décima
+— frase fixa verbatim de sem-info — foi removida depois do teste de campo:
+virava atrator para o 3B, que carimbava a frase em todo turno em vez de
+orientar nas Atividades. O não-saber continua governado por `NAO_INVENTAR`
+com saída em `ENCAMINHAMENTO`, que nunca exigiram frase exata.
 `test_o_prompt_tem_exatamente_as_regras_da_issue` afirma o conjunto inteiro:
 regra nova entra ali junto, regra derrubada quebra ali primeiro.
 """
@@ -302,8 +282,8 @@ PERSONA: str = "\n\n".join(f"{regra.titulo}\n{regra.instrucao}" for regra in REG
 """O prompt versionado do S.A.U.: as regras, inteiras, em um lugar só.
 
 O `titulo` entra com a `instrucao`, e não fica de fora do prompt. Um campo que
-nenhum código nem teste lia não é metadado, é resto — e dez parágrafos sem
-cabeçalho entregam ao modelo dez blocos de que tratar sem dizer qual regra é
+nenhum código nem teste lia não é metadado, é resto — e nove parágrafos sem
+cabeçalho entregam ao modelo nove blocos de que tratar sem dizer qual regra é
 cada um. O cabeçalho nomeia a regra para quem lê o prompt, que é o modelo, e é o
 que torna `titulo` um campo em vez de uma coluna morta.
 """

@@ -52,7 +52,6 @@ from sau.persona import (
     PRAZO_NAO_E_ATIVIDADE,
     RECUSA_DE_ATIVIDADE,
     REGRAS,
-    RESPOSTA_FIXA_SEM_INFO,
     SEM_CATALOGO,
     TOM,
     USAR_HISTORICO,
@@ -118,12 +117,12 @@ def _prompt_do_turno(fazer_cliente: FabricaCliente) -> str:
 
 
 def test_o_prompt_tem_exatamente_as_regras_da_issue() -> None:
-    """As regras do prompt são estas dez, nesta ordem, e nenhuma a mais.
+    """As regras do prompt são estas nove, nesta ordem, e nenhuma a mais.
 
     A lista é literal porque a fonte dela não é o código: é o critério de
-    aceitação da issue #10 mais as duas do caso à parte e a da frase fixa. Uma
-    regra nova entra aqui junto, e uma regra derrubada da composição deixa este
-    teste vermelho antes de qualquer outro.
+    aceitação da issue #10 mais as duas do caso à parte. Uma regra nova entra
+    aqui junto, e uma regra derrubada da composição deixa este teste vermelho
+    antes de qualquer outro.
     """
     assert tuple(regra.id for regra in REGRAS) == (
         "identidade",
@@ -135,7 +134,6 @@ def test_o_prompt_tem_exatamente_as_regras_da_issue() -> None:
         "encaminhamento",
         "usar_historico",
         "sem_catalogo",
-        "resposta_fixa_sem_info",
     )
 
 
@@ -283,26 +281,10 @@ def test_a_regra_de_sem_catalogo_chega_ao_modelo(
     assert prompt.count(SEM_CATALOGO.instrucao) == 1
 
 
-def test_a_regra_de_resposta_fixa_chega_ao_modelo(
-    fazer_cliente: FabricaCliente,
-) -> None:
-    """A frase fixa de sem-info está no prompt que o modelo recebeu.
-
-    É esta instrução que dá ao S.A.U. a saída literal quando a resposta não
-    está ao alcance ou o pedido viola as regras: sem ela, o não-saber sai em
-    redação livre a cada turno, e a forma varia. A garantia verbatim continua
-    sendo o classificador futuro — aqui o que se prova é que a frase chegou.
-    """
-    prompt = _prompt_do_turno(fazer_cliente)
-
-    assert RESPOSTA_FIXA_SEM_INFO.instrucao in prompt
-    assert prompt.count(RESPOSTA_FIXA_SEM_INFO.instrucao) == 1
-
-
 def test_o_titulo_de_cada_regra_chega_ao_modelo(fazer_cliente: FabricaCliente) -> None:
     """O `titulo` de cada regra vai no prompt junto da instrução.
 
-    Os dez testes acima conferem a `instrucao` e não o `titulo`, então um
+    Os nove testes acima conferem a `instrucao` e não o `titulo`, então um
     `PERSONA` montado só com as instruções passaria por todos eles — que é
     exatamente o estado em que a persona estava, com sete parágrafos sem
     cabeçalho entregues a um modelo de 3B. Este teste é o que fecha a porta: o
@@ -494,7 +476,7 @@ def test_o_prefixo_da_persona_e_travado_por_cache_de_prefixo() -> None:
 
     assert prefixo_a == prefixo_b, (
         "O prefixo do prompt até `INICIO_CONVERSA` mudou entre dois turnos. "
-        "Isso quebra o **cache de prefixo** do Ollama: os 949 tokens da persona "
+        "Isso quebra o **cache de prefixo** do Ollama: os 868 tokens da persona "
         "deixam de ser reaproveitados e todo turno volta a custar a leitura "
         "inteira do prompt (0,02 s → 3,8 s), do primeiro ao último Aluno. "
         "Não mude este prefixo — nem espaço, nem parágrafo, nem ordem — sem "
