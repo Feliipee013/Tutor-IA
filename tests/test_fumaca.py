@@ -24,6 +24,7 @@ import pytest
 from sau.config import Configuracao
 from sau.inference import fumaca
 from sau.inference.ollama import NUM_CTX_PADRAO, ClienteOllama
+from sau.inference.semaphore import K_PADRAO, TETO_PADRAO_DA_FILA
 from sau.prereqs import executar_checagens
 
 _MODELO = "qwen2.5:3b"
@@ -53,6 +54,8 @@ def _config_de_teste(**mudancas: Any) -> Configuracao:
         "telegram_api_base": "https://api.telegram.org",
         "conversa_caminho": "conversas.db",
         "conversa_ttl_minutos": 30,
+        "inferencia_k": K_PADRAO,
+        "inferencia_fila_teto": TETO_PADRAO_DA_FILA,
     }
     base.update(mudancas)
     return Configuracao(**base)
