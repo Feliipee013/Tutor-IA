@@ -62,6 +62,23 @@ já é do Aluno e ele não pode ficar esperando por uma chamada de saída; o ADR
 pede confirmação imediata, e um envio sem teto transforma o webhook numa
 espera."""
 
+TENTATIVAS_NGROK = 10
+"""Quantas vezes a descoberta consulta a API do ngrok antes de desistir.
+
+A API demora a responder no boot do compose dev: o túnel ainda não existe
+quando o webhook sobe. Dez tentativas curtas absorvem essa largada sem segurar
+a subida.
+"""
+
+INTERVALO_NGROK_SEGUNDOS = 1.0
+"""Espera entre duas consultas à API do ngrok."""
+
+TIMEOUT_TUNEL_SEGUNDOS = 5.0
+"""Teto de cada consulta à API local do ngrok."""
+
+TIMEOUT_SETWEBHOOK_SEGUNDOS = 5.0
+"""Teto do registro do webhook na API do Telegram."""
+
 RespostaWebhook = Response | tuple[Response, int]
 
 
@@ -103,6 +120,116 @@ def exigir_credenciais(config: Configuracao) -> None:
 
     if ausentes:
         raise CredencialTelegramAusenteError("\n".join(ausentes))
+
+
+def _extrair_url_https_dos_tuneis(dados: Any) -> str | None:
+    """Acha a primeira URL pública https na resposta do /api/tunnels do ngrok.
+
+    A API devolve um objeto com a lista `tunnels`, e cada túnel traz o seu
+    `public_url`. O http fica de fora de propósito: o Telegram só entrega em
+    443, 80, 88 e 8443, então o túnel precisa terminar em HTTPS.
+    """
+    if not isinstance(dados, dict):
+        return None
+    tuneis = dados.get("tunnels")
+    if not isinstance(tuneis, list):
+        return None
+    for tunel in tuneis:
+        if not isinstance(tunel, dict):
+            continue
+        url = tunel.get("public_url")
+        if isinstance(url, str) and url.startswith("https://"):
+            normalizada = url.rstrip("/") or url
+            return normalizada
+    return None
+
+
+def _descobrir_via_ngrok(
+    cliente: httpx.Client,
+    alvo: str,
+    dormir: Callable[[float], None],
+) -> str | None:
+    """Consulta o /api/tunnels com retry curto e devolve o primeiro https."""
+    for tentativa in range(TENTATIVAS_NGROK):
+        try:
+            resposta = cliente.get(alvo, timeout=TIMEOUT_TUNEL_SEGUNDOS)
+            resposta.raise_for_status()
+            encontrada = _extrair_url_https_dos_tuneis(resposta.json())
+        except Exception:
+            encontrada = None
+        if encontrada is not None:
+            return encontrada
+        if tentativa < TENTATIVAS_NGROK - 1:
+            dormir(INTERVALO_NGROK_SEGUNDOS)
+    return None
+
+
+def descobrir_url_publica(
+    config: Configuracao,
+    client: httpx.Client | None = None,
+    dormir: Callable[[float], None] = time.sleep,
+) -> str | None:
+    """Descobre a URL pública do canal, ou None quando não há como saber.
+
+    A TELEGRAM_PUBLIC_URL vence sempre: é o caminho de quem abre o túnel na
+    mão, fora do compose dev. Sem ela, a descoberta consulta o /api/tunnels do
+    ngrok apontado por NGROK_API_URL, com retry curto para absorver o boot.
+    Sem as duas, nenhum HTTP acontece — o canal sobe sem registrar, como em
+    prod — e é por isso que este retorno é None em vez de exceção.
+    """
+    if config.telegram_public_url:
+        return config.telegram_public_url.rstrip("/") or config.telegram_public_url
+    base = config.ngrok_api_url
+    if base is None:
+        return None
+    alvo = f"{base.rstrip('/')}/api/tunnels"
+    if client is not None:
+        return _descobrir_via_ngrok(client, alvo, dormir)
+    with httpx.Client(timeout=TIMEOUT_TUNEL_SEGUNDOS) as proprio:
+        return _descobrir_via_ngrok(proprio, alvo, dormir)
+
+
+def registrar_webhook(
+    config: Configuracao,
+    url_publica: str,
+    client: httpx.Client | None = None,
+) -> None:
+    """Registra a URL pública no Telegram via setWebhook.
+
+    A URL registrada é a pública com `/webhook` no fim, e o `secret_token` é o
+    mesmo que fecha a porta do endpoint. O token do S.A.U. nunca vai para o
+    log: ele mora na URL do setWebhook, então nenhuma mensagem de erro daqui
+    carrega a URL chamada — só a URL pública e o motivo sanitizado.
+    """
+    token = config.telegram_bot_token
+    if token is None:
+        raise CredencialTelegramAusenteError(
+            "TELEGRAM_BOT_TOKEN ausente: sem ele o S.A.U. não registra o webhook."
+        )
+    destino = f"{url_publica.rstrip('/')}/webhook"
+    chamada = f"{config.telegram_api_base.rstrip('/')}/bot{token}/setWebhook"
+    carga: dict[str, str] = {"url": destino}
+    if config.telegram_webhook_secret_token is not None:
+        carga["secret_token"] = config.telegram_webhook_secret_token
+
+    def _postar(cliente: httpx.Client) -> None:
+        try:
+            resposta = cliente.post(chamada, json=carga, timeout=TIMEOUT_SETWEBHOOK_SEGUNDOS)
+            resposta.raise_for_status()
+            corpo = resposta.json()
+        except httpx.HTTPError as err:
+            raise RuntimeError(
+                f"falha de rede ao registrar o webhook em {destino}: "
+                f"{type(err).__name__}"
+            ) from err
+        if not isinstance(corpo, dict) or not corpo.get("ok", False):
+            raise RuntimeError(f"o Telegram recusou o registro do webhook em {destino}: {corpo}")
+
+    if client is not None:
+        _postar(client)
+    else:
+        with httpx.Client(timeout=TIMEOUT_SETWEBHOOK_SEGUNDOS) as proprio:
+            _postar(proprio)
 
 
 def _extrair_chat_id(update: dict[str, Any]) -> int | None:
@@ -507,6 +634,22 @@ def main() -> None:
             "!" * 60,
         )
         sys.exit(1)
+
+    try:
+        url_publica = descobrir_url_publica(config)
+        if url_publica is None:
+            logger.warning(
+                "Sem URL pública (sem TELEGRAM_PUBLIC_URL e sem túnel do ngrok): "
+                "subindo sem registrar o webhook. O Aluno só recebe após o setWebhook."
+            )
+        else:
+            registrar_webhook(config, url_publica)
+            logger.info("Webhook registrado em %s/webhook.", url_publica.rstrip("/"))
+    except Exception as err:
+        # Registro automático nunca derruba o canal: o serviço continua no ar
+        # para acusejar o Aluno, e o setWebhook manual segue valendo. O token
+        # não aparece aqui — só a URL pública e o motivo sanitizado.
+        logger.warning("Não foi possível registrar o webhook automaticamente: %s", err)
 
     logger.info("=" * 60)
     logger.info("S.A.U. - webhook do Telegram")

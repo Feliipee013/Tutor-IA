@@ -223,34 +223,56 @@ resolvidos, então a saída desse comando não deve ser colada em lugar nenhum.
 Se um token vazar, o caminho é `@BotFather` → `/revoke`.
 
 **Expor a porta e registrar o webhook.** O Telegram entrega updates por POST numa
-URL pública, então a porta local precisa de um túnel HTTPS. O `ngrok` serve
-aqui; ele exige conta, que é gratuita:
-
-Antes de uma vez, credencie o ngrok com o token que `dashboard.ngrok.com`
-entrega na conta gratuita:
+URL pública, então a porta local precisa de um túnel HTTPS. Em dev o túnel é o
+serviço `ngrok` do `docker-compose.dev.yml` — ele exige conta gratuita, com o
+token que `dashboard.ngrok.com` entrega:
 
 ```sh
-ngrok config add-authtoken <seu token>
+# .env (ignorado pelo git, nunca entra em commit ou log)
+NGROK_AUTHTOKEN=<o token do dashboard.ngrok.com>
 ```
 
-Daí em diante, a cada subida:
+Daí em diante, um comando só sobe o canal com o túnel e registra sozinho a URL
+pública no Telegram, antes de atender o Aluno:
 
 ```sh
-# 1. suba o serviço
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+```
+
+Ou exporte o `COMPOSE_FILE` uma vez e use o `up` normal:
+
+```sh
+export COMPOSE_FILE=docker-compose.yml:docker-compose.dev.yml
+docker compose up --build
+```
+
+O `docker compose up` puro (sem `-f`) nunca inclui o ngrok: a prod continua sem
+dependência externa. Confira com `docker compose config` — sem `-f` ele não
+lista o `ngrok`.
+
+Como funciona: o `webhook` descobre a URL pelo `/api/tunnels` do serviço
+`ngrok` (com retry curto para absorver o boot) e faz o `setWebhook` com
+`url=<url-pública>/webhook` mais o `secret_token`. Se a `TELEGRAM_PUBLIC_URL`
+estiver preenchida no `.env`, ela vence a descoberta — é o caminho de quem abre
+o túnel na mão, fora do compose dev. Sem as duas, nenhum HTTP extra acontece e
+o serviço sobe sem registrar, como em prod. O registro nunca derruba o canal:
+se falhar, vira só um warning no log e o Aluno continua sendo acusejado.
+
+**O `.env` é lido pelo Compose, não pelo seu shell.** O `curl` abaixo usa
+`${TELEGRAM_BOT_TOKEN}`, então exporte as variáveis antes, senão a URL vira
+`api.telegram.org/bot/setWebhook` e a resposta é um `404` sem outra pista. O
+mesmo cuidado vale para rodar `python -m sau.telegram` direto na máquina. O
+`curl` é o caminho manual, para quando o registro automático não se aplica
+(compose puro, sem o override de dev):
+
+```sh
+# 1. suba o serviço (compose puro)
 docker compose up --build webhook
 
 # 2. em outro terminal, abra o túnel para a porta 8080
 ngrok http 8080
 # ele imprime algo como: https://aleatorio-1234.ngrok-free.app
-```
 
-**O `.env` é lido pelo Compose, não pelo seu shell.** Os `curl` abaixo usam
-`${TELEGRAM_BOT_TOKEN}` e `${TELEGRAM_WEBHOOK_SECRET_TOKEN}`, então exporte as
-variáveis antes, senão a URL vira `api.telegram.org/bot/setWebhook` e a resposta
-é um `404` sem outra pista. O mesmo cuidado vale para rodar
-`python -m sau.telegram` direto na máquina.
-
-```sh
 # 3. registre a URL pública no Telegram, com a chave do openssl acima
 set -a; source .env; set +a
 

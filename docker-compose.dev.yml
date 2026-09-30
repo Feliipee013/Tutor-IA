@@ -1,0 +1,24 @@
+services:
+  # O túnel de desenvolvimento. Só existe no compose dev: o
+  # `docker compose up` puro nunca inclui o ngrok, e é isso que mantém a prod
+  # sem dependência externa. Encaminha para o `webhook:8080`, que é a porta que
+  # o serviço escuta dentro do container.
+  ngrok:
+    image: ngrok/ngrok:latest
+    container_name: sau-ngrok
+    command: ["http", "webhook:8080"]
+    environment:
+      - NGROK_AUTHTOKEN=${NGROK_AUTHTOKEN:-}
+    # A API local (porta 4040) não é publicada no host de propósito: quem
+    # consulta o /api/tunnels é o `webhook`, dentro da rede do compose.
+
+  # Override do canal: aponta a descoberta para a API do serviço acima.
+  # A TELEGRAM_PUBLIC_URL segue vazia por padrão — com ela vazia, o `webhook`
+  # descobre sozinho a URL pelo /api/tunnels; com ela preenchida, ela vence a
+  # descoberta (o caminho de quem abre o túnel na mão).
+  webhook:
+    environment:
+      - NGROK_API_URL=http://ngrok:4040
+      - TELEGRAM_PUBLIC_URL=${TELEGRAM_PUBLIC_URL:-}
+    depends_on:
+      - ngrok

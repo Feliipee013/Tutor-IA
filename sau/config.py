@@ -31,6 +31,8 @@ class Configuracao:
     telegram_api_base: str
     conversa_caminho: str
     conversa_ttl_minutos: int
+    telegram_public_url: str | None = None
+    ngrok_api_url: str | None = None
 
 
 _MIB_EM_BYTES = 1_048_576
@@ -108,6 +110,16 @@ def carregar_configuracao(origem: Mapping[str, str] | None = None) -> Configurac
     telegram_webhook_secret_token = (env.get("TELEGRAM_WEBHOOK_SECRET_TOKEN") or "").strip() or None
     telegram_api_base = env.get("TELEGRAM_API_BASE", "https://api.telegram.org").strip()
 
+    # URL pública do túnel de desenvolvimento. Ausente é None; string vazia
+    # também, porque o compose dev injeta '${TELEGRAM_PUBLIC_URL:-}'. Quando
+    # presente, ela vence a descoberta via API do ngrok: é o caminho manual
+    # para quem abre o túnel na mão, fora do compose dev.
+    telegram_public_url = (env.get("TELEGRAM_PUBLIC_URL") or "").strip() or None
+    # Base da API local do ngrok (o /api/tunnels). Ausente é None pelo mesmo
+    # motivo acima. Sem ela e sem TELEGRAM_PUBLIC_URL nenhum HTTP extra
+    # acontece: o canal sobe sem registrar, como em prod.
+    ngrok_api_url = (env.get("NGROK_API_URL") or "").strip() or None
+
     webhook_port_raw = env.get("TELEGRAM_WEBHOOK_PORT", "8080")
     try:
         telegram_webhook_port = int(webhook_port_raw)
@@ -152,4 +164,6 @@ def carregar_configuracao(origem: Mapping[str, str] | None = None) -> Configurac
         telegram_api_base=telegram_api_base,
         conversa_caminho=conversa_caminho,
         conversa_ttl_minutos=conversa_ttl_minutos,
+        telegram_public_url=telegram_public_url,
+        ngrok_api_url=ngrok_api_url,
     )

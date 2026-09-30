@@ -35,8 +35,10 @@ from sau.telegram.webhook import (
     CredencialTelegramAusenteError,
     ExecutorTurno,
     criar_app,
+    descobrir_url_publica,
     exigir_credenciais,
     main,
+    registrar_webhook,
 )
 
 _TOKEN = "7123456789:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsaw"
@@ -1428,3 +1430,141 @@ def test_sem_token_o_acuse_e_registrado_como_ausente(
 
     assert telegram.enviados == []
     assert any("TELEGRAM_BOT_TOKEN ausente" in r.getMessage() for r in caplog.records)
+
+
+# --- Registro automático do webhook no compose dev ---
+
+
+def test_descobrir_prefere_telegram_public_url_e_registra_com_secret() -> None:
+    """A TELEGRAM_PUBLIC_URL vence a descoberta e vira setWebhook com secret.
+
+    É o caminho de quem abre o túnel na mão, fora do compose dev: o ngrok nem
+    é consultado, e o registro leva a URL com `/webhook` mais o secret que
+    fecha a porta do endpoint.
+    """
+    url_manual = "https://manual-1234.ngrok-free.app"
+    config = carregar_configuracao(
+        {**_ENV_PADRAO, "TELEGRAM_PUBLIC_URL": url_manual, "NGROK_API_URL": "http://ngrok:4040"}
+    )
+
+    def explodir(requisicao: httpx.Request) -> httpx.Response:
+        raise AssertionError("o ngrok não deveria ser consultado com TELEGRAM_PUBLIC_URL presente")
+
+    cliente_ngrok = httpx.Client(transport=httpx.MockTransport(explodir))
+    try:
+        assert descobrir_url_publica(config, cliente_ngrok, dormir=lambda _: None) == url_manual
+    finally:
+        cliente_ngrok.close()
+
+    enviadas: list[httpx.Request] = []
+
+    def responder_setwebhook(requisicao: httpx.Request) -> httpx.Response:
+        enviadas.append(requisicao)
+        return httpx.Response(
+            status_code=200, json={"ok": True, "result": True}, request=requisicao
+        )
+
+    cliente_telegram = httpx.Client(transport=httpx.MockTransport(responder_setwebhook))
+    try:
+        registrar_webhook(config, url_manual, cliente_telegram)
+    finally:
+        cliente_telegram.close()
+
+    assert len(enviadas) == 1
+    chamada = enviadas[0]
+    assert chamada.url.path == f"/bot{_TOKEN}/setWebhook"
+    corpo = json.loads(chamada.content)
+    assert corpo == {"url": f"{url_manual}/webhook", "secret_token": _SEGREDO}
+
+
+def test_descobrir_via_api_do_ngrok_e_registra_o_webhook() -> None:
+    """Sem URL manual, a descoberta lê o /api/tunnels e registra o https.
+
+    O túnel http fica de fora de propósito: o Telegram só entrega em 443, 80,
+    88 e 8443, então só o https serve ao Aluno.
+    """
+    url_do_tunel = "https://aleatorio-1234.ngrok-free.app"
+    config = carregar_configuracao({**_ENV_PADRAO, "NGROK_API_URL": "http://ngrok:4040"})
+
+    def responder_tuneis(requisicao: httpx.Request) -> httpx.Response:
+        assert requisicao.url.path == "/api/tunnels"
+        return httpx.Response(
+            status_code=200,
+            json={
+                "tunnels": [
+                    {"public_url": "http://sem-https.ngrok-free.app", "proto": "http"},
+                    {"public_url": url_do_tunel, "proto": "https"},
+                ]
+            },
+            request=requisicao,
+        )
+
+    cliente_tuneis = httpx.Client(transport=httpx.MockTransport(responder_tuneis))
+    try:
+        assert descobrir_url_publica(config, cliente_tuneis, dormir=lambda _: None) == url_do_tunel
+    finally:
+        cliente_tuneis.close()
+
+    enviadas: list[httpx.Request] = []
+
+    def responder_setwebhook(requisicao: httpx.Request) -> httpx.Response:
+        enviadas.append(requisicao)
+        return httpx.Response(
+            status_code=200, json={"ok": True, "result": True}, request=requisicao
+        )
+
+    cliente_telegram = httpx.Client(transport=httpx.MockTransport(responder_setwebhook))
+    try:
+        registrar_webhook(config, url_do_tunel, cliente_telegram)
+    finally:
+        cliente_telegram.close()
+
+    assert len(enviadas) == 1
+    corpo = json.loads(enviadas[0].content)
+    assert corpo["url"] == f"{url_do_tunel}/webhook"
+    assert corpo["secret_token"] == _SEGREDO
+
+
+def test_sem_url_publica_o_main_sobe_sem_http_extra(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Em prod, sem TELEGRAM_PUBLIC_URL e sem NGROK_API_URL, nada extra sai.
+
+    A descoberta devolve None sem tocar na rede, o `main` sobe sem registrar e
+    o token do S.A.U. nunca aparece no log — só a ausência da URL pública.
+    """
+    config = carregar_configuracao(_ENV_PADRAO)
+    assert config.telegram_public_url is None
+    assert config.ngrok_api_url is None
+
+    def explodir(requisicao: httpx.Request) -> httpx.Response:
+        raise AssertionError("nenhum HTTP deveria sair sem URL pública")
+
+    cliente = httpx.Client(transport=httpx.MockTransport(explodir))
+    try:
+        assert descobrir_url_publica(config, cliente, dormir=lambda _: None) is None
+    finally:
+        cliente.close()
+
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", _TOKEN)
+    monkeypatch.setenv("TELEGRAM_WEBHOOK_SECRET_TOKEN", _SEGREDO)
+    monkeypatch.delenv("TELEGRAM_PUBLIC_URL", raising=False)
+    monkeypatch.delenv("NGROK_API_URL", raising=False)
+    monkeypatch.setattr(Flask, "run", _nao_sobe_servidor)
+
+    def explodir_request(_eu: httpx.Client, *args: Any, **kwargs: Any) -> httpx.Response:
+        raise AssertionError("o main não deveria fazer HTTP sem URL pública")
+
+    monkeypatch.setattr(httpx.Client, "request", explodir_request)
+
+    raiz = logging.getLogger()
+    handlers, nivel = raiz.handlers[:], raiz.level
+    try:
+        main()
+    finally:
+        raiz.handlers[:] = handlers
+        raiz.setLevel(nivel)
+
+    saida = capsys.readouterr().out
+    assert "Sem URL pública" in saida
+    assert _TOKEN not in saida

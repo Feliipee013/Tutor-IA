@@ -28,6 +28,7 @@ agente Implementar localizar o ponto de impacto sem varrer o repositório inteir
 | `SETUP.md` | ambiente: `gh`, Context7, e como executar o projeto | sim |
 | `Dockerfile` | imagem do serviço do bot, `python -m sau.main` — **issue #4** | sim |
 | `docker-compose.yml` | sobe o serviço `bot` (com o Ollama no host, ADR-0002) e o serviço `webhook`, independentes entre si e ambos alcançando o Ollama do host. Desde a #9 o `webhook` monta o volume nomeado que guarda o arquivo de conversas — **issues #4, #5, #8 e #9** | sim |
+| `docker-compose.dev.yml` | override de dev: o serviço `ngrok` (túnel para o `webhook:8080`) e o `webhook` apontado para a API dele (`NGROK_API_URL`) com `TELEGRAM_PUBLIC_URL` opcional. O compose puro nunca inclui o ngrok | sim |
 | `pyproject.toml` | pacote `sau`, dependências (o `langgraph` entrou com a #8) e config de pytest, ruff e mypy — **issues #4 e #8** | sim |
 | `.env.example` | modelo das variáveis de ambiente do compose, com o que é obrigatório — **issues #4, #5, #8 e #9** | sim |
 | `scripts/preparar-host.sh` | o passo que o compose não dá conta de fazer: acha a VRAM, confere o Ollama e baixa o modelo se faltar. Idempotente — **issue #7** | sim |
