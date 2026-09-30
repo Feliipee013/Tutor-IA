@@ -14,7 +14,7 @@
 # Uso:
 #   scripts/preparar-host.sh
 #   MODELO=llama3.2:3b scripts/preparar-host.sh
-#   NUM_CTX=4096 scripts/preparar-host.sh
+#   NUM_CTX=8192 scripts/preparar-host.sh
 #
 # Ao final, ele imprime a linha do VRAM_TOTAL_MIB para exportar antes de
 # `docker compose up`.
@@ -27,14 +27,16 @@ DRM_DIR="${DRM_DIR:-/sys/class/drm}"
 # A janela de contexto é a mesma da geração, e o valor vem de fora pelo mesmo
 # motivo de `MODELO` e `DRM_DIR`: mudar a janela muda o consumo de memória da
 # placa, e quem muda precisa conferir a VRAM da máquina de novo (ADR-0003).
-# Sem este `num_ctx` o Ollama carregaria com o default do servidor — 4096 na
-# máquina medida — e a checagem do serviço, que pede a janela do cliente,
-# recarregaria o modelo. A linha do `ollama ps` que este script imprime sairia
-# com `CONTEXT 4096`, que é a marca da recarga.
+# Sem este `num_ctx` o Ollama carrega com o default do servidor, que na máquina
+# medida por acaso é o mesmo número — e coincidência não é garantia: no dia em
+# que a janela da geração mudar, o modelo recarrega e o primeiro Aluno paga a
+# carga duas vezes. Por isso o número vem de fora em vez de ficar no default.
+# A linha do `ollama ps` que este script imprime é a prova: ela diz em que janela
+# o modelo ficou, e é o que a pessoa compara com a janela da geração.
 #
 # O valor é o `NUM_CTX_PADRAO` do cliente (`sau/inference/ollama.py`), e um
-# `test_fumaca.py` afirma que os dois continuam iguais: a janela que carrega o
-# modelo é a que a geração vai usar. 2048 aqui obrigaria a mudar de novo.
+# `test_fumaca.py` afirma que os dois continuam iguais. Trocar um e esquecer o
+# outro é a recarga dupla, e foi por isso que a costura ganhou teste.
 NUM_CTX="${NUM_CTX:-4096}"
 MIB_EM_BYTES=1048576
 

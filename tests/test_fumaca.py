@@ -1026,12 +1026,12 @@ def test_script_para_quando_o_ollama_ps_nao_mostra_o_modelo(tmp_path: Path) -> N
 def test_script_aquece_com_o_num_ctx_da_geracao(tmp_path: Path) -> None:
     """O aquecimento do script manda a janela da geração, e não a do servidor.
 
-    Sem `num_ctx` o Ollama carrega com o default do servidor (4096 na máquina
-    medida), a checagem do serviço pede a janela do cliente e o modelo recarrega
-    — que é a carga dupla que o primeiro Aluno paga. E a linha do `ollama ps`
-    que este script imprime é justamente a evidência de que não recarregou: ela
-    saía com `CONTEXT 4096`, a marca da recarga que
-    `docs/tempo-primeira-resposta.md` diz que não pode aparecer.
+    Sem `num_ctx` o Ollama carrega com o default do servidor, que por acaso é o
+    mesmo número na máquina medida; a coincidência acaba no dia em que a janela
+    da geração mudar, e aí o modelo recarrega — que é a carga dupla que o
+    primeiro Aluno paga. A linha do `ollama ps` que este script imprime é a
+    evidência: ela diz em que janela o modelo ficou, e o que a pessoa compara
+    com a janela da geração para ver que não recarregou.
     """
     pagina = tmp_path / "pagina.json"
     registro = tmp_path / "pulls.txt"
@@ -1044,7 +1044,7 @@ def test_script_aquece_com_o_num_ctx_da_geracao(tmp_path: Path) -> None:
     # Contra a constante do cliente, e não contra o literal: o script tem a
     # janela num `NUM_CTX` que o bash não importa do Python, e o literal aqui
     # era o que deixou a costura sem verificação. Com `NUM_CTX_PADRAO` mudado,
-    # este teste é o que avisa que o `NUM_CTX="${NUM_CTX:-2048}"` do script
+    # este teste é o que avisa que o `NUM_CTX="${NUM_CTX:-...}"` do script
     # ficou para trás — que é o mesmo caminho que o `4c58f92` e o `a972623`
     # fecharam para o `ollama ps` e para o `prereqs.py`.
     assert corpo["options"]["num_ctx"] == NUM_CTX_PADRAO

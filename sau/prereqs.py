@@ -152,9 +152,11 @@ def aquecer_modelo(
 ) -> None:
     """Dispara uma geração mínima para que o Ollama carregue o modelo na memória.
 
-    O `num_ctx` é o mesmo da geração (`NUM_CTX_PADRAO` do cliente): sem ele o
-    Ollama carregaria com o default do servidor (4096) e a geração seguinte,
-    com a janela do cliente, recarregaria — o primeiro Aluno pagaria duas cargas.
+    O `num_ctx` é o mesmo da geração (`NUM_CTX_PADRAO` do cliente), e é por isso
+    que ele é enviado: sem ele o Ollama carrega com o default do servidor, que na
+    máquina medida por acaso é o mesmo número. Acaso não é garantia — no dia em
+    que a janela da geração mudar, o modelo recarrega, e o primeiro Aluno paga a
+    carga duas vezes. Mandar o número trava a igualdade.
     """
     url = f"{base_url.rstrip('/')}/api/generate"
     payload: dict[str, Any] = {
