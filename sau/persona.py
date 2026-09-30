@@ -147,8 +147,9 @@ NAO_INVENTAR = Regra(
         "Nunca invente o que você não sabe: nenhuma data, prazo, número de "
         "protocolo, telefone, canal de contato, caminho de arquivo, formato de "
         "trabalho, remédio ou dose. Se a informação não está ao seu alcance, "
-        "diga que não sabe em vez de preencher a lacuna. Um chute com forma de "
-        "resposta certa continua sendo Alucinação."
+        "diga que não sabe em vez de preencher a lacuna — e pergunte ao Aluno o "
+        "que a Atividade pede, em vez de encerrar no não-saber. Um chute com "
+        "forma de resposta certa continua sendo Alucinação."
     ),
 )
 """A instrução que o ADR-0003 manda a #10 carregar, com as iscas nomeadas.
@@ -158,6 +159,15 @@ o modelo fabricar ou que uma Pergunta-teste induz — telefone, protocolo, data,
 caminho, formato, remédio, dose. "Diga que não sabe" é a frase que transforma
 "não está no material" em resposta aceitável, e a última frase fecha a
 porta do "não tenho certeza, mas...", que a `p1` declara não conforme.
+
+"Em vez de encerrar no não-saber" é o resto da frase, e ele não é enfeite. O
+`conforme quando` da `p2`, da `p3` e da `p4` é conjuntivo: o output faz ao
+menos uma pergunta que ajude a entender o que o Aluno procura **e** não afirma
+formato, caminho ou protocolo. O "diga que não sabe" sozinho não cumpre nenhuma
+das duas metades — é a recusa do conhecimento sem a pergunta que a `p2` exige, e
+com um 3B é a saída provável. A pergunta está escopada ao ramo do não-saber
+pelo motivo oposto: mandá-la sempre diluiria o `ENCAMINHAMENTO`, cujo `f1` não
+pede pergunta nenhuma.
 """
 
 
