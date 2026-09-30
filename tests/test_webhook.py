@@ -26,6 +26,7 @@ from sau.config import carregar_configuracao
 from sau.graph.state import RegistroDeConversas
 from sau.inference.ollama import ErroDeInferencia, Resposta, TempoEsgotadoError
 from sau.main import configurar_logging
+from sau.persona import PERSONA
 from sau.telegram import webhook
 from sau.telegram.webhook import (
     CABECALHO_SECRET_TOKEN,
@@ -68,6 +69,21 @@ UPDATE_COM_FOTO: dict[str, Any] = {
 }
 
 LOGGER = "sau.telegram.webhook"
+
+RESPOSTA_1 = "texto-resposta-1"
+"""A resposta que o `ModeloQueEspelha` devolve no primeiro turno.
+
+O texto é de fixture, e não uma frase que pareça conversa, por um motivo mecânico:
+desde a #10 a persona entra no prompt de **todo** turno, e uma sentinela que
+apareça em algum texto de regra faria as afirmações de vazamento do histórico
+medirem a persona em vez da conversa do outro Aluno. Foi exatamente o que
+"primeira resposta" virou, quando a regra de identidade passou a dizer "na
+primeira resposta desta conversa". `test_a_sentinela_nao_esta_na_persona` trava
+a condição.
+"""
+
+RESPOSTA_2 = "texto-resposta-2"
+"""A resposta do modelo no segundo turno, pelo mesmo motivo da anterior."""
 
 
 def _geracao(texto: str) -> dict[str, Any]:
@@ -650,7 +666,12 @@ def test_o_texto_do_aluno_e_a_mensagem_que_o_grafo_recebe(
 
     Um turno que respondesse a uma pergunta fixa passaria pelo teste do caminho
     inteiro acima, porque o texto do modelo voltaria igual. Aqui o modelo falso
-    guarda o prompt que recebeu, e ele tem que ser a mensagem do update.
+    guarda o prompt que recebeu, e ele tem que conter a mensagem do update.
+
+    A afirmação é `in` e não `endswith` desde a #10: o prompt termina no marcador
+    de fechamento da cerca, que é o que impede a mensagem do Aluno de ser lida como
+    instrução. Que a fala do Aluno seja a última antes do fechamento é o que
+    `test_persona.py` afirma, no módulo que monta o prompt.
     """
     prompts: list[str] = []
 
@@ -664,7 +685,7 @@ def test_o_texto_do_aluno_e_a_mensagem_que_o_grafo_recebe(
     _postar(_app(telegram, executor=None), UPDATE_DO_ALUNO)
 
     assert len(prompts) == 1
-    assert prompts[0].endswith(UPDATE_DO_ALUNO["message"]["text"])
+    assert UPDATE_DO_ALUNO["message"]["text"] in prompts[0]
 
 
 def test_falha_do_modelo_vira_mensagem_ao_aluno_e_nao_stack_trace(
@@ -1005,7 +1026,7 @@ class ModeloQueEspelha(ModeloFalso):
     recriado a cada turno — o `webhook` monta um `ClienteOllama` por turno — e a
     lista precisa sobreviver à recriação."""
 
-    respostas: list[str] = ["primeira resposta", "segunda resposta"]
+    respostas: list[str] = [RESPOSTA_1, RESPOSTA_2]
     """A resposta de cada turno, na ordem dos prompts. Variar por turno é o que
     permite ao teste da ordem afirmar que o histórico do segundo turno tem a troca
     inteira, e não só a pergunta anterior."""
@@ -1023,6 +1044,29 @@ class ModeloQueEspelha(ModeloFalso):
             tokens_gerados=None,
             concluida=True,
             motivo_de_parada="stop",
+        )
+
+
+def test_a_sentinela_nao_esta_na_persona() -> None:
+    """A resposta de fixture não pode ser uma palavra que a persona usa.
+
+    A persona entra no prompt de todo turno, então uma sentinela que apareça num
+    texto de regra está em todo prompt — e as afirmações de vazamento do histórico
+    passam a medir a persona. `test_o_historico_de_um_aluno_nao_vai_para_o_prompt_de_outro`
+    affirmava "a resposta da primeira Aluna não vazou" com a frase "primeira
+    resposta", que a regra de identidade passou a usar: o teste ficou vermelho
+    apontando um vazamento que não existia, e o que ele não mais provava era o
+    isolamento.
+
+    O defeito é silencioso pelo lado certo também: o isolamento está provado nos
+    testes de conversa, e a persona nunca é o que eles medem. Se um dia uma regra
+    usar a palavra de uma sentinela, este teste fica vermelho apontando a origem —
+    que é a forma como ele devia ter ficado vermelho da primeira vez.
+    """
+    for sentinela in (RESPOSTA_1, RESPOSTA_2):
+        assert sentinela not in PERSONA, (
+            f"a sentinela {sentinela!r} está na persona: as afirmações de vazamento "
+            "do histórico passariam a medir a persona em vez da conversa"
         )
 
 
@@ -1074,13 +1118,13 @@ def test_o_historico_de_um_aluno_nao_vai_para_o_prompt_de_outro(
     assert "Atividade 2" in da_aluna_ainda, (
         f"o segundo turno da Aluna não recebeu o histórico: {da_aluna_ainda!r}"
     )
-    assert "primeira resposta" in da_aluna_ainda, (
+    assert RESPOSTA_1 in da_aluna_ainda, (
         f"o histórico não trouxe a resposta anterior: {da_aluna_ainda!r}"
     )
     # E a outra Aluna não viu nada da primeira, nem da pergunta nem da resposta.
     assert "Atividade 2" not in da_outra, "a pergunta da primeira Aluna vazou para a segunda"
     assert "matemática" not in da_outra, "a conversa da primeira Aluna vazou inteira"
-    assert "primeira resposta" not in da_outra, "a resposta da primeira Aluna vazou"
+    assert RESPOSTA_1 not in da_outra, "a resposta da primeira Aluna vazou"
     assert "atividade de inglês" in da_outra
 
 
@@ -1143,13 +1187,13 @@ def test_as_mensagens_do_mesmo_aluno_sao_respondidas_em_ordem(
     primeiro, segundo = ModeloQueEspelha.prompts
     # O segundo turno só existe depois do primeiro ter gravado a resposta, e é isso
     # que a fila garante.
-    assert "primeira resposta" in segundo, (
+    assert RESPOSTA_1 in segundo, (
         f"o segundo turno rodou antes do primeiro gravar a resposta: {segundo!r}"
     )
     assert "Atividade 1" in segundo
     assert "matemática" in segundo
     # E a entrega saiu na ordem em que o Aluno perguntou.
-    assert telegram.textos == [TEXTO_ACK, TEXTO_ACK, "primeira resposta", "segunda resposta"]
+    assert telegram.textos == [TEXTO_ACK, TEXTO_ACK, RESPOSTA_1, RESPOSTA_2]
 
 
 def test_a_conversa_registra_a_falha_como_parte_do_que_o_aluno_viu(
@@ -1182,7 +1226,7 @@ def test_a_conversa_registra_a_falha_como_parte_do_que_o_aluno_viu(
         ("aluno", "qual o prazo da Atividade 1?"),
         ("sau", TEXTO_FALHA),
         ("aluno", "e a de matemática?"),
-        ("sau", "primeira resposta"),
+        ("sau", RESPOSTA_1),
     ], f"a conversa gravada não é a que o Aluno teve: {historico}"
     assert TEXTO_FALHA in ModeloQueEspelha.prompts[0], (
         f"o turno seguinte não viu a falha anterior: {ModeloQueEspelha.prompts[0]!r}"

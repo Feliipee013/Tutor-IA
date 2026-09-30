@@ -23,15 +23,31 @@ desempate.
 
 > ## O que este ADR ainda não cumpre
 >
-> **Um item só, e ele é do tracker, não da medição.** A issue #3 ainda cita
+> **Dois itens. O primeiro é do tracker, não da medição.** A issue #3 ainda cita
 > `OLLAMA_VISIBLE_DEVICES`, que não é a variável que o Ollama lê — a correta é
 > `CUDA_VISIBLE_DEVICES`, com o UUID de `nvidia-smi -L`, e o repositório está
 > corrigido no ADR-0002 e no SETUP.md. O **critério 4 da issue precisa de edição
 > humana**.
 >
-> O critério de velocidade está fechado: medido na máquina do ADR-0002, com
-> `100% GPU` nos três candidatos, em
-> [`resultado-gpu.md`](../medicao-modelo/resultado-gpu.md).
+> **O segundo é o critério "a régua subir", previsto e medido.** Os
+> [critérios de troca](#critérios-de-troca) abaixo já registravam que 0,02 s era o
+> número de `num_ctx: 2048` com o prompt da sondagem, e que a régua precisava ser
+> remedida com o prompt real antes de reclamar dele. Foi isso que aconteceu: com a
+> persona da #10 no prompt, um turno real custa **~4,9 s de ponta a ponta** no
+> caso frio de produção (3,8 s de leitura do prompt + 1,1 s de geração), e o caso
+> quente — mesmo prefixo, já lido pelo cache de prefixo — fica em ~1,1 s. A régua
+> subiu, e subiu pelo motivo que este ADR já previa.
+>
+> **A escolha não muda por isso.** O modelo continua sendo o `qwen2.5:3b`: a régua
+> mediu o tempo de *entregar a primeira palavra*, não a qualidade da resposta, e a
+> qualidade é o que os três critérios anteriores decidiram. O que a remessa mediu
+> foi que 0,02 s nunca foi o número de produção — ele era o número da sondagem.
+>
+> O critério de velocidade da escolha está fechado: medido na máquina do ADR-0002,
+> com `100% GPU` nos três candidatos, em
+> [`resultado-gpu.md`](../medicao-modelo/resultado-gpu.md). O caso de produção do
+> tempo está em
+> [`tempo-primeira-resposta.md`](../tempo-primeira-resposta.md).
 
 ## A regra de decisão, antes dos resultados
 

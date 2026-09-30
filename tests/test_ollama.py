@@ -10,6 +10,7 @@ import httpx
 import pytest
 
 from sau.inference.ollama import (
+    NUM_CTX_PADRAO,
     ClienteOllama,
     ErroDeInferencia,
     TempoEsgotadoError,
@@ -147,7 +148,7 @@ def test_sem_opcoes_manda_so_o_num_ctx() -> None:
     """
     corpo = _corpo_enviado(lambda cliente: cliente.responder("oi"))
 
-    assert corpo["options"] == {"num_ctx": 2048}
+    assert corpo["options"] == {"num_ctx": NUM_CTX_PADRAO}
     assert "seed" not in corpo["options"]
     assert "temperature" not in corpo["options"]
 
@@ -165,7 +166,7 @@ def test_opcoes_da_chamada_chegam_juntas_do_num_ctx() -> None:
     assert opcoes["temperature"] == 0
     assert opcoes["seed"] == 20260926
     assert opcoes["num_predict"] == 256
-    assert opcoes["num_ctx"] == 2048
+    assert opcoes["num_ctx"] == NUM_CTX_PADRAO
 
 
 def test_opcoes_da_chamada_ganham_do_num_ctx_do_cliente() -> None:

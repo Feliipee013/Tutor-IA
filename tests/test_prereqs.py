@@ -381,8 +381,8 @@ def test_verificar_alocacao_gpu_aquecimento_quando_nao_carregado() -> None:
 def test_aquecer_modelo_usa_o_mesmo_num_ctx_da_geracao() -> None:
     """O aquecimento carrega com a janela da geração, e não com o default do servidor.
 
-    Sem o `num_ctx`, o Ollama carrega com 4096 e a geração seguinte (2048, o
-    `NUM_CTX_PADRAO` do cliente) recarrega: o primeiro Aluno paga duas cargas,
+    Sem o `num_ctx`, o Ollama carrega com 4096 e a geração seguinte (a janela do
+    cliente, o `NUM_CTX_PADRAO`) recarrega: o primeiro Aluno paga duas cargas,
     na fumaça e em produção.
     """
     cargas: list[dict[str, Any]] = []

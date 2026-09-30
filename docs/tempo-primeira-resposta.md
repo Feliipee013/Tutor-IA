@@ -106,6 +106,76 @@ primeira leitura do prompt (0,296 s contra 0,018 s das seguintes). Os Alunos
 seguintes esperam 0,019 s. São coisas diferentes: misturá-los num número só
 descreve um Aluno que não existe.
 
+### O mecanismo dos 0,019 s é o cache de prefixo, não o modelo carregado
+
+A explicação óbvia para o 0,019 s é "o modelo já está carregado", e é o que a
+versão anterior deste documento dizia. O mecanismo é outro, e a diferença importa
+porque muda o que se pode fazer com o tempo: acelerar o cache é manter o prompt
+igual, e não manter o modelo carregado.
+
+O Ollama guarda em cache os **tokens já lidos do prompt** (cache de prefixo).
+Enquanto o início do prompt for byte a byte igual ao que ele acabou de ler, ele
+não relê esse trecho — e o `prompt_eval_duration` despenca. A `carga` cair para
+0,001 s porque o modelo está quente é verdade; mas a `leitura` cair de 0,296 s
+para 0,018 s **não** é a carga do modelo: é o prompt ter sido lido antes.
+
+A consequência prática: **mover uma única palavra no início do prompt quebra o
+cache**, e o turno seguinte volta a pagar a leitura inteira. Por isso
+`sau/persona.py` trava o prefixo em teste (`test_o_prefixo_da_persona_e_travado_por_cache_de_prefixo`):
+os 698 tokens da persona são os mesmos em todo turno, e essa identidade é o que
+paga o 0,02 s.
+
+## O caso de produção: o prefixo é frio quase sempre
+
+O quadro acima é de uma corrida com o modelo **mantido em memória entre as
+gerações** — o `keep_alive` do servidor segurava o processo. O turno real do
+S.A.U. é diferente, e a diferença muda o número que o Aluno espera.
+
+Na prática de tráfego esparso (que é o plantão da madrugada, por definição), o
+`keep_alive` padrão do Ollama (5 min) expira antes da próxima pergunta — a
+conversa vive ~30 min, pelo TTL da #9, e as pausas entre Alunos são longas. O
+modelo descarrega, e o próximo turno recomeça o prefixo frio.
+
+Medido na máquina do ADR-0002, com persona e prompt de turno reais (sem contar a
+montagem do modelo):
+
+| | Tempo de leitura | Geração | **Total** |
+| --- | --- | --- | --- |
+| Prefixo frio (1º turno, ou Aluno novo) | ~3,8 s | ~1,1 s (57-60 tok) | **~4,9 s** |
+| Prefixo quente (mesmo prefixo, já lido) | ~0,02 s | ~1,1 s | **~1,1 s** |
+
+O número de produção a citar é **4,9 s** — o caso frio. O caso quente (1,1 s) só
+vale quando o prefixo da persona foi lido no mesmo processo ainda vivo, e a
+janela de 5 min do `keep_alive` raramente cobre o intervalo entre dois Alunos
+reais.
+
+### A persona é a linha que faltava na tabela
+
+A tabela original mediu a leitura do prompt **sem** a persona (que é a #10). A
+persona com a cerca é 2.413 caracteres ≈ **698 tokens** — a maior fatia isolada
+do prompt, e a que fica no início, exatamente onde o cache de prefixo a torna
+barata a partir do segundo turno. Com ela, a leitura do turno real sobe de ~0,3 s
+para ~3,8 s a cada prefixo frio: é a persona que transforma a "primeira leitura"
+em 3,8 s, não a pergunta do Aluno.
+
+### A janela maior não piora a leitura
+
+Um ponto que o número de KV cache poderia sugerir e **não** sugere: aumentar a
+janela de contexto não piora a leitura do prompt. Medido com o mesmo prompt de
+740 tokens: 3,778 s a `num_ctx: 2048`; 3,776 s a 4.096; 3,693 s a 6.144; 3,694 s
+a 8.192. A janela não é alocada na leitura — o KV cache é pré-alocado no
+carregamento, e é por isso que subir a janela para 4096 (o que a #10 fez, para o
+prompt real caber) não custa tempo de leitura, só memória.
+
+## O corte da janela, que a medição também revelou
+
+Com o prompt de turno real somando ~2.166 tokens (persona 698 + pergunta no teto
+do Telegram 1.138 + 6 falas 386), o `num_ctx: 2048` antigo **cortava o prompt ao
+meio sem erro**: o modelo via 1.026 tokens, parava com `done: true`, e perdia
+exatamente o fim — onde está a pergunta do Aluno. Ver
+[`ADR-0003` §critérios de troca](../adr/0003-modelo-do-ollama.md) e o
+[`NUM_CTX_PADRAO`](../../sau/inference/ollama.py).
+
 ## A saída, como ela saiu no log
 
 O log vem do cliente de inferência, em INFO, com o prefixo `[SAU]` do

@@ -63,9 +63,9 @@ MAXIMO_DE_MENSAGENS = 40
 """Quantas mensagens a mais recente fica guardada por conversa.
 
 O histórico vai para o prompt com um recorte bem menor — as 6 mais recentes, três
-trocas, pelo `num_ctx` de 2048 do cliente. O teto de 40 existe para o arquivo não
-crescer sem limite entre uma limpeza e outra, e não para o prompt: ele segura o
-registro, e o TTL da conversa é quem decide quando ele some.
+trocas, pelo `MENSAGENS_NO_PROMPT` da persona. O teto de 40 existe para o
+arquivo não crescer sem limite entre uma limpeza e outra, e não para o prompt: ele
+segura o registro, e o TTL da conversa é quem decide quando ele some.
 """
 
 MINUTOS_POR_TTL_PADRAO = 30

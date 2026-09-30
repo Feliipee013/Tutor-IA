@@ -231,7 +231,11 @@ mas não têm o mesmo peso:
   porque é o tempo de espera que o Aluno encontra na maior parte das vezes.
   **Não** trate a repetição fria como valor atípico e não jogue fora a linha:
   quem espera o primeiro Aluno de uma madrugada paga esse tempo, e isso é fato.
-  O que causa esse tempo está medido no bloco de cima, e não é a carga dos pesos.
+  A causa está medida em
+  [`tempo-primeira-resposta.md`](../tempo-primeira-resposta.md): a repetição 1 é
+  a primeira vez que o Ollama lê aquele prompt, e é o **cache de prefixo** que
+  faz as leituras seguintes custarem quase nada — não o modelo estar carregado,
+  que é o que o número sugere à primeira leitura.
 - **`tok/s` é secundário.** O ADR diz que é, e por isso ele vem marcado como tal
   na coluna. Ele mede a vazão da geração, não a espera — um modelo que despeja
   tokens rápido depois de esperar 5 s continua sendo um modelo que o Aluno
