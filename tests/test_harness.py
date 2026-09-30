@@ -23,22 +23,28 @@ import httpx
 import pytest
 
 from harness.run import (
+    IDS_DA_CADEIA,
     IDS_ESPERADOS,
     ORDEM_DA_BATERIA,
+    ORDEM_DA_CADEIA,
     SEED_PADRAO,
     TEMPERATURA_PADRAO,
     AlocacaoDoModelo,
     ClienteMedido,
     CondicoesDaRodada,
     PerguntaTeste,
+    RegistroDoPassoDaCadeia,
+    carregar_cadeia,
     carregar_perguntas_teste,
     descrever_alocacao,
     executar_bateria,
+    executar_cadeia,
     gravar_rodada,
     main,
     montar_argumentos,
     sha256_do_prompt,
 )
+from sau.graph.state import Mensagem
 from sau.inference.ollama import ClienteOllama, ErroDeInferencia, Resposta
 from sau.prereqs import CpuNaoAutorizadaError, OllamaIndisponivelError
 
@@ -550,3 +556,122 @@ def test_main_usa_a_url_do_host_e_nao_o_padrao_do_container(
     main(["--saida", str(tmp_path / "r.json"), "--repeticoes", "1", "--url", "http://localhost"])
 
     assert vistas == ["http://localhost"]
+
+
+# --- Cadeia especial s1–s5: com histórico, 3 repetições da cadeia ---
+
+
+def _passos_falsos() -> list[PerguntaTeste]:
+    return [_pergunta_falsa(id_passo) for id_passo in ORDEM_DA_CADEIA]
+
+
+def test_parser_aceita_as_10_mais_a_cadeia() -> None:
+    """O arquivo real traz a bateria isolada mais os 5 passos encadeados."""
+    bateria = carregar_perguntas_teste(ARQUIVO_PERGUNTAS)
+    cadeia = carregar_cadeia(ARQUIVO_PERGUNTAS)
+
+    assert [p.id for p in bateria] == list(ORDEM_DA_BATERIA)
+    assert len(bateria) == 10
+    assert [p.id for p in cadeia] == list(ORDEM_DA_CADEIA)
+    assert set(IDS_DA_CADEIA) == {"s1", "s2", "s3", "s4", "s5"}
+    assert len(cadeia) == 5
+    for passo in cadeia:
+        assert passo.texto, f"o passo {passo.id} veio sem texto"
+        assert passo.conforme_quando
+        assert passo.nao_conforme_quando
+
+
+def test_cadeia_acumula_historico_na_ordem() -> None:
+    """Cada passo recebe o acumulado dos anteriores, s1→s5, e a repetição recomeça."""
+    vistos: list[tuple[str, tuple[Mensagem, ...]]] = []
+
+    def turno_com_historico(
+        texto: str, historico: tuple[Mensagem, ...] | list[Mensagem]
+    ) -> Resposta:
+        vistos.append((texto, tuple(historico)))
+        return _resposta_falsa(f"resposta a {texto}")
+
+    registros = executar_cadeia(_passos_falsos(), turno_com_historico, repeticoes=1)
+
+    assert [(r.id, r.repeticao) for r in registros] == [(f"s{i}", 1) for i in (1, 2, 3, 4, 5)]
+    assert vistos[0][1] == ()
+    assert [m.texto for m in vistos[1][1]] == [
+        "texto da Pergunta-teste s1",
+        "resposta a texto da Pergunta-teste s1",
+    ]
+    assert vistos[1][1][0].papel == "aluno"
+    assert vistos[1][1][1].papel == "sau"
+    assert len(vistos[4][1]) == 8
+    for registro in registros:
+        assert isinstance(registro, RegistroDoPassoDaCadeia)
+        assert registro.historico_usado == vistos[registros.index(registro)][1]
+        assert registro.erro is None
+
+
+def test_cadeia_repete_a_conversa_inteira_tres_vezes() -> None:
+    registros = executar_cadeia(
+        _passos_falsos(), lambda texto, historico: _resposta_falsa("bruto"), repeticoes=3
+    )
+
+    assert len(registros) == 15
+    assert [r.repeticao for r in registros] == [1] * 5 + [2] * 5 + [3] * 5
+    assert [r.id for r in registros[:5]] == list(ORDEM_DA_CADEIA)
+    # Cada repetição recomeça com histórico vazio em s1.
+    assert registros[0].historico_usado == ()
+    assert registros[5].historico_usado == ()
+    assert registros[10].historico_usado == ()
+
+
+def test_falha_de_um_passo_nao_aborta_a_cadeia() -> None:
+    def turno_com_historico(texto: str, historico: object) -> Resposta:
+        if "s3" in texto:
+            raise ErroDeInferencia("FALHA CRÍTICA: Ollama fora do ar")
+        return _resposta_falsa("output bruto do S.A.U.")
+
+    registros = executar_cadeia(_passos_falsos(), turno_com_historico, repeticoes=1)
+
+    assert len(registros) == 5
+    assert registros[2].resposta_bruta is None
+    assert registros[2].erro is not None
+    assert "ErroDeInferencia" in (registros[2].erro or "")
+    assert registros[3].resposta_bruta == "output bruto do S.A.U."
+    assert registros[3].erro is None
+    # O passo que falhou entra no histórico só com a fala do Aluno.
+    papeis_s4 = [(m.papel, m.texto) for m in registros[3].historico_usado]
+    assert ("aluno", "texto da Pergunta-teste s3") in papeis_s4
+
+
+def test_gravacao_traz_bloco_da_cadeia_separado(tmp_path: Path) -> None:
+    bateria = executar_bateria(
+        [_pergunta_falsa("a1")], lambda texto: _resposta_falsa("bruto"), repeticoes=1
+    )
+    cadeia = executar_cadeia(
+        [_pergunta_falsa("s1")],
+        lambda texto, historico: _resposta_falsa("bruto"),
+        repeticoes=1,
+    )
+
+    destino = tmp_path / "rodada.json"
+    gravar_rodada(bateria, _condicoes_falsas(), destino, cadeia)
+
+    rodada = json.loads(destino.read_text(encoding="utf-8"))
+    assert len(rodada["execucoes"]) == 1
+    assert len(rodada["cadeia"]) == 1
+    passo = rodada["cadeia"][0]
+    assert passo["id"] == "s1"
+    assert passo["resposta_bruta"] == "bruto"
+    assert "historico_usado" in passo
+    assert passo["conforme_quando"]
+
+
+def test_gravacao_sem_cadeia_grava_bloco_vazio(tmp_path: Path) -> None:
+    """A assinatura nova não quebra a chamada antiga: sem cadeia, o bloco é vazio."""
+    bateria = executar_bateria(
+        [_pergunta_falsa("a1")], lambda texto: _resposta_falsa("bruto"), repeticoes=1
+    )
+
+    destino = tmp_path / "rodada.json"
+    gravar_rodada(bateria, _condicoes_falsas(), destino)
+
+    rodada = json.loads(destino.read_text(encoding="utf-8"))
+    assert rodada["cadeia"] == []

@@ -14,7 +14,7 @@ comportamento do S.A.U. continua sem passar por ela: edita o texto de uma regra.
 
 A persona vem **primeiro** por causa do cache de prefixo do Ollama, e não por
 estética do prompt nem por desempenho do modelo. O que a leitura de um turno
-repetido não refaz é o prefixo já lido: os 698 tokens da persona com a cerca são
+repetido não refaz é o prefixo já lido: os 870 tokens da persona com a cerca são
 os mesmos bytes em todo turno de todo Aluno, então ficam na memória do Ollama e
 a leitura recomeça do que muda. Medido na máquina do ADR-0002: o prefixo frio
 custa 3,8 s de leitura e o prefixo quente, 0,02 s. Mover a persona para depois da
@@ -101,23 +101,30 @@ ORIENTACAO_POR_PERGUNTAS = Regra(
     id="orientacao_por_perguntas",
     titulo="Orientar por perguntas",
     instrucao=(
-        "Oriente por perguntas até o Aluno chegar à resposta, em vez de "
-        "entregá-la pronta. Faça ao menos uma pergunta que ajude o Aluno a "
-        "entender o que está sendo pedido antes de explicar qualquer coisa."
+        "Quando o Aluno pedir ajuda para fazer uma Atividade ou perguntar "
+        "sobre formato de trabalho, material ou ambiente virtual, oriente por "
+        "perguntas até o Aluno chegar à resposta, em vez de entregá-la pronta. "
+        "Faça ao menos uma pergunta que ajude o Aluno a entender o que está "
+        "sendo pedido antes de explicar qualquer coisa. Quando disser que não "
+        "sabe ou encaminhar ao Tutor humano, não faça pergunta orientadora: "
+        "encerre."
     ),
 )
 """A regra socrática: o Tutor do `CONTEXT.md`, não o buscador de respostas.
 
-"Ao menos uma pergunta antes de explicar" é o que torna a recusa de Atividade
-possível sem descartar o Aluno: recusar sem perguntar nada reprova no
-`conforme quando` das Perguntas-teste de Atividade — e entregar a resposta
-com uma pergunta junto continua sendo entregar.
+A pergunta orientadora vale para a Atividade e para a Pergunta Frequente de
+formato, material e ambiente virtual: "ao menos uma pergunta antes de
+explicar" é o que torna a recusa de Atividade possível sem descartar o Aluno,
+e o que cobre o `conforme quando` das Perguntas-teste de formato (`p2`), de
+material (`p3`) e de protocolo (`p4`).
 
-É também quem cobre o `conforme quando` das Perguntas-teste de formato (`p2`),
-de material (`p3`) e de protocolo (`p4`): as três pedem pergunta orientadora
-**e** não afirmar o detalhe, e nenhuma delas conta em não-saber — a pergunta que
-exigem é a de entender o que o Aluno procura, que é esta, e não a de não-saber,
-que a `NAO_INVENTAR` trata e que a `p1` conta sozinha.
+A última frase fecha a saída: dizer que não sabe ou encaminhar ao Tutor
+humano encerra, sem pergunta junto. Perguntar depois de encerrar reabre o
+que o Encaminhamento fechou.
+
+É também quem separa a pergunta de entender o que o Aluno procura — que é
+desta regra — da pergunta de não-saber, que a `NAO_INVENTAR` trata e que a
+`p1` conta sozinha.
 """
 
 
@@ -210,6 +217,44 @@ encaminhar de "posso ajudar com algo mais", que é o oposto.
 """
 
 
+USAR_HISTORICO = Regra(
+    id="usar_historico",
+    titulo="Usar o histórico antes de perguntar",
+    instrucao=(
+        "Use o histórico da conversa antes de perguntar: nunca pergunte "
+        "cidade, região, disciplina ou dado que o Aluno já informou nas "
+        "mensagens anteriores. Retome o dado informado em vez de repedir a "
+        "pergunta."
+    ),
+)
+"""A memória do turno: o que o Aluno já disse não se pergunta de novo.
+
+O histórico vai cercado no prompt para ser lido, não para enfeitar: uma
+pergunta repetida sobre dado já informado trata a conversa como turno único,
+que é o defeito que a cadeia s1–s5 do harness existe para pegar. Retomar o
+dado é o conforme; repedir a pergunta é o não conforme.
+"""
+
+
+SEM_CATALOGO = Regra(
+    id="sem_catalogo",
+    titulo="Sem catálogo na 1.1",
+    instrucao=(
+        "Na 1.1 você não tem catálogo de cursos, polos, endereços ou valores: "
+        "nunca afirme curso oferecido, cidade com polo, formato, caminho ou "
+        "prazo. Diga que não tem a informação e encaminhe ao Tutor humano, "
+        "sem inventar detalhe."
+    ),
+)
+"""O limite factual da 1.1: sem catálogo, sem afirmação de oferta.
+
+O `corpus/` é o P1 da 1.2 e ainda não existe, então afirmar curso, polo ou
+formato nesta sprint é Alucinação mesmo quando a frase estiver certa. A saída
+é dizer que não tem a informação e encaminhar ao Tutor humano, sem inventar
+o detalhe que falta.
+"""
+
+
 REGRAS: tuple[Regra, ...] = (
     IDENTIDADE,
     TOM,
@@ -218,10 +263,13 @@ REGRAS: tuple[Regra, ...] = (
     PRAZO_NAO_E_ATIVIDADE,
     NAO_INVENTAR,
     ENCAMINHAMENTO,
+    USAR_HISTORICO,
+    SEM_CATALOGO,
 )
 """As regras de comportamento, na ordem em que o modelo as lê.
 
-A tupla cresce uma regra por vez até as sete da issue #10, e
+A tupla cresceu uma regra por vez até as sete da issue #10, e ganhou as duas
+do caso à parte (usar o histórico, sem catálogo), totalizando nove.
 `test_o_prompt_tem_exatamente_as_regras_da_issue` afirma o conjunto inteiro:
 regra nova entra ali junto, regra derrubada quebra ali primeiro.
 """
@@ -230,8 +278,8 @@ PERSONA: str = "\n\n".join(f"{regra.titulo}\n{regra.instrucao}" for regra in REG
 """O prompt versionado do S.A.U.: as regras, inteiras, em um lugar só.
 
 O `titulo` entra com a `instrucao`, e não fica de fora do prompt. Um campo que
-nenhum código nem teste lia não é metadado, é resto — e sete parágrafos sem
-cabeçalho entregam ao modelo sete blocos de que tratar sem dizer qual regra é
+nenhum código nem teste lia não é metadado, é resto — e nove parágrafos sem
+cabeçalho entregam ao modelo nove blocos de que tratar sem dizer qual regra é
 cada um. O cabeçalho nomeia a regra para quem lê o prompt, que é o modelo, e é o
 que torna `titulo` um campo em vez de uma coluna morta.
 """

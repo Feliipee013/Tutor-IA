@@ -37,12 +37,13 @@ NUM_CTX_PADRAO = 4096
 2048 é o que a #3 usou, e o que cabe nas placas de 4 GB que a decisão do
 ADR-0002 assume — justificativa que continua valendo e que nenhuma medição
 derrubou. O que a medição do tempo de primeira resposta mostrou foi que esse
-teto é curto demais para o prompt de um turno real: persona (698 tokens), a
-pergunta do Aluno no teto do Telegram (4.096 caracteres, 1.138 tokens) e seis
-falas de histórico (386 tokens) somam 2.166 tokens, e a 2048 o modelo leu
-**1.026** deles — menos da metade, sem erro e com `done: true`. O que se perde
-é o fim do prompt, e o fim é onde está a pergunta do Aluno. Um prompt de
-3.031 tokens a 2048 lia 1.026 também; o mesmo, a 4096, lia os 3.031.
+teto é curto demais para o prompt de um turno real: persona (870 tokens com a
+cerca, 3.008 caracteres na mesma base de 3,46 do doc), a pergunta do Aluno no
+teto do Telegram (4.096 caracteres, 1.138 tokens) e seis falas de histórico
+(386 tokens) somam 2.394 tokens, e a 2048 o modelo leu **1.026** deles — menos
+da metade, sem erro e com `done: true`. O que se perde é o fim do prompt, e o
+fim é onde está a pergunta do Aluno. Um prompt de 3.031 tokens a 2048 lia 1.026
+também; o mesmo, a 4096, lia os 3.031.
 
 O que custa: **+72 MiB** de KV cache, de 72 para 144. A VRAM não aperta —
 `ollama ps` marca 2,4 GB do modelo com janela de 8.192 numa placa de 4.096 MiB.

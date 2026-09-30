@@ -19,7 +19,7 @@ importado: cada arquivo de teste declara o contrato que ele precisa, e ninguém
 depende do texto de outro.
 
 O teste do conjunto (`test_o_prompt_tem_exatamente_as_regras_da_issue`) é o
-último a ficar verde por construção: ele afirma as sete regras de uma vez, e
+último a ficar verde por construção: ele afirma as nove regras de uma vez, e
 cada ciclo de regra nova o aproxima do verde sem que ele passe antes da hora.
 """
 
@@ -49,7 +49,9 @@ from sau.persona import (
     PRAZO_NAO_E_ATIVIDADE,
     RECUSA_DE_ATIVIDADE,
     REGRAS,
+    SEM_CATALOGO,
     TOM,
+    USAR_HISTORICO,
     montar_prompt,
 )
 
@@ -108,15 +110,16 @@ def _prompt_do_turno(fazer_cliente: FabricaCliente) -> str:
     return prompts[0]
 
 
-# --- O conjunto: as sete regras da issue, na ordem em que o modelo as lê ---
+# --- O conjunto: as nove regras, na ordem em que o modelo as lê ---
 
 
 def test_o_prompt_tem_exatamente_as_regras_da_issue() -> None:
-    """As regras do prompt são estas sete, nesta ordem, e nenhuma a mais.
+    """As regras do prompt são estas nove, nesta ordem, e nenhuma a mais.
 
     A lista é literal porque a fonte dela não é o código: é o critério de
-    aceitação da issue #10. Uma regra nova entra aqui junto, e uma regra
-    derrubada da composição deixa este teste vermelho antes de qualquer outro.
+    aceitação da issue #10 mais as duas do caso à parte. Uma regra nova entra
+    aqui junto, e uma regra derrubada da composição deixa este teste vermelho
+    antes de qualquer outro.
     """
     assert tuple(regra.id for regra in REGRAS) == (
         "identidade",
@@ -126,6 +129,8 @@ def test_o_prompt_tem_exatamente_as_regras_da_issue() -> None:
         "prazo_nao_e_atividade",
         "nao_inventar",
         "encaminhamento",
+        "usar_historico",
+        "sem_catalogo",
     )
 
 
@@ -242,10 +247,41 @@ def test_a_regra_de_encaminhamento_chega_ao_modelo(
     assert prompt.count(ENCAMINHAMENTO.instrucao) == 1
 
 
+def test_a_regra_de_usar_historico_chega_ao_modelo(
+    fazer_cliente: FabricaCliente,
+) -> None:
+    """O uso do histórico está no prompt que o modelo recebeu.
+
+    É esta instrução que impede o S.A.U. de repedir pergunta sobre dado que o
+    Aluno já informou: sem ela, a cadeia de Petrolina repete "qual cidade?" a
+    cada turno, e o conforme da cadeia s1–s5 reprova.
+    """
+    prompt = _prompt_do_turno(fazer_cliente)
+
+    assert USAR_HISTORICO.instrucao in prompt
+    assert prompt.count(USAR_HISTORICO.instrucao) == 1
+
+
+def test_a_regra_de_sem_catalogo_chega_ao_modelo(
+    fazer_cliente: FabricaCliente,
+) -> None:
+    """A ausência de catálogo na 1.1 está no prompt que o modelo recebeu.
+
+    É esta instrução que impede o S.A.U. de afirmar curso, polo ou formato na
+    1.1: sem catálogo versionado, afirmar a oferta é Alucinação mesmo quando a
+    frase estiver certa, e a saída é dizer que não tem e encaminhar ao Tutor
+    humano.
+    """
+    prompt = _prompt_do_turno(fazer_cliente)
+
+    assert SEM_CATALOGO.instrucao in prompt
+    assert prompt.count(SEM_CATALOGO.instrucao) == 1
+
+
 def test_o_titulo_de_cada_regra_chega_ao_modelo(fazer_cliente: FabricaCliente) -> None:
     """O `titulo` de cada regra vai no prompt junto da instrução.
 
-    Os sete testes acima conferem a `instrucao` e não o `titulo`, então um
+    Os nove testes acima conferem a `instrucao` e não o `titulo`, então um
     `PERSONA` montado só com as instruções passaria por todos eles — que é
     exatamente o estado em que a persona estava, com sete parágrafos sem
     cabeçalho entregues a um modelo de 3B. Este teste é o que fecha a porta: o
@@ -397,7 +433,7 @@ def test_o_prefixo_da_persona_e_travado_por_cache_de_prefixo() -> None:
 
     assert prefixo_a == prefixo_b, (
         "O prefixo do prompt até `INICIO_CONVERSA` mudou entre dois turnos. "
-        "Isso quebra o **cache de prefixo** do Ollama: os 698 tokens da persona "
+        "Isso quebra o **cache de prefixo** do Ollama: os 870 tokens da persona "
         "deixam de ser reaproveitados e todo turno volta a custar a leitura "
         "inteira do prompt (0,02 s → 3,8 s), do primeiro ao último Aluno. "
         "Não mude este prefixo — nem espaço, nem parágrafo, nem ordem — sem "
