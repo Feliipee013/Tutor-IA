@@ -26,8 +26,10 @@ import pytest
 from harness.metrics import (
     ARQUIVO_PERGUNTAS_PADRAO,
     DENOMINADOR_ESPERADO,
+    FORA_DAS_TAXAS,
     MEMBROS,
     NAO_SABER,
+    ORDEM_DA_CADEIA,
     RECUSA_DE_ATIVIDADE,
     ArquivoInacessivelError,
     JulgamentoInvalidoError,
@@ -329,6 +331,51 @@ def test_conferir_membros_falha_quando_falta_a_linha_de_uma_pergunta(tmp_path: P
     )
 
     with pytest.raises(MembrosDivergentesError, match="a1"):
+        conferir_membros(alterado)
+
+
+def test_a_cadeia_especial_declara_que_esta_fora_das_duas_taxas() -> None:
+    """A cadeia `s1`–`s5` é um bloco do arquivo que não alimenta taxa nenhuma.
+
+    A cadeia mora no mesmo `perguntas-teste.md` desde a #11, e o `harness/run.py` a
+    grava na chave `cadeia` da rodada — separada de `execucoes`, porque roda com
+    histórico acumulado e não isolada. `metrics.py` mede `execucoes`, então a cadeia
+    está fora das duas taxas por decisão, e não por esquecimento: ela está escrita
+    aqui para que `conferir_membros` saiba que existem blocos fora da conta, em vez
+    de deixar um denominador mudar em silêncio.
+    """
+    declarados = metricas_declaradas()
+
+    for id_passo in ORDEM_DA_CADEIA:
+        assert id_passo in FORA_DAS_TAXAS
+        assert id_passo not in declarados
+
+
+def test_conferir_membros_falha_quando_um_bloco_novo_nao_declara_nenhuma_taxa(
+    tmp_path: Path,
+) -> None:
+    """Um bloco novo sem a linha da métrica não pode entrar na conta em silêncio.
+
+    Este é o furo que a revisão encontrou: `conferir_membros` comparava `MEMBROS` só
+    com os blocos que *tinham* a linha `conta na métrica do #13`, então um bloco
+    acrescentado ao arquivo sem essa linha simplesmente não aparecia em nenhum dos
+    dois conjuntos — `faltando` e `sobrando` saíam vazios, o check passava, e o
+    denominador da taxa ficava medindo um conjunto diferente do que o arquivo
+    descreve. Foi o que a cadeia `s1`–`s5` da #11 fez.
+
+    O bloco novo aqui não declara nada e não é `s1`–`s5`, que é exatamente o caso que
+    precisa quebrar.
+    """
+    conteudo = ARQUIVO_PERGUNTAS_PADRAO.read_text(encoding="utf-8")
+    alterado = tmp_path / "perguntas-teste.md"
+    alterado.write_text(
+        conteudo
+        + "\n<!-- pergunta:x9 -->\n### `x9` — pergunta que ninguém classificou\n"
+        + "<!-- pergunta:fim -->\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(MembrosDivergentesError, match="x9"):
         conferir_membros(alterado)
 
 

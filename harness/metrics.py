@@ -82,7 +82,7 @@ import hashlib
 import json
 import re
 import sys
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Final, Literal, cast
@@ -141,6 +141,32 @@ DENOMINADOR_ESPERADO: Final[dict[Metrica, int]] = {
     RECUSA_DE_ATIVIDADE: 3,
 }
 """Quantas perguntas alimentam cada taxa, em perguntas e não em execuções."""
+
+ORDEM_DA_CADEIA: Final[tuple[str, ...]] = ("s1", "s2", "s3", "s4", "s5")
+"""A cadeia especial de `perguntas-teste.md`, na ordem que o Aluno a disse.
+
+Copiado do `harness/run.py` em vez de importado, e a cópia é concertada de propósito:
+o `run.py` é quem mede o modelo e este módulo é quem conta, e ligar os dois por
+import criaria uma aresta entre as duas metades do harness que só existe por causa
+das perguntas. Se a #11 acrescentar um passo à cadeia, `conferir_membros` quebra e
+a cópia é atualizada com a issue aberta.
+"""
+
+FORA_DAS_TAXAS: Final[frozenset[str]] = frozenset(ORDEM_DA_CADEIA)
+"""Os blocos do arquivo que existem e não alimentam nenhuma das duas taxas.
+
+A cadeia especial da #11 é o caso, e ficar fora é decisão, não esquecimento: ela roda
+com histórico acumulado, o `harness/run.py` a grava na chave `cadeia` da rodada —
+separada de `execucoes` — e nenhuma das duas taxas deste módulo a lê. Os passos `s1` a
+`s5` também não trazem a linha `conta na métrica do #13`, porque a #6 as congelou
+antes da cadeia existir.
+
+Estar aqui é o que fecha o furo: `conferir_membros` comparava `MEMBROS` só com os
+blocos que *tinham* a linha, então um bloco acrescentado ao arquivo sem ela não
+entrava em nenhum dos dois conjuntos e o check passava verde. Declarar a cadeia
+fora das taxas faz o próximo bloco novo quebrar o instrumento, em vez de mudar a
+conta em silêncio.
+"""
 
 VEREDITOS: Final[tuple[Veredito, ...]] = ("conforme", "nao_conforme", "nao_avaliavel")
 
@@ -423,8 +449,18 @@ def metricas_declaradas(arquivo: Path = ARQUIVO_PERGUNTAS_PADRAO) -> dict[str, s
     Um bloco sem a linha não aparece no resultado — e `conferir_membros` trata a
     ausência como erro, em vez de deixar um denominador mudar em silêncio.
     """
+    return _linhas_da_metrica(blocos_de_perguntas(arquivo))
+
+
+def _linhas_da_metrica(blocos: Mapping[str, str]) -> dict[str, str]:
+    """O valor cru da linha da métrica de cada bloco, a partir dos blocos já lidos.
+
+    Existe para o arquivo ser lido uma vez só: `conferir_membros` precisa dos blocos
+    inteiros, para conferir o fecho, e dos valores declarados, e ler o arquivo duas
+    vezes abriria a chance de as duas leituras discordarem.
+    """
     declaradas: dict[str, str] = {}
-    for id_pergunta, bloco in blocos_de_perguntas(arquivo).items():
+    for id_pergunta, bloco in blocos.items():
         achado = RE_LINHA_DA_METRICA.search(bloco)
         if achado is not None:
             declaradas[id_pergunta] = achado.group("valor").strip()
@@ -472,10 +508,15 @@ def conferir_membros(arquivo: Path = ARQUIVO_PERGUNTAS_PADRAO) -> None:
 
     Também confere a contagem 4 + 3 = 7 perguntas, porque um mapeamento certo com
     uma pergunta faltando produz uma taxa que parece inteira e não é.
+
+    E confere o fecho: todo bloco do arquivo tem que estar em `MEMBROS` ou em
+    `FORA_DAS_TAXAS`. Um bloco que não está em nenhum dos dois entraria na taxa sem
+    o denominador saber, ou ficaria de fora sem ninguém declarar que foi de fora.
     """
+    blocos = blocos_de_perguntas(arquivo)
     declarados = {
         id_pergunta: metrica_declarada(valor)
-        for id_pergunta, valor in metricas_declaradas(arquivo).items()
+        for id_pergunta, valor in _linhas_da_metrica(blocos).items()
     }
 
     faltando = sorted(set(MEMBROS) - set(declarados))
@@ -507,6 +548,16 @@ def conferir_membros(arquivo: Path = ARQUIVO_PERGUNTAS_PADRAO) -> None:
         raise MembrosDivergentesError(
             f"as taxas esperam {DENOMINADOR_ESPERADO} perguntas cada e o contrato tem "
             f"{contagens}"
+        )
+
+    sem_destino = sorted(set(blocos) - set(MEMBROS) - FORA_DAS_TAXAS)
+    if sem_destino:
+        raise MembrosDivergentesError(
+            f"os blocos {sem_destino} do arquivo de Perguntas-teste não declaram "
+            f"`conta na métrica do #13` e não estão em `FORA_DAS_TAXAS`: ou o bloco "
+            f"declara a taxa em que entra, ou entra na cadeia especial, que é o que "
+            f"`{', '.join(ORDEM_DA_CADEIA)}` faz. Sem uma das duas, o denominador "
+            f"mede um conjunto que o arquivo não descreve"
         )
 
 
