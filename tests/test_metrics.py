@@ -10,6 +10,14 @@ vez de sair como número.
 Nenhum teste deste arquivo fala com o Ollama, e nenhum grava em `outputs/`: a
 rodada e a folha são falsas e moram em `tmp_path`. O `harness/run.py` é quem
 mede, e `tests/test_harness.py` prova o lado dele.
+
+Dois testes deste arquivo usam `/proc/nao-existe/` para provocar uma recusa do
+disco e **só passam em Linux**: no Windows o caminho vira `C:\\proc\\nao-existe`, e
+o `mkdir(parents=True)` cria a pasta em vez de falhar. O comportamento sob teste é
+o mesmo nas duas plataformas, o que muda é a premissa de que o `/proc` não existe —
+por isso eles ficam assim, visíveis, em vez de ganharem um `skipif` que esconderia
+o dia em que o contrato do código `3` quebrar de verdade. A dívida está registrada
+na PR da #13.
 """
 
 from __future__ import annotations
@@ -1010,6 +1018,10 @@ def test_destino_que_nao_pode_ser_gravado_falha_alto_sem_traceback(tmp_path: Pat
 
     Sem o `3`, um disco cheio cairia no `1` e mandaria a pessoa caçar um veredito
     que está correto — que era exatamente o que o código de saída promete evitar.
+
+    Linux-only: no Windows `/proc/nao-existe` vira `C:\\proc\\nao-existe` e o
+    `mkdir` cria a pasta, então não há recusa para o `_gravar` converter. Ver a nota
+    no topo do arquivo.
     """
     lida = carregar_rodada(_gravar_rodada(tmp_path / "rodada.json", _rodada()))
 
@@ -1018,7 +1030,11 @@ def test_destino_que_nao_pode_ser_gravado_falha_alto_sem_traceback(tmp_path: Pat
 
 
 def test_o_codigo_tres_chega_ao_shell_e_nao_vem_com_traceback(tmp_path: Path) -> None:
-    """O `3` precisa aparecer no shell, senão o passo seguinte roda sobre nada."""
+    """O `3` precisa aparecer no shell, senão o passo seguinte roda sobre nada.
+
+    Linux-only, pela mesma premissa do teste acima: sem a recusa do disco o comando
+    sai com `0`. Ver a nota no topo do arquivo.
+    """
     rodada = _gravar_rodada(tmp_path / "rodada.json", _rodada())
 
     resultado = _rodar_como_modulo(

@@ -531,7 +531,7 @@ def blocos_de_perguntas(arquivo: Path = ARQUIVO_PERGUNTAS_PADRAO) -> dict[str, s
     """O arquivo de Perguntas-teste lido e partido em blocos, ou o erro do contrato.
 
     Esta é a **única** leitura do arquivo, e ela existe para ser o único lugar onde
-    o `OSError` e o `UnicodeDecodeError` são convertidos. Antes these duas classes
+    o `OSError` e o `UnicodeDecodeError` são convertidos. Antes estas duas classes
     escapavam daqui e subiam como `traceback`, com o código de saída do interpretador
     — que é `1`, o código do julgamento. Duas consequências ruins de uma vez: quem
     preenche a folha lia uma pilha de Python em vez de uma frase, e o `1` mandava
@@ -1484,7 +1484,14 @@ def _descrever_alocacao(alocacao: dict[str, Any] | None) -> str:
 
 
 def _plural(quantidade: int, palavra: str) -> str:
-    """`1 erro`, `2 erros`: a contagem escrita por extenso, como a documentação."""
+    """`1 erro`, `2 erros`, para a palavra que pluraliza com `s`.
+
+    O português tem plural irregular (`execução`/`execuções`), e esta função não o
+    conhece: quem a chamar com `execução` escreve `execuçãos`. Ela recebe só a forma
+    singular porque é isso que ela precisa — o dia em que o resumo tiver que dizer
+    `execuções`, entra o plural explícito e a decisão sai daqui, em vez de a função
+    adivinhar.
+    """
     sufixo = "" if quantidade == 1 else "s"
     return f"{quantidade} {palavra}{sufixo}"
 
