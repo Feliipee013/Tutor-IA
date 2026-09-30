@@ -43,9 +43,14 @@ def criar_no_responder(cliente: ClienteOllama) -> Callable[[EstadoTurno], dict[s
 
     Aqui entra no log só o **prompt**. O texto do modelo já sai em dois outros
     lugares, e nenhum deles é este: o `ClienteOllama` grava a resposta com os
-    tempos que a mediram, e o `grafo` grava a saída do turno. O prompt é a única
-    coisa que só este módulo sabe — a persona do S.A.U., não mais a mensagem
-    crua do Aluno — e é por isso que ele fica registrado aqui.
+    tempos que a mediram, e o `grafo` grava a entrada e a saída do turno.
+
+    O prompt montado é a única coisa do caminho que nenhum outro registro
+    guarda. As duas partes dele são legíveis onde estão — a persona, em
+    `sau/persona.py`, e a mensagem do Aluno, na entrada do grafo — mas a
+    composição das duas, que é o texto exato enviado para o modelo, só existe
+    aqui. É essa composição que o log torna auditável, e é por isso que ele fica
+    registrado aqui.
     """
 
     def responder(estado: EstadoTurno) -> dict[str, str]:
