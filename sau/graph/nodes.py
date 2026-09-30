@@ -22,7 +22,7 @@ import logging
 from typing import Callable, NotRequired, TypedDict
 
 from sau.graph.state import Mensagem
-from sau.inference.ollama import ClienteOllama, Resposta
+from sau.inference.ollama import MOTIVO_PARADA_NO_LIMITE, ClienteOllama, Resposta
 from sau.persona import montar_prompt as montar_prompt
 
 logger = logging.getLogger("sau.graph.nodes")
@@ -65,12 +65,27 @@ def criar_no_responder(cliente: ClienteOllama) -> Callable[[EstadoTurno], dict[s
     O `historico` vem do estado com `get`, e não com `[]`: um estado sem ele é um
     turno sem memória, e a memória ausente é um slice vazio, não um `KeyError` no
     meio da conversa do Aluno.
+
+    O nó não olha o texto da resposta, e o motivo pelo limite é um: o corte de
+    geração é o defeito que não se vê no turno. O Ollama fecha a geração como
+    bem-sucedida (`MOTIVO_PARADA_NO_LIMITE`), o grafo devolve o texto cortado
+    como se fosse a resposta, e o Aluno lê uma frase que termina no meio. Sem
+    esta linha o corte sai do log do cliente — que grava o `parada` — e só como
+    palavra, para quem for procurar. Aqui ele vira `WARNING`, que é o nível que
+    aparece sem ninguém pedir.
     """
 
     def responder(estado: EstadoTurno) -> dict[str, str]:
         prompt = montar_prompt(estado["mensagem"], estado.get("historico", ()))
         logger.info("Prompt do turno enviado ao modelo:\n%s", prompt)
         resposta: Resposta = cliente.responder(prompt)
+        if resposta.motivo_de_parada == MOTIVO_PARADA_NO_LIMITE:
+            logger.warning(
+                "A geração parou por falta de espaço e saiu cortada: o Aluno "
+                "recebeu uma resposta incompleta, e nenhuma falha foi lançada. "
+                "Motivo informado: %s.",
+                resposta.motivo_de_parada,
+            )
         return {"resposta": resposta.texto}
 
     return responder

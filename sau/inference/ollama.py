@@ -57,6 +57,20 @@ linha: duas frases para o mesmo vazio só faz a divergência aparecer quando
 alguém compara os dois logs.
 """
 
+MOTIVO_PARADA_NO_LIMITE = "length"
+"""O `done_reason` que o Ollama dá quando a geração parou por falta de espaço.
+
+O Ollama trata a parada como o fim bem-sucedido da geração: `done` é verdadeiro
+e o motivo é este, o mesmo `done` de uma resposta que chegou ao fim do limite.
+A geração não falhou — ela acabou, e o que ela deixou é texto pela metade.
+
+Por isso o valor é uma constante aqui e não uma string espalhada pelo pacote: quem
+lê o registro de um turno precisa comparar a parada contra um nome declarado, e
+não lembrar de um literal. O nome `length` sozinho não diz nada disso — é
+`length` de "tamanho", e quem não conhece o vocabulário do modelo lê um motivo
+que parece o de qualquer outra parada.
+"""
+
 NANOSEGUNDOS_POR_SEGUNDO = 1e9
 """O Ollama reporta durações em nanossegundos, e a pessoa que lê o log pensa em segundos."""
 

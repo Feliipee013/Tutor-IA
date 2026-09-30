@@ -23,7 +23,7 @@ import pytest
 
 from sau.graph.graph import construir_grafo, executar_turno
 from sau.graph.nodes import EstadoTurno, montar_prompt
-from sau.inference.ollama import ClienteOllama, ErroDeInferencia
+from sau.inference.ollama import MOTIVO_PARADA_NO_LIMITE, ClienteOllama, ErroDeInferencia
 
 _BASE_URL = "http://host.docker.internal:11434"
 _MODELO = "qwen2.5:3b"
@@ -161,7 +161,7 @@ def test_mensagem_do_aluno_chega_ao_modelo_verbatim(fazer_cliente: FabricaClient
     assert _MENSAGEM in prompts[0]
 
 
-# --- A costura do prompt, que é onde a #10 entra ---
+# --- A costura do prompt, que é onde a persona do S.A.U. entra ---
 
 
 def test_o_prompt_que_chega_ao_modelo_e_o_montar_prompt(
@@ -169,10 +169,14 @@ def test_o_prompt_que_chega_ao_modelo_e_o_montar_prompt(
 ) -> None:
     """`montar_prompt` é o caminho único do prompt até o modelo.
 
-    É esta afirmação que torna a troca da #10 uma troca de texto: a persona
-    entra reescrevendo `montar_prompt`, e nada mais no grafo muda. Um teste que
-    só conferisse que a mensagem aparece no prompt passaria igual depois que a
-    persona tivesse entrado por outro caminho.
+    E o `montar_prompt` deste módulo não é um: é o de `sau.persona`, reexportado
+    em `nodes.py` com `from sau.persona import montar_prompt as montar_prompt`. É
+    por isso que a afirmação é esta e não "o prompt contém a persona": ela
+    compara o texto que o grafo mandou com a função que mora no módulo da
+    persona, e uma persona que tivesse entrado por outro caminho — um segundo
+    prompt montado dentro do grafo — deixaria as duas pontas diferentes sem que
+    nenhum teste de conteúdo notasse. Quem afirma o conteúdo da persona é o
+    `test_persona.py`, que é o arquivo dono dela.
     """
     prompts: list[str] = []
 
@@ -267,6 +271,62 @@ def test_o_no_registra_o_prompt_que_manda_ao_modelo(
     assert not any(_RESPOSTA in mensagem for mensagem in registros), (
         f"a resposta do modelo foi registrada uma terceira vez no nó: {registros}"
     )
+
+
+# --- O corte de geração: sucesso do modelo, texto pela metade no Aluno ---
+
+
+def _parada_no_limite(_request: httpx.Request) -> httpx.Response:
+    """Geração que o Ollama fecha com sucesso e sem o texto inteiro.
+
+    É o corpo exato do defeito: `done: true` e `done_reason: length` numa
+    resposta que termina no meio da frase.
+    """
+    corpo = _payload("Esse prazo eu não sei. Consultar o calendário")
+    corpo["done_reason"] = MOTIVO_PARADA_NO_LIMITE
+    return httpx.Response(200, json=corpo)
+
+
+def test_o_no_avisa_quando_a_geracao_para_no_limite(
+    fazer_cliente: FabricaCliente, caplog: pytest.LogCaptureFixture
+) -> None:
+    """O corte de geração vira `WARNING` no log, e não um turno qualquer.
+
+    O Ollama fecha essa geração como sucesso, então o grafo devolve o texto
+    cortado e o turno termina igual a qualquer outro: sem aviso, ninguém descobre
+    que o Aluno leu uma frase pela metade. O `WARNING` é o que a pessoa vê sem
+    pedir — e o teste abaixo é o que impede que a linha vire `INFO`, que é o
+    nível que o `webhook` esconde de quem opera.
+    """
+    with caplog.at_level(logging.WARNING):
+        executar_turno(fazer_cliente(_parada_no_limite), _MENSAGEM)
+
+    avisos = _avisos_do_no(caplog)
+    assert len(avisos) == 1, f"o corte de geração não avisou: {avisos}"
+    assert MOTIVO_PARADA_NO_LIMITE in avisos[0]
+
+
+def test_o_no_nao_avisa_quando_a_geracao_para_normalmente(
+    fazer_cliente: FabricaCliente, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Só o corte avisa: uma resposta que chegou ao fim é turno sem novidade.
+
+    O aviso que dispara para todo turno vira ruído, e ruído é o que faz a pessoa
+    parar de ler o log — que é o oposto do que esta linha existe para dar.
+    """
+    with caplog.at_level(logging.WARNING):
+        executar_turno(fazer_cliente(_responde(_RESPOSTA)), _MENSAGEM)
+
+    assert _avisos_do_no(caplog) == [], "uma geração completa gerou aviso"
+
+
+def _avisos_do_no(caplog: pytest.LogCaptureFixture) -> list[str]:
+    """Os avisos que o nó do grafo registrou, e não os dos outros loggers."""
+    return [
+        registro.getMessage()
+        for registro in caplog.records
+        if registro.name == LOGGER_NOS and registro.levelno == logging.WARNING
+    ]
 
 
 # --- A falha do modelo sobe do grafo, e é o `webhook` quem a vira mensagem ---

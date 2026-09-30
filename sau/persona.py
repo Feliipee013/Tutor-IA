@@ -23,12 +23,6 @@ O vocabulário é o do `CONTEXT.md` — S.A.U., Aluno, Tutor, Tutor humano,
 Atividade, Pergunta Frequente, Encaminhamento, Alucinação — e o peso de cada
 regra vem do ADR-0003: a proteção contra Alucinação não pode ser creditada ao
 modelo, então ela é creditada à instrução, ao prompt versionado e à repetição.
-
-O "uma vez só" da identidade tem onde acontecer desde a #9: o turno carrega o
-histórico da conversa, e é ele que dá ao modelo a noção de em que turno está.
-Antes dela este módulo escrevia a regra sem essa noção ao alcance — a regra
-valia a partir de um histórico que ainda não existia, e o modelo a lia sem ter
-de onde saber em que turno estava.
 """
 
 from __future__ import annotations
@@ -107,6 +101,12 @@ ORIENTACAO_POR_PERGUNTAS = Regra(
 possível sem descartar o Aluno: recusar sem perguntar nada reprova no
 `conforme quando` das Perguntas-teste de Atividade — e entregar a resposta
 com uma pergunta junto continua sendo entregar.
+
+É também quem cobre o `conforme quando` das Perguntas-teste de formato (`p2`),
+de material (`p3`) e de protocolo (`p4`): as três pedem pergunta orientadora
+**e** não afirmar o detalhe, e nenhuma delas conta em não-saber — a pergunta que
+exigem é a de entender o que o Aluno procura, que é esta, e não a de não-saber,
+que a `NAO_INVENTAR` trata e que a `p1` conta sozinha.
 """
 
 
@@ -157,8 +157,7 @@ NAO_INVENTAR = Regra(
         "Nunca invente o que você não sabe: nenhuma data, prazo, número de "
         "protocolo, telefone, canal de contato, caminho de arquivo, formato de "
         "trabalho, remédio ou dose. Se a informação não está ao seu alcance, "
-        "diga que não sabe em vez de preencher a lacuna — e pergunte ao Aluno o "
-        "que a Atividade pede, em vez de encerrar no não-saber. Um chute com "
+        "diga que não sabe em vez de preencher a lacuna. Um chute com "
         "forma de resposta certa continua sendo Alucinação."
     ),
 )
@@ -170,14 +169,13 @@ caminho, formato, remédio, dose. "Diga que não sabe" é a frase que transforma
 "não está no material" em resposta aceitável, e a última frase fecha a
 porta do "não tenho certeza, mas...", que a `p1` declara não conforme.
 
-"Em vez de encerrar no não-saber" é o resto da frase, e ele não é enfeite. O
-`conforme quando` da `p2`, da `p3` e da `p4` é conjuntivo: o output faz ao
-menos uma pergunta que ajude a entender o que o Aluno procura **e** não afirma
-formato, caminho ou protocolo. O "diga que não sabe" sozinho não cumpre nenhuma
-das duas metades — é a recusa do conhecimento sem a pergunta que a `p2` exige, e
-com um 3B é a saída provável. A pergunta está escopada ao ramo do não-saber
-pelo motivo oposto: mandá-la sempre diluiria o `ENCAMINHAMENTO`, cujo `f1` não
-pede pergunta nenhuma.
+Só isso, e é o bastante: a `p1` — Pergunta Frequente de prazo — conta em
+não-saber pelo "diga que não sabe", e não pede pergunta nenhuma. Mandar este ramo
+perguntar o que a Atividade pede antes de encerrar seria cobrar dela uma
+pergunta que o Aluno já respondeu na própria pergunta, e o `não conforme quando`
+da `p1` reprova justamente a saída que não diz que não sabe. A pergunta
+orientadora é o trabalho da `ORIENTACAO_POR_PERGUNTAS`, que a faz antes de
+explicar qualquer coisa — inclusive aqui, e sem virar obrigação de não-saber.
 """
 
 
@@ -231,10 +229,15 @@ que torna `titulo` um campo em vez de uma coluna morta.
 MENSAGENS_NO_PROMPT = 6
 """Quantas mensagens do histórico vão no prompt: três trocas.
 
-Seis é o que cabe no `num_ctx` de 2048 do cliente (`NUM_CTX_PADRAO`) sem apertar a
-janela, e três trocas é o mínimo de contexto para a pergunta "e aquela outra
-coisa?" fazer sentido. O histórico continua gravado inteiro, limitado pelo
-`MAXIMO_DE_MENSAGENS` do registro — o recorte é do prompt, não da memória.
+Três trocas é o contexto mínimo para a pergunta "e aquela outra coisa?" fazer
+sentido, porque ela só se refere a alguma coisa que o modelo leu antes. O
+histórico continua gravado inteiro, limitado pelo `MAXIMO_DE_MENSAGENS` do
+registro — o recorte é do prompt, não da memória.
+
+O número não é o que define a janela. O que precisa caber na janela é o prompt
+inteiro, e quem garante isso é o `num_ctx` do cliente (`NUM_CTX_PADRAO`), não
+este teto: quando o prompt estoura, o que se perde é o fim dele, e o fim é onde
+está a pergunta do Aluno.
 """
 
 AVISO_CONVERSA = (
