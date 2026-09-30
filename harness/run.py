@@ -1,48 +1,112 @@
 """Harness das Perguntas-teste do S.A.U.
 
 Envia as 10 Perguntas-teste ao S.A.U. pelo caminho real do turno
-(`sau.config` + `ClienteOllama` + `sau.graph.graph.executar_turno`,
-com histórico vazio, como o `webhook` faz) e grava o output bruto
-de cada uma, com o comportamento esperado lado a lado.
+(`sau.config` + `ClienteOllama` + `sau.graph.graph.executar_turno`, com
+histórico vazio, como o `webhook` faz) e grava o output bruto de cada
+execução, com o comportamento esperado lado a lado.
 
-O julgamento é humano por decisão da #6: este script grava e não
-avalia. A falha ou o timeout de um turno grava `erro` no registro
-do caso e a bateria segue.
+Cada Pergunta-teste roda **3 repetições**, e não uma. O ADR-0003 mediu que das
+12 perguntas da sondagem só 4 tiveram as 3 repetições idênticas na máquina de
+CPU e 7 na do ADR-0002, e que o telefone inventado pelo `qwen2.5:3b` apareceu
+em 2 de 3 repetições numa e em 0 de 3 na outra: quem mede uma vez só registra
+uma das duas respostas e conclui o oposto do que o modelo faz. O ADR-0003
+nomeia este harness e proíbe a execução única.
+
+As condições da medição são travadas e **gravadas na rodada**: `temperatura 0`,
+`seed` 20260926 e `num_predict` 256, as mesmas do ADR-0003, mais o `num_ctx`
+realmente enviado e o `sha256` do prompt versionado. Linha de base que não
+declara as condições não é comparável com nada — por isso elas vão dentro do
+JSON e não numa nota de rodapé.
+
+A máquina também vai no JSON. O ADR-0003 exige que toda afirmação qualitativa
+diga de qual máquina veio, e `sau.prereqs.executar_checagens` já leu `/api/ps`
+para decidir se o modelo está na GPU: essa leitura ia dispensada, e aqui ela
+vira o campo `alocacao`. Uma rodada medida em CPU fica visivelmente uma
+rodada em CPU, que é o defeito que o ADR-0002 existe para não deixar passar.
+
+O julgamento é humano por decisão da #6: este script grava e não avalia. A
+falha ou o timeout de uma execução grava `erro` no registro e a bateria segue.
+
+Códigos de saída:
+
+- `0` — a bateria rodou e produziu ao menos uma resposta
+- `1` — a bateria rodou e **nenhuma** execução produziu resposta
+- `2` — o arquivo das Perguntas-teste não bate com as 10 esperadas
+- `3` — o pré-requisito falhou (Ollama fora, modelo ausente, CPU não autorizada)
 
 Uso canônico:
 
+    export OLLAMA_BASE_URL=http://localhost:11434   # o harness roda no host
     python -m harness.run
-    python -m harness.run --modelo qwen2.5:3b --saida outputs/rodada.json
+    python -m harness.run --saida outputs/baseline-1.1.json
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import sys
 import time
 from collections.abc import Callable, Sequence
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Final
+from typing import Any, Final
+
+import httpx
 
 from sau.config import carregar_configuracao
 from sau.graph.graph import executar_turno
-from sau.inference.ollama import ClienteOllama
+from sau.inference.ollama import (
+    NUM_CTX_PADRAO,
+    TIMEOUT_PADRAO,
+    ClienteOllama,
+    ErroDeInferencia,
+    Resposta,
+)
+from sau.persona import PERSONA
+from sau.prereqs import PreRequisitoError, executar_checagens, modelo_servido_em_cpu
 
 RAIZ_DO_PROJETO: Final = Path(__file__).resolve().parent.parent
 ARQUIVO_PERGUNTAS_PADRAO: Final = RAIZ_DO_PROJETO / "perguntas-teste" / "perguntas-teste.md"
 PASTA_SAIDAS_PADRAO: Final = RAIZ_DO_PROJETO / "outputs"
 
-IDS_ESPERADOS: Final = frozenset({"a1", "a2", "a3", "f1", "f2", "f3", "p1", "p2", "p3", "p4"})
 ORDEM_DA_BATERIA: Final = ("a1", "a2", "a3", "f1", "f2", "f3", "p1", "p2", "p3", "p4")
+IDS_ESPERADOS: Final = frozenset(ORDEM_DA_BATERIA)
+
+REPETICOES_PADRAO: Final = 3
+"""Quantas vezes cada Pergunta-teste roda.
+
+O número é o do ADR-0003, e ele não é um detalhe de configuração: sem repetição
+a taxa da #13 sai de uma amostra só, e o ADR já mostrou que uma amostra só
+registra uma das respostas possíveis. Por isso a flag existe mas o padrão é
+este — mudar o número muda o que a rodada pode provar, e o JSON registra o
+que foi usado.
+"""
+
+TEMPERATURA_PADRAO: Final = 0.0
+SEED_PADRAO: Final = 20260926
+NUM_PREDICT_PADRAO: Final = 256
+"""As três condições que o ADR-0003 travou na medição do modelo.
+
+São valores de arquivo, não preferences de execução: a flag existe porque a
+varredura de temperatura do P7 da 1.2 precisa mexer nelas, e o padrão é o do
+ADR porque é o que torna a linha de base comparável com
+`docs/medicao-modelo/resultado-gpu.md`.
+"""
+
+SAIDA_OK: Final = 0
+SAIDA_SEM_RESPOSTA: Final = 1
+SAIDA_PERGUNTAS_INVALIDAS: Final = 2
+SAIDA_PRE_REQUISITO: Final = 3
 
 RE_BLOCO_PERGUNTA: Final = re.compile(
     r"<!--\s*pergunta:(?P<id>[a-z0-9_-]+)\s*-->\s*```text\n(?P<texto>.*?)```",
     re.DOTALL,
 )
+RE_MARCADOR_PERGUNTA: Final = re.compile(r"<!--\s*pergunta:(?P<id>[a-z0-9_-]+)\s*-->")
 RE_CONFORME: Final = re.compile(
     r"^\s*\|\s*conforme quando\s*\|\s*(?P<valor>.*)\|\s*$",
     re.MULTILINE,
@@ -69,22 +133,110 @@ class PerguntaTeste:
 
 
 @dataclass(frozen=True)
-class RegistroDoCaso:
-    """O resultado de uma Pergunta-teste na bateria.
+class AlocacaoDoModelo:
+    """Onde o modelo estava rodando quando a rodada saiu.
 
-    `resposta_bruta` é o output bruto do S.A.U., character a character.
-    Quando o turno falha, ela é `None` e o motivo vai em `erro`: a
-    bateria nunca aborta por causa de um caso.
+    Vem do `/api/ps` que `sau.prereqs.executar_checagens` já leu para decidir
+    se a checagem passa. `size_vram` zerado é a queda silenciosa para CPU do
+    ADR-0002, e `em_cpu` é o mesmo veredito que o serviço do bot aplica — o
+    campo entra na rodada para que a leitura que ia ser descartada vire
+    evidência, e para que uma rodada de CPU não possa ser lida como se fosse
+    de GPU.
+    """
+
+    size: int
+    size_vram: int | None
+    em_cpu: bool
+
+
+@dataclass(frozen=True)
+class CondicoesDaRodada:
+    """As condições que produziram uma rodada inteira, declaradas de uma vez.
+
+    Tudo o que separa uma rodada da outra mora aqui: o modelo, o endereço, as
+    três travas de amostragem, a janela de contexto, o hash do prompt e a
+    máquina. Uma rodada sem este bloco é um arquivo de texto com respostas
+    soltas, e a diferença entre o "antes" e o "depois" da 1.2 deixa de ter
+    causa — que é a única coisa que a comparação precisa dizer.
+    """
+
+    modelo: str
+    url: str
+    repeticoes: int
+    temperatura: float
+    seed: int
+    num_predict: int
+    num_ctx: int
+    sha256_do_prompt: str
+    alocacao: AlocacaoDoModelo | None
+    inicio: str
+    fim: str
+
+
+@dataclass(frozen=True)
+class RegistroDaExecucao:
+    """Uma execução: uma Pergunta-teste, uma vez.
+
+    `resposta_bruta` é o output bruto do S.A.U., character a character. Quando
+    o turno falha, ela é `None` e o motivo vai em `erro`: a bateria nunca
+    aborta por causa de uma execução.
+
+    `motivo_de_parada`, `tokens_gerados` e `primeiro_token_segundos` vêm da
+    `Resposta` do modelo e existem por um motivo prático: o Ollama trata o
+    fim da geração por falta de espaço como sucesso, então uma resposta
+    cortada sai com cara de resposta e parece não-conformidade. Sem estes três
+    campos, uma rodada não distingue "o S.A.U. errou" de "a geração foi
+    cortada no meio da frase".
     """
 
     id: str
+    repeticao: int
     pergunta: str
     conforme_quando: str
     nao_conforme_quando: str
     resposta_bruta: str | None
     erro: str | None
+    motivo_de_parada: str | None
+    tokens_gerados: int | None
+    primeiro_token_segundos: float | None
     timestamp: str
     duracao_segundos: float
+
+
+class ClienteMedido(ClienteOllama):
+    """O cliente do Ollama com as travas da medição aplicadas, e que guarda a `Resposta`.
+
+    Existe para que o harness não tenha de passar `opcoes` por um caminho que
+    não é seu: `sau.graph.graph.executar_turno` não tem por onde recebe-las, e
+    mexer nele significaria levar mudança de medição para dentro do caminho
+    quente do Telegram. `sau/inference/ollama.py` diz que quem mede passa as
+    condições em `opcoes`, e esta classe é o "quem mede" do harness.
+
+    `ultima` é a `Resposta` da última geração. Com o grafo de um nó só, cada
+    execução gera exatamente uma, e ela é a resposta do turno. É o único
+    ponto deste módulo que depende do grafo ter um nó: quando a 1.2 somar nós
+    que também geram, é aqui que se revê.
+    """
+
+    def __init__(
+        self,
+        base_url: str,
+        modelo: str,
+        *,
+        opcoes: dict[str, Any],
+        timeout: float = TIMEOUT_PADRAO,
+        num_ctx: int = NUM_CTX_PADRAO,
+        client: httpx.Client | None = None,
+    ) -> None:
+        super().__init__(base_url, modelo, timeout=timeout, num_ctx=num_ctx, client=client)
+        self._opcoes_medidas = dict(opcoes)
+        self.ultima: Resposta | None = None
+
+    def responder(self, prompt: str, *, opcoes: dict[str, Any] | None = None) -> Resposta:
+        combinadas = {**self._opcoes_medidas, **(opcoes or {})}
+        resposta = super().responder(prompt, opcoes=combinadas)
+        self.ultima = resposta
+        return resposta
 
 
 def carregar_perguntas_teste(caminho: Path = ARQUIVO_PERGUNTAS_PADRAO) -> list[PerguntaTeste]:
@@ -127,9 +279,6 @@ def carregar_perguntas_teste(caminho: Path = ARQUIVO_PERGUNTAS_PADRAO) -> list[P
     return perguntas
 
 
-RE_MARCADOR_PERGUNTA: Final = re.compile(r"<!--\s*pergunta:(?P<id>[a-z0-9_-]+)\s*-->")
-
-
 def _regiao_do_bloco(conteudo: str, id_pergunta: str) -> str:
     """O trecho do markdown do marcador da Pergunta-teste até a próxima Pergunta-teste.
 
@@ -168,52 +317,116 @@ def _extrair_campo(regiao: str, regex: re.Pattern[str], nome: str, id_pergunta: 
 
 def executar_bateria(
     perguntas: Sequence[PerguntaTeste],
-    turno: Callable[[str], str],
-) -> list[RegistroDoCaso]:
-    """Roda cada Pergunta-teste no turno e isola a falha por caso.
+    turno: Callable[[str], Resposta],
+    repeticoes: int = REPETICOES_PADRAO,
+) -> list[RegistroDaExecucao]:
+    """Roda cada Pergunta-teste `repeticoes` vezes e isola a falha por execução.
 
-    `turno` recebe o texto da Pergunta-teste e devolve o output bruto do
-    S.A.U. Erro ou timeout viram `erro` no registro do caso e a bateria
-    segue para a próxima Pergunta-teste.
+    A ordem é pergunta-maior: as repetições da `a1` vêm seguidas, e só então a
+    `a2`. Quem lê a rodada compara repetições de uma mesma pergunta lado a
+    lado, e a ordem que as separa facilitava a leitura e atrapalhava.
+
+    `turno` recebe o texto da Pergunta-teste e devolve a `Resposta` do modelo.
+    Erro ou timeout viram `erro` no registro e a bateria segue para a próxima
+    execução — uma pergunta que responde mal é dado, e uma que estoura o
+    tempo limite também.
     """
-    registros: list[RegistroDoCaso] = []
+    registros: list[RegistroDaExecucao] = []
     for pergunta in perguntas:
-        timestamp = datetime.now(timezone.utc).isoformat()
-        inicio = time.perf_counter()
-        resposta: str | None = None
-        erro: str | None = None
-        try:
-            resposta = turno(pergunta.texto)
-        except Exception as exc:  # noqa: BLE001 — a bateria não aborta por um caso
-            erro = f"{type(exc).__name__}: {exc}"
-        duracao = time.perf_counter() - inicio
-        registros.append(
-            RegistroDoCaso(
-                id=pergunta.id,
-                pergunta=pergunta.texto,
-                conforme_quando=pergunta.conforme_quando,
-                nao_conforme_quando=pergunta.nao_conforme_quando,
-                resposta_bruta=resposta,
-                erro=erro,
-                timestamp=timestamp,
-                duracao_segundos=duracao,
-            )
-        )
+        for repeticao in range(1, repeticoes + 1):
+            registros.append(_executar_uma(pergunta, repeticao, turno))
     return registros
 
 
+def _executar_uma(
+    pergunta: PerguntaTeste,
+    repeticao: int,
+    turno: Callable[[str], Resposta],
+) -> RegistroDaExecucao:
+    """Roda uma execução e devolve o registro dela, com ou sem erro."""
+    timestamp = datetime.now(timezone.utc).isoformat()
+    inicio = time.perf_counter()
+    resposta: Resposta | None = None
+    erro: str | None = None
+    try:
+        resposta = turno(pergunta.texto)
+    except Exception as exc:
+        # A exceção larga aqui é deliberada: a bateria não pode abortar por causa
+        # de uma execução (critério de aceitação da #12), e o tipo do erro entra
+        # inteiro no registro para que a causa seja legível depois.
+        erro = f"{type(exc).__name__}: {exc}"
+    duracao = time.perf_counter() - inicio
+    return RegistroDaExecucao(
+        id=pergunta.id,
+        repeticao=repeticao,
+        pergunta=pergunta.texto,
+        conforme_quando=pergunta.conforme_quando,
+        nao_conforme_quando=pergunta.nao_conforme_quando,
+        resposta_bruta=resposta.texto if resposta is not None else None,
+        erro=erro,
+        motivo_de_parada=resposta.motivo_de_parada if resposta is not None else None,
+        tokens_gerados=resposta.tokens_gerados if resposta is not None else None,
+        primeiro_token_segundos=(
+            resposta.primeiro_token_segundos if resposta is not None else None
+        ),
+        timestamp=timestamp,
+        duracao_segundos=duracao,
+    )
+
+
+def sha256_do_prompt() -> str:
+    """O `sha256` do prompt versionado, para amarrar a rodada a um estado do código.
+
+    A persona é versionada em `sau/persona.py` no sentido de que mora no
+    arquivo — não tem número de versão. Duas rodadas com o mesmo modelo, a
+    mesma seed e a mesma máquina podem ter prompts diferentes se alguém
+    editou a persona entre elas, e aí a comparação da 1.2 mede duas coisas ao
+    mesmo tempo. O hash é o que separa "o RAG mudou" de "a persona mudou".
+    """
+    return hashlib.sha256(PERSONA.encode("utf-8")).hexdigest()
+
+
+def descrever_alocacao(item_ps: dict[str, Any]) -> AlocacaoDoModelo:
+    """Lê a alocação do modelo no `/api/ps` que a checagem de pré-requisito já fez.
+
+    O item é o mesmo que `executar_checagens` devolve, e o veredito de CPU é o
+    mesmo que `sau.prereqs.modelo_servido_em_cpu` aplica: quem decide se a
+    checagem passa e quem escreve na rodada precisam responder a mesma
+    pergunta, com a mesma resposta.
+    """
+    size_vram_bruto = item_ps.get("size_vram")
+    return AlocacaoDoModelo(
+        size=int(item_ps.get("size", 0)),
+        size_vram=int(size_vram_bruto) if size_vram_bruto is not None else None,
+        em_cpu=modelo_servido_em_cpu(item_ps),
+    )
+
+
 def gravar_rodada(
-    registros: Sequence[RegistroDoCaso],
-    modelo: str,
-    url: str,
+    registros: Sequence[RegistroDaExecucao],
+    condicoes: CondicoesDaRodada,
     destino: Path,
 ) -> Path:
-    """Grava o JSON de uma rodada com metadados e um registro por Pergunta-teste."""
+    """Grava o JSON de uma rodada: as condições, a máquina e as execuções.
+
+    `condicoes` vem antes dos registros porque é ele que dá sentido aos
+    registros: os números só se comparam com os mesmos números.
+    """
     rodada = {
-        "modelo": modelo,
-        "url": url,
-        "inicio": registros[0].timestamp if registros else datetime.now(timezone.utc).isoformat(),
-        "casos": [asdict(registro) for registro in registros],
+        "modelo": condicoes.modelo,
+        "url": condicoes.url,
+        "condicoes": {
+            "repeticoes": condicoes.repeticoes,
+            "temperatura": condicoes.temperatura,
+            "seed": condicoes.seed,
+            "num_predict": condicoes.num_predict,
+            "num_ctx": condicoes.num_ctx,
+            "sha256_do_prompt": condicoes.sha256_do_prompt,
+        },
+        "alocacao": asdict(condicoes.alocacao) if condicoes.alocacao is not None else None,
+        "inicio": condicoes.inicio,
+        "fim": condicoes.fim,
+        "execucoes": [asdict(registro) for registro in registros],
     }
     destino.parent.mkdir(parents=True, exist_ok=True)
     destino.write_text(json.dumps(rodada, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -226,6 +439,12 @@ def montar_argumentos(argumentos: Sequence[str] | None = None) -> argparse.Names
             "Roda as 10 Perguntas-teste no S.A.U. pelo caminho real do turno "
             "e grava os outputs brutos com o comportamento esperado junto. "
             "O julgamento de conforme/não-conforme é humano: este script grava, não avalia."
+        ),
+        epilog=(
+            "O harness roda no HOST, não no container: o padrão de OLLAMA_BASE_URL "
+            "aponta para o container. Exporte a URL do host antes de rodar (ver SETUP.md). "
+            "Saídas: 0 rodou e respondeu, 1 rodou sem nenhuma resposta, 2 "
+            "Perguntas-teste inválidas, 3 pré-requisito falhou."
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -244,6 +463,30 @@ def montar_argumentos(argumentos: Sequence[str] | None = None) -> argparse.Names
         type=float,
         default=None,
         help="tempo limite da geração em segundos (padrão: o OLLAMA_TIMEOUT do ambiente)",
+    )
+    analisador.add_argument(
+        "--repeticoes",
+        type=int,
+        default=REPETICOES_PADRAO,
+        help=f"execuções por Pergunta-teste (padrão: {REPETICOES_PADRAO}, o do ADR-0003)",
+    )
+    analisador.add_argument(
+        "--temperatura",
+        type=float,
+        default=TEMPERATURA_PADRAO,
+        help=f"temperatura de amostragem (padrão: {TEMPERATURA_PADRAO}, o do ADR-0003)",
+    )
+    analisador.add_argument(
+        "--seed",
+        type=int,
+        default=SEED_PADRAO,
+        help=f"seed da amostragem (padrão: {SEED_PADRAO}, o do ADR-0003)",
+    )
+    analisador.add_argument(
+        "--num-predict",
+        type=int,
+        default=NUM_PREDICT_PADRAO,
+        help=f"teto de tokens por geração (padrão: {NUM_PREDICT_PADRAO}, o do ADR-0003)",
     )
     analisador.add_argument(
         "--perguntas",
@@ -265,38 +508,124 @@ def _nome_padrao_de_saida() -> Path:
     return PASTA_SAIDAS_PADRAO / f"harness-{carimbo}.json"
 
 
+def _checar_pre_requisitos(url: str, modelo: str, timeout: float) -> AlocacaoDoModelo:
+    """Roda a checagem do ADR-0002 antes da bateria e devolve a alocação lida.
+
+    Ela falha alto em Ollama fora do ar, modelo ausente e CPU não autorizada,
+    e é por isso que roda **antes**: um Ollama desligado produziria dez
+    execuções com `erro` e um JSON de aparência válida, que é o tipo de
+    arquivo que outra pessoa lê depois como evidência. A falha do pré-requisito
+    é do instrumento, não de uma Pergunta-teste, e por isso ela não vira `erro`
+    dentro de um caso.
+
+    As checagem recebem a configuração já com `--url`, `--modelo` e `--timeout`
+    aplicados, para validarem o alvo que a bateria vai usar de fato e não o que
+    o ambiente declarar.
+    """
+    configuracao = replace(
+        carregar_configuracao(),
+        ollama_base_url=url,
+        ollama_model=modelo,
+        ollama_timeout=timeout,
+    )
+    return descrever_alocacao(executar_checagens(configuracao))
+
+
 def main(argumentos: Sequence[str] | None = None) -> int:
     opcoes = montar_argumentos(argumentos)
+    if opcoes.repeticoes < 1:
+        print(
+            f"\nFALHA: --repeticoes foi {opcoes.repeticoes} e o mínimo é 1. "
+            "Uma execução só não é evidência de comportamento (ADR-0003).",
+            file=sys.stderr,
+        )
+        return SAIDA_PERGUNTAS_INVALIDAS
+
     try:
         perguntas = carregar_perguntas_teste(opcoes.perguntas)
     except ValueError as exc:
         print(f"\nFALHA: {exc}", file=sys.stderr)
-        return 2
+        return SAIDA_PERGUNTAS_INVALIDAS
 
     configuracao = carregar_configuracao()
     modelo = opcoes.modelo or configuracao.ollama_model
     url = opcoes.url or configuracao.ollama_base_url
     timeout = opcoes.timeout if opcoes.timeout is not None else configuracao.ollama_timeout
 
-    cliente = ClienteOllama(url, modelo, timeout=timeout)
+    inicio = datetime.now(timezone.utc).isoformat()
+    try:
+        alocacao = _checar_pre_requisitos(url, modelo, timeout)
+    except PreRequisitoError as exc:
+        print(f"\nFALHA: {exc}", file=sys.stderr)
+        return SAIDA_PRE_REQUISITO
 
-    def turno(texto: str) -> str:
-        return executar_turno(cliente, texto, ())
+    cliente = ClienteMedido(
+        url,
+        modelo,
+        timeout=timeout,
+        num_ctx=NUM_CTX_PADRAO,
+        opcoes={
+            "temperature": opcoes.temperatura,
+            "seed": opcoes.seed,
+            "num_predict": opcoes.num_predict,
+        },
+    )
 
-    registros = executar_bateria(perguntas, turno)
+    def turno(texto: str) -> Resposta:
+        # `executar_turno` devolve o texto e o `ClienteMedido` guarda a
+        # `Resposta` que produziu esse texto. O texto não é usado aqui: quem
+        # interessa à rodada é a `Resposta` inteira, com o motivo de parada e os
+        # tempos, e é ela que vai para o registro.
+        executar_turno(cliente, texto, ())
+        if cliente.ultima is None:
+            raise ErroDeInferencia(
+                "FALHA CRÍTICA: o turno rodou e não deixou registro de geração. "
+                "O grafo deixou de chamar o cliente, e um turno sem geração não "
+                "produz resposta nenhuma."
+            )
+        return cliente.ultima
+
+    registros = executar_bateria(perguntas, turno, opcoes.repeticoes)
+
+    condicoes = CondicoesDaRodada(
+        modelo=modelo,
+        url=url,
+        repeticoes=opcoes.repeticoes,
+        temperatura=opcoes.temperatura,
+        seed=opcoes.seed,
+        num_predict=opcoes.num_predict,
+        num_ctx=NUM_CTX_PADRAO,
+        sha256_do_prompt=sha256_do_prompt(),
+        alocacao=alocacao,
+        inicio=inicio,
+        fim=datetime.now(timezone.utc).isoformat(),
+    )
     destino = opcoes.saida or _nome_padrao_de_saida()
-    gravar_rodada(registros, modelo, url, destino)
+    gravar_rodada(registros, condicoes, destino)
 
-    falhas = sum(1 for registro in registros if registro.erro is not None)
-    print(f"bateria: {len(registros)} Perguntas-teste, {falhas} com erro")
+    com_resposta = sum(1 for registro in registros if registro.resposta_bruta is not None)
+    falhas = len(registros) - com_resposta
+    cortadas = sum(1 for registro in registros if registro.motivo_de_parada == "length")
+    print(
+        f"bateria: {len(perguntas)} Perguntas-teste x {opcoes.repeticoes} repetições "
+        f"= {len(registros)} execuções, {com_resposta} com resposta, {falhas} com erro"
+    )
+    if cortadas:
+        print(
+            f"ATENÇÃO: {cortadas} execuções pararam por falta de espaço e saíram "
+            "cortadas. Resposta cortada parece não-conformidade: confira o motivo "
+            "de parada antes de julgar a rodada."
+        )
     print(f"JSON bruto gravado em {destino}")
-    for registro in registros:
-        if registro.erro:
-            estado = f"erro: {registro.erro}"
-        else:
-            estado = f"{len(registro.resposta_bruta or '')} caracteres"
-        print(f"  {registro.id}: {estado}")
-    return 0
+
+    if com_resposta == 0:
+        print(
+            "\nFALHA: nenhuma execução produziu resposta. O arquivo foi gravado, "
+            "mas ele não é evidência de nada — confira o `erro` do primeiro caso.",
+            file=sys.stderr,
+        )
+        return SAIDA_SEM_RESPOSTA
+    return SAIDA_OK
 
 
 if __name__ == "__main__":
