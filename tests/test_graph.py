@@ -182,17 +182,19 @@ def test_o_prompt_que_chega_ao_modelo_e_o_montar_prompt(
 
 
 def test_montar_prompt_carrega_a_mensagem_e_mais_nada(fazer_cliente: FabricaCliente) -> None:
-    """Até a #10, o prompt é a instrução mínima com a mensagem do Aluno dentro.
+    """O prompt é a persona do S.A.U. com a mensagem do Aluno dentro.
 
-    A persona é a #10, e ela entra por aqui. Affirmar que o prompt hoje é esse
-    texto simples é o que torna a chegada dela visível: um teste que só pedisse
-    que a mensagem estivesse no prompt continuaria verde com a persona dentro, e
-    a troca de comportamento passaria sem ninguém notar.
+    A persona entra por aqui desde a #10, e o que sobra para este teste é a
+    afirmação de que o prompt não é a mensagem crua: um teste que só pedisse que
+    a mensagem estivesse no prompt continuaria verde com a persona dentro, e uma
+    persona que desaparecesse passaria sem ninguém notar. O `!=` segura a
+    instrução sem depender de `sau.persona` — quem afirma o conteúdo da persona
+    é o `test_persona.py` da #10, que é o arquivo dono dela.
     """
     prompt = montar_prompt(_MENSAGEM)
 
     assert _MENSAGEM in prompt
-    # Não é a mensagem crua: existe uma instrução, e é ela que a #10 substitui.
+    # Não é a mensagem crua: existe a persona do S.A.U. antes dela.
     assert prompt != _MENSAGEM
 
 
@@ -244,8 +246,10 @@ def test_o_no_registra_o_prompt_que_manda_ao_modelo(
 ) -> None:
     """O nó registra o prompt que ele monta, que é o registro mais perto do modelo.
 
-    É o que separa "o grafo rodou" de "o grafo rodou com o prompt certo", e o que
-    vai deixar de ser a mensagem crua do Aluno quando a #10 trouxer a persona.
+    É o que separa "o grafo rodou" de "o grafo rodou com o prompt certo". Desde a
+    #10 o prompt é a persona do S.A.U. com a mensagem do Aluno dentro, e a
+    persona é legível em `sau/persona.py` — o que o log torna auditável é a
+    composição das duas, que só existe aqui.
 
     A resposta do modelo **não** é registrada aqui, e a ausência é o ponto: ela
     já sai do `ClienteOllama` com os tempos que a mediram e da saída do grafo, e
