@@ -355,6 +355,57 @@ def test_o_historico_vai_antes_da_mensagem_do_turno() -> None:
     assert prompt.index("Atividade 2") > prompt.index(PERSONA)
 
 
+def test_o_prefixo_da_persona_e_travado_por_cache_de_prefixo() -> None:
+    """O prefixo até `INICIO_CONVERSA` inclusive é idêntico, byte a byte, em dois turnos.
+
+    O cache de prefixo do Ollama só funciona quando os primeiros bytes são
+    exatamente iguais. Mover a persona para depois da conversa — ou trocar uma
+    vírgula, um espaço ou a ordem de um parágrafo — quebra esse alinhamento: o
+    Ollama não consegue reaproveitar o que já leu, e **todo turno volta a custar
+    a leitura inteira do prompt** (0,02 s → 3,8 s), do primeiro ao último Aluno
+    de um tráfego esparso.
+
+    A mensagem de falha é intencionalmente dura: quebrar este teste não é um
+    "refactor inofensivo de prompt", é mudar o que o cache pode reaproveitar.
+    O teste compara o prefixo dos dois prompts montados com Alunos diferentes e
+    históricos diferentes — se ele passa, o cache de prefixo da persona continua
+    valendo. Se falha, a culpa é de quem mudou o prefixo antes de `INICIO_CONVERSA`.
+    """
+    aluno_1 = "Até que dia eu preciso entregar a Atividade 2?"
+    aluno_2 = "Não entendi o material da semana passada. Onde encontro?"
+
+    historico_a = [
+        Mensagem(papel="aluno", texto="Oi, bom dia", em=1.0),
+        Mensagem(papel="sau", texto="Oi! Como posso ajudar?", em=2.0),
+    ]
+    historico_b = [
+        Mensagem(papel="aluno", texto="Outro Aluno, outra conversa", em=10.0),
+        Mensagem(papel="sau", texto="Vamos por partes.", em=11.0),
+        Mensagem(papel="aluno", texto="Terceira fala diferente", em=12.0),
+    ]
+
+    prompt_a = montar_prompt(aluno_1, historico_a)
+    prompt_b = montar_prompt(aluno_2, historico_b)
+
+    # O prefixo comum termina em INICIO_CONVERSA (inclusive). Depois dele começa
+    # a conversa — que é o que muda entre os dois turnos.
+    indice_a = prompt_a.index(INICIO_CONVERSA)
+    indice_b = prompt_b.index(INICIO_CONVERSA)
+
+    prefixo_a = prompt_a[: indice_a + len(INICIO_CONVERSA)]
+    prefixo_b = prompt_b[: indice_b + len(INICIO_CONVERSA)]
+
+    assert prefixo_a == prefixo_b, (
+        "O prefixo do prompt até `INICIO_CONVERSA` mudou entre dois turnos. "
+        "Isso quebra o **cache de prefixo** do Ollama: os 698 tokens da persona "
+        "deixam de ser reaproveitados e todo turno volta a custar a leitura "
+        "inteira do prompt (0,02 s → 3,8 s), do primeiro ao último Aluno. "
+        "Não mude este prefixo — nem espaço, nem parágrafo, nem ordem — sem "
+        "reconferir a medição. "
+        f"Tamanhos: {len(prefixo_a)} vs {len(prefixo_b)}"
+    )
+
+
 # --- Um lugar só: nenhum texto de regra mora fora de sau/persona.py ---
 
 

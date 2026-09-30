@@ -12,6 +12,17 @@ janela e a cerca em volta do texto do Aluno —, e ela existe para que o prompt
 que o modelo recebe seja legível inteiro num lugar só. Quem muda o
 comportamento do S.A.U. continua sem passar por ela: edita o texto de uma regra.
 
+A persona vem **primeiro** por causa do cache de prefixo do Ollama, e não por
+estética do prompt nem por desempenho do modelo. O que a leitura de um turno
+repetido não refaz é o prefixo já lido: os 698 tokens da persona com a cerca são
+os mesmos bytes em todo turno de todo Aluno, então ficam na memória do Ollama e
+a leitura recomeça do que muda. Medido na máquina do ADR-0002: o prefixo frio
+custa 3,8 s de leitura e o prefixo quente, 0,02 s. Mover a persona para depois da
+conversa do Aluno — por qualquer motivo, inclusive um que pareça bom — quebra
+esse byte a byte: o cache morre e **todo turno volta a pagar a leitura inteira
+do prompt**, do primeiro ao último Aluno. É por isso que o teste do prefixo
+existe, e por isso que ele compara bytes e não frases.
+
 Cada regra é uma `Regra` com `id`, `titulo` e `instrucao`, e `REGRAS` as carrega
 na ordem em que o modelo as lê. `montar_prompt` junta as regras, o histórico e
 a mensagem do Aluno sem `.format` sobre nenhum dos dois textos: interpolar com

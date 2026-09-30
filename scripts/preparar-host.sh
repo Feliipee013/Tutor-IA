@@ -28,10 +28,14 @@ DRM_DIR="${DRM_DIR:-/sys/class/drm}"
 # motivo de `MODELO` e `DRM_DIR`: mudar a janela muda o consumo de memória da
 # placa, e quem muda precisa conferir a VRAM da máquina de novo (ADR-0003).
 # Sem este `num_ctx` o Ollama carregaria com o default do servidor — 4096 na
-# máquina medida — e a checagem do serviço, que pede 2048, recarregaria o
-# modelo. A linha do `ollama ps` que este script imprime sairia com
-# `CONTEXT 4096`, que é a marca da recarga.
-NUM_CTX="${NUM_CTX:-2048}"
+# máquina medida — e a checagem do serviço, que pede a janela do cliente,
+# recarregaria o modelo. A linha do `ollama ps` que este script imprime sairia
+# com `CONTEXT 4096`, que é a marca da recarga.
+#
+# O valor é o `NUM_CTX_PADRAO` do cliente (`sau/inference/ollama.py`), e um
+# `test_fumaca.py` afirma que os dois continuam iguais: a janela que carrega o
+# modelo é a que a geração vai usar. 2048 aqui obrigaria a mudar de novo.
+NUM_CTX="${NUM_CTX:-4096}"
 MIB_EM_BYTES=1048576
 
 # `DRM_DIR` é o caminho onde o kernel publica as placas. Está em variável só

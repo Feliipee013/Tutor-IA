@@ -154,7 +154,7 @@ def aquecer_modelo(
 
     O `num_ctx` é o mesmo da geração (`NUM_CTX_PADRAO` do cliente): sem ele o
     Ollama carregaria com o default do servidor (4096) e a geração seguinte,
-    com 2048, recarregaria — o primeiro Aluno pagaria duas cargas.
+    com a janela do cliente, recarregaria — o primeiro Aluno pagaria duas cargas.
     """
     url = f"{base_url.rstrip('/')}/api/generate"
     payload: dict[str, Any] = {

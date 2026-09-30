@@ -153,8 +153,9 @@ a forma mais barata de fabricar Alucinação.
   comportamento de volume nomeado, e ele é desejado: o reinício é justamente o
   caso que a issue pede para sobreviver.
 - **O teto de 40 mensagens é do arquivo, e não do prompt.** O prompt recebe um
-  recorte bem menor, porque o `num_ctx` do cliente é 2048. Dois tetos porque são
-  duas perguntas: quanto o arquivo guarda sem crescer, e quanto cabe na janela do
+  recorte bem menor, porque a janela do cliente é apertada: a persona, a pergunta
+  do Aluno e o histórico disputam o mesmo `num_ctx`. Dois tetos porque são duas
+  perguntas: quanto o arquivo guarda sem crescer, e quanto cabe na janela do
   modelo.
 - **A ordem é garantida dentro do processo, e não entre instâncias.** Quem
   replicar o `webhook` precisa de um estado compartilhado, e a fila em memória
