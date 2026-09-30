@@ -12,8 +12,15 @@ __pycache__/
 .ruff_cache/
 .mypy_cache/
 
-# Saída do harness das Perguntas-teste (issue #12)
-outputs/
+# Saída do harness das Perguntas-teste (issue #12).
+#
+# As rodadas comuns são rascunho e ficam de fora. A linha de base é o
+# contrário: a comparação entre a 1.1 e a 1.2 do ADR-0004 só existe se o
+# arquivo da 1.1 estiver no repositório, e o ADR-0003 exige que toda
+# afirmação qualitativa diga de qual máquina veio — o que só é conferível
+# depois, lendo o `alocacao` do próprio arquivo. Por isso a exceção abaixo.
+outputs/*
+!outputs/baseline-*.json
 
 # Arquivo de conversas quando o serviço roda no host, sem container (issue #9).
 # O padrão de CONVERSA_CAMINHO é relativo ao diretório de trabalho, e quem roda
