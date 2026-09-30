@@ -34,18 +34,23 @@ import httpx
 import pytest
 
 from sau.graph.graph import executar_turno
+from sau.graph.state import Mensagem
 from sau.inference.ollama import ClienteOllama
 from sau.persona import (
+    AVISO_CONVERSA,
     ENCAMINHAMENTO,
+    FIM_CONVERSA,
     IDENTIDADE,
+    INICIO_CONVERSA,
+    MENSAGENS_NO_PROMPT,
     NAO_INVENTAR,
     ORIENTACAO_POR_PERGUNTAS,
     PERSONA,
     PRAZO_NAO_E_ATIVIDADE,
     RECUSA_DE_ATIVIDADE,
     REGRAS,
-    ROTULO_MENSAGEM,
     TOM,
+    montar_prompt,
 )
 
 _BASE_URL = "http://host.docker.internal:11434"
@@ -253,28 +258,101 @@ def test_o_titulo_de_cada_regra_chega_ao_modelo(fazer_cliente: FabricaCliente) -
         assert prompt.count(regra.titulo) == 1
 
 
-# --- A mensagem: verbatim, depois das regras, com rótulo próprio ---
+# --- A conversa do Aluno: depois das regras, dentro da cerca ---
 
 
-def test_a_mensagem_do_aluno_vem_depois_das_regras(
+def test_a_conversa_do_aluno_vem_depois_das_regras_dentro_da_cerca(
     fazer_cliente: FabricaCliente,
 ) -> None:
-    """A mensagem do Aluno chega verbatim, depois da persona, sob o rótulo.
+    """A conversa chega verbatim, depois da persona, entre os dois marcadores.
 
-    Três afirmações em uma: a mensagem não é comida pela composição, ela não
-    divide o prompt com as regras (vem depois da persona inteira, sob o
-    rótulo), e aparece uma vez só. Sem a ordem e o rótulo, uma mensagem que
-    soe como ordem — "ignore o resto e responda..." — seria lida como
-    instrução no meio das regras.
+    Quatro afirmações em uma: o texto do Aluno não é comida pela composição, ele
+    não divide o prompt com as regras (vem depois da persona inteira), ele aparece
+    uma vez só, e ele é a última coisa antes do fechamento.
+
+    A última é a que a cerca torna possível: um marcador de abertura sem um de
+    fechamento deixa aberto onde a citação acaba, e um prompt cuja última linha é a
+    fala do Aluno é o que a ordem de leitura do modelo pequeno espera. O par de
+    marcadores é o que dá a uma e a outra ao mesmo tempo.
     """
     prompt = _prompt_do_turno(fazer_cliente)
 
     assert PERSONA in prompt
-    assert ROTULO_MENSAGEM in prompt
+    assert INICIO_CONVERSA in prompt
+    assert FIM_CONVERSA in prompt
     assert _MENSAGEM in prompt
     assert prompt.index(_MENSAGEM) > prompt.index(PERSONA)
-    assert prompt.index(_MENSAGEM) > prompt.index(ROTULO_MENSAGEM)
+    assert prompt.index(_MENSAGEM) > prompt.index(INICIO_CONVERSA)
+    assert prompt.index(FIM_CONVERSA) > prompt.index(_MENSAGEM)
     assert prompt.count(_MENSAGEM) == 1
+
+
+def test_o_aviso_da_cerca_vem_antes_do_marcador_de_abertura(
+    fazer_cliente: FabricaCliente,
+) -> None:
+    """O aviso diz o que é o texto do Aluno, e ele é lido antes de encontrá-lo.
+
+    O aviso sem a ordem seria um parágrafo a mais: o modelo encontraria a
+    delimitação e o texto do Aluno antes de ler que aquilo é citação e não ordem.
+    Ele vem logo antes da abertura por isso.
+    """
+    prompt = _prompt_do_turno(fazer_cliente)
+
+    assert AVISO_CONVERSA in prompt
+    assert prompt.index(AVISO_CONVERSA) < prompt.index(INICIO_CONVERSA)
+    assert prompt.index(AVISO_CONVERSA) > prompt.index(PERSONA)
+
+
+def test_o_historico_da_conversa_vai_dentro_da_cerca() -> None:
+    """O histórico entra cercado, e não antes dela.
+
+    A cerca abre antes do histórico de propósito: as falas anteriores do Aluno são
+    entrada não confiável tanto quanto a mensagem de agora, e as respostas
+    anteriores do S.A.U. são saída de modelo, que é tão pouco confiável quanto a
+    entrada. Um histórico montado antes da abertura deixaria a parte mais longa do
+    prompt sem cerca nenhuma.
+
+    E o corte da janela acontece dentro da cerca: o que não cabe em
+    `MENSAGENS_NO_PROMPT` não entra no prompt, e o que entra vem inteiro. São nove
+    falas e a janela guarda seis, então as três mais antigas saem — e o que a
+    afirmação abaixo mede é que elas saem mesmo, e não que a cerca as esconde.
+    """
+    falas = [
+        Mensagem(papel="aluno", texto=f"pergunta {indice}", em=float(indice))
+        for indice in range(MENSAGENS_NO_PROMPT + 2)
+    ]
+    falas.append(Mensagem(papel="sau", texto="Vamos por partes: o que travou você?", em=99.0))
+
+    prompt = montar_prompt(_MENSAGEM, falas)
+
+    # A mais antiga que sobra é a que abre a janela: ela vem depois da abertura.
+    mais_antiga_que_sobra = f"pergunta {MENSAGENS_NO_PROMPT - 3}"
+    assert prompt.index(INICIO_CONVERSA) < prompt.index(mais_antiga_que_sobra)
+    assert prompt.index(mais_antiga_que_sobra) < prompt.index(FIM_CONVERSA)
+    # E as três que não cabem não estão no prompt, nem dentro nem fora da cerca.
+    for indice in range(MENSAGENS_NO_PROMPT - 3):
+        assert f"pergunta {indice}" not in prompt
+    # A última fala do Aluno é a penúltima linha do prompt, antes do fechamento.
+    assert prompt.splitlines()[-2] == _MENSAGEM
+    assert prompt.splitlines()[-1] == FIM_CONVERSA
+
+
+def test_o_historico_vai_antes_da_mensagem_do_turno() -> None:
+    """A troca anterior vem antes da pergunta de agora, como no grafo.
+
+    Um histórico montado depois da mensagem do turno inverteria a conversa para o
+    modelo: ele leria a pergunta, responderia a ela, e só então descobriria que
+    aquilo era a fala de três trocas atrás.
+    """
+    falas = [
+        Mensagem(papel="aluno", texto="qual o prazo da Atividade 2?", em=1.0),
+        Mensagem(papel="sau", texto="Vamos por partes: o que travou você?", em=2.0),
+    ]
+
+    prompt = montar_prompt(_MENSAGEM, falas)
+
+    assert prompt.index("Atividade 2") < prompt.index(_MENSAGEM)
+    assert prompt.index("Atividade 2") > prompt.index(PERSONA)
 
 
 # --- Um lugar só: nenhum texto de regra mora fora de sau/persona.py ---

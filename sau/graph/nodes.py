@@ -9,6 +9,11 @@ O prompt do turno vem de `sau.persona.montar_prompt`, e a costura é de
 propósito isolada: a persona do S.A.U. (issue #10) entra por esta função, e o
 resto do grafo não precisa saber que o texto mudou. Reexportada aqui para que
 quem importa o caminho do prompt continue resolvendo a partir deste módulo.
+
+Desde a #9 o turno também carrega o `historico` da conversa: ele chega pronto,
+lido pelo `webhook`, e o grafo não sabe de onde veio nem de onde ele foi lido. É o
+grafo não fazer I/O que deixou a #10 ser uma troca de texto: a persona e o
+histórico entram pela mesma função, e nada mais no grafo mudou.
 """
 
 from __future__ import annotations
@@ -16,6 +21,7 @@ from __future__ import annotations
 import logging
 from typing import Callable, NotRequired, TypedDict
 
+from sau.graph.state import Mensagem
 from sau.inference.ollama import ClienteOllama, Resposta
 from sau.persona import montar_prompt as montar_prompt
 
@@ -23,14 +29,18 @@ logger = logging.getLogger("sau.graph.nodes")
 
 
 class EstadoTurno(TypedDict):
-    """O estado de um turno: a mensagem que entra e a resposta que sai.
+    """O estado de um turno: o que entra e a resposta que sai.
 
-    É por turno, não por conversa: o histórico isolado por Aluno é a #9, dona de
-    `sau/graph/state.py`. Aqui só trafega o que este turno precisa, e a resposta
-    é opcional porque ela não existe antes de o nó `responder` rodar.
+    `historico` é por conversa e `mensagem` é por turno, e as duas coisas coexistem
+    porque o turno não é a conversa: ele é uma fatia dela. O `historico` é `NotRequired`
+    pelo mesmo motivo que a `resposta` — antes da #9 o estado era só a mensagem, e um
+    grafo que exigisse o histórico quebraria todo chamador antigo. Quem chama hoje
+    sempre passa o histórico, e quem não passar recebe o turno sem memória nenhuma,
+    que é o comportamento antigo.
     """
 
     mensagem: str
+    historico: NotRequired[list[Mensagem]]
     resposta: NotRequired[str]
 
 
@@ -46,15 +56,19 @@ def criar_no_responder(cliente: ClienteOllama) -> Callable[[EstadoTurno], dict[s
     tempos que a mediram, e o `grafo` grava a entrada e a saída do turno.
 
     O prompt montado é a única coisa do caminho que nenhum outro registro
-    guarda. As duas partes dele são legíveis onde estão — a persona, em
-    `sau/persona.py`, e a mensagem do Aluno, na entrada do grafo — mas a
-    composição das duas, que é o texto exato enviado para o modelo, só existe
-    aqui. É essa composição que o log torna auditável, e é por isso que ele fica
-    registrado aqui.
+    guarda. As partes dele são legíveis onde estão — as regras, em
+    `sau/persona.py`, e a conversa do Aluno, na entrada do grafo e no registro de
+    `sau/graph/state.py` — mas a composição das duas, que é o texto exato enviado
+    para o modelo, só existe aqui. É essa composição que o log torna auditável, e
+    é por isso que ele fica registrado aqui.
+
+    O `historico` vem do estado com `get`, e não com `[]`: um estado sem ele é um
+    turno sem memória, e a memória ausente é um slice vazio, não um `KeyError` no
+    meio da conversa do Aluno.
     """
 
     def responder(estado: EstadoTurno) -> dict[str, str]:
-        prompt = montar_prompt(estado["mensagem"])
+        prompt = montar_prompt(estado["mensagem"], estado.get("historico", ()))
         logger.info("Prompt do turno enviado ao modelo:\n%s", prompt)
         resposta: Resposta = cliente.responder(prompt)
         return {"resposta": resposta.texto}

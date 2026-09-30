@@ -250,12 +250,43 @@ segunda mensagem dizendo que houve um problema — nunca um stack trace, e nunca
 5xx que faria o Telegram reentregar o update. O motivo da falha fica inteiro no
 log do serviço.
 
+### A Conversa (histórico por Aluno)
+
+Desde a [#9](docs/adr/0005-estado-da-conversa.md) o S.A.U. lembra do que cada
+Aluno perguntou. O que ele disse numa mensagem entra no prompt da seguinte, então
+"e o prazo da outra?" não precisa repetir o nome da Atividade, e o isolamento é
+por `chat_id`: a conversa de um Aluno nunca entra no prompt de outro.
+
+O histórico vive num arquivo SQLite, num volume nomeado do compose
+(`conversas`), e é apagado depois de `CONVERSA_TTL_MINUTOS` de inatividade — o
+que o Aluno perguntou às 3h da manhã não fica guardado para sempre. Além disso, a
+conversa de cada Aluno é respondida na ordem em que as mensagens chegaram: duas
+perguntas seguidas do mesmo Aluno não se embaralham. Entre Alunos diferentes não
+há ordem, e não deveria haver — um Aluno não espera na fila de outro.
+
+```sh
+# as conversas guardadas, com quantas mensagens cada uma tem
+docker compose exec -T webhook python - <<'PY'
+import sqlite3
+con = sqlite3.connect("/var/lib/sau/conversas.db")
+for chat, ultimo in con.execute("SELECT chat_id, ultimo_turno FROM conversa ORDER BY ultimo_turno"):
+    total = con.execute("SELECT COUNT(*) FROM mensagem WHERE chat_id = ?", (chat,)).fetchone()[0]
+    print(f"chat {chat}: {total} mensagens, mexida em {ultimo}")
+PY
+```
+
+Apagar tudo é apagar o arquivo com o serviço parado:
+
+```sh
+docker compose down
+docker volume rm tutor-ia_conversas   # o nome real sai de `docker volume ls`
+```
+
 > **O que ainda não existe.** O prompt do turno ainda não tem a persona do S.A.U.:
 > ele é a mensagem do Aluno com a instrução mínima de respondê-la, e é isso que a
 > #10 substitui. A posição na fila e o semáforo são da #11, que também substitui
-> a thread por turno — até lá, duas mensagens seguidas do mesmo Aluno podem ser
-> respondidas fora de ordem. O histórico por conversa e o isolamento entre Alunos
-> são da #9.
+> a thread por turno — até lá, um Aluno que manda seis mensagens seguidas recebe
+> um aviso de fila cheia antes de um turno ser recusado, e o teto é por conversa.
 
 ---
 
@@ -279,6 +310,8 @@ não lê `.env` sozinho.
 | `TELEGRAM_WEBHOOK_SECRET_TOKEN` | — (ausente) | **Sim** (só para `webhook`) | Chave que o Telegram devolve no header `X-Telegram-Bot-Api-Secret-Token` e que fecha a porta do endpoint. Gere com `openssl rand -hex 16` |
 | `TELEGRAM_WEBHOOK_PORT` | `8080` | Não | Porta do webhook no host. O container escuta sempre em 8080 |
 | `TELEGRAM_API_BASE` | `https://api.telegram.org` | Não | URL base da Bot API do Telegram. Existe para apontar para uma Bot API local em desenvolvimento; o compose não a expõe, porque o canal conversa com a do Telegram |
+| `CONVERSA_CAMINHO` | `/var/lib/sau/conversas.db` no compose; `conversas.db` rodando no host | Não | Onde fica o arquivo que guarda o histórico por Aluno. O compose fixa este caminho dentro do container e monta o volume nomeado `conversas` nele — por isso a variável não é repassada pelo compose, e é o volume que faz o histórico sobreviver ao `docker compose down`. Vale para quem roda o `webhook` direto no host |
+| `CONVERSA_TTL_MINUTOS` | `30` | Não | Há quanto tempo, em minutos, a conversa de um Aluno ociosa é apagada. Precisa ser inteiro positivo |
 
 A VRAM total não é exposta por nenhum endpoint do Ollama — o `/api/ps` só
 relata o `size_vram` de cada modelo — então ela tem de vir do host:

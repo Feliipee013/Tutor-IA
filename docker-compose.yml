@@ -54,5 +54,18 @@ services:
       - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2.5:3b}
       - OLLAMA_TIMEOUT=${OLLAMA_TIMEOUT:-30}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      # O histórico da conversa vive num arquivo, e sem volume nomeado ele
+      # desapareceria a cada `docker compose down` — que é a memória do Aluno
+      # perdurada. O volume é do `webhook` e não do `bot` porque o `bot` não roda
+      # turno: ele não tem conversa nenhuma para guardar.
+      - CONVERSA_CAMINHO=/var/lib/sau/conversas.db
+      - CONVERSA_TTL_MINUTOS=${CONVERSA_TTL_MINUTOS:-30}
+    volumes:
+      - conversas:/var/lib/sau
     extra_hosts:
       - "host.docker.internal:host-gateway"
+
+volumes:
+  # Nomeado, e não um bind de diretório do repositório: o arquivo do SQLite fica
+  # sob controle do Docker, não entre os arquivos que o git enxerga.
+  conversas:
