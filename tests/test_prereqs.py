@@ -11,6 +11,7 @@ import pytest
 
 from sau.config import Configuracao
 from sau.inference.ollama import NUM_CTX_PADRAO
+from sau.inference.semaphore import K_PADRAO, TETO_PADRAO_DA_FILA
 from sau.prereqs import (
     CpuNaoAutorizadaError,
     ModeloNaoEncontradoError,
@@ -417,6 +418,8 @@ def _config_de_teste(vram_total_bytes: int | None) -> Configuracao:
         telegram_api_base="https://api.telegram.org",
         conversa_caminho="conversas.db",
         conversa_ttl_minutos=30,
+        inferencia_k=K_PADRAO,
+        inferencia_fila_teto=TETO_PADRAO_DA_FILA,
     )
 
 

@@ -60,6 +60,14 @@ services:
       # turno: ele não tem conversa nenhuma para guardar.
       - CONVERSA_CAMINHO=/var/lib/sau/conversas.db
       - CONVERSA_TTL_MINUTOS=${CONVERSA_TTL_MINUTOS:-30}
+      # O semáforo de inferência, e ele é do `webhook` porque o `webhook` é quem
+      # roda turno. O `k` é o número que o ADR-0001 exige medido na máquina alvo em
+      # vez de assumido, e o roteiro está em `docs/fila-e-semaforo.md` — o padrão 2
+      # abaixo é ponto de partida declarado, não o número verificado. O serviço
+      # `bot` não recebe estas duas de propósito: ele não roda turno, então não
+      # tem inferência para limitar nem fila para fechar.
+      - INFERENCIA_K=${INFERENCIA_K:-2}
+      - INFERENCIA_FILA_TETO=${INFERENCIA_FILA_TETO:-10}
     volumes:
       - conversas:/var/lib/sau
     extra_hosts:
