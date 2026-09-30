@@ -29,6 +29,8 @@ class Configuracao:
     telegram_webhook_secret_token: str | None
     telegram_webhook_port: int
     telegram_api_base: str
+    conversa_caminho: str
+    conversa_ttl_minutos: int
 
 
 _MIB_EM_BYTES = 1_048_576
@@ -114,6 +116,27 @@ def carregar_configuracao(origem: Mapping[str, str] | None = None) -> Configurac
             f"Valor inválido para TELEGRAM_WEBHOOK_PORT: '{webhook_port_raw}'. Esperado inteiro."
         ) from err
 
+    # O arquivo de conversas. O padrão é relativo ao diretório de trabalho, e é
+    # de propósito: o `python -m sau.telegram` no host cria o arquivo onde a pessoa
+    # está, sem configuração nenhuma. Quem sobe em container aponta o caminho para
+    # o volume nomeado do compose, e é o que faz o histórico sobreviver ao
+    # `docker compose down`.
+    conversa_caminho = env.get("CONVERSA_CAMINHO", "conversas.db").strip()
+
+    ttl_raw = env.get("CONVERSA_TTL_MINUTOS", "30")
+    try:
+        conversa_ttl_minutos = int(ttl_raw)
+    except ValueError as err:
+        raise ValueError(
+            f"Valor inválido para CONVERSA_TTL_MINUTOS: '{ttl_raw}'. Esperado inteiro."
+        ) from err
+    if conversa_ttl_minutos <= 0:
+        raise ValueError(
+            f"Valor inválido para CONVERSA_TTL_MINUTOS: '{ttl_raw}'. "
+            "Esperado inteiro positivo: com zero o histórico de toda conversa "
+            "seria apagado antes de o turno seguinte chegar."
+        )
+
     return Configuracao(
         ollama_base_url=ollama_base_url,
         ollama_model=ollama_model,
@@ -127,4 +150,6 @@ def carregar_configuracao(origem: Mapping[str, str] | None = None) -> Configurac
         telegram_webhook_secret_token=telegram_webhook_secret_token,
         telegram_webhook_port=telegram_webhook_port,
         telegram_api_base=telegram_api_base,
+        conversa_caminho=conversa_caminho,
+        conversa_ttl_minutos=conversa_ttl_minutos,
     )

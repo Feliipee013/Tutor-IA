@@ -27,9 +27,9 @@ agente Implementar localizar o ponto de impacto sem varrer o repositório inteir
 | `AGENTS.md` | como o agente trabalha aqui: skills, regras, Context7 | sim |
 | `SETUP.md` | ambiente: `gh`, Context7, e como executar o projeto | sim |
 | `Dockerfile` | imagem do serviço do bot, `python -m sau.main` — **issue #4** | sim |
-| `docker-compose.yml` | sobe o serviço `bot` (com o Ollama no host, ADR-0002) e o serviço `webhook`, independentes entre si e ambos alcançando o Ollama do host — **issues #4, #5 e #8** | sim |
+| `docker-compose.yml` | sobe o serviço `bot` (com o Ollama no host, ADR-0002) e o serviço `webhook`, independentes entre si e ambos alcançando o Ollama do host. Desde a #9 o `webhook` monta o volume nomeado que guarda o arquivo de conversas — **issues #4, #5, #8 e #9** | sim |
 | `pyproject.toml` | pacote `sau`, dependências (o `langgraph` entrou com a #8) e config de pytest, ruff e mypy — **issues #4 e #8** | sim |
-| `.env.example` | modelo das variáveis de ambiente do compose, com o que é obrigatório — **issues #4, #5 e #8** | sim |
+| `.env.example` | modelo das variáveis de ambiente do compose, com o que é obrigatório — **issues #4, #5, #8 e #9** | sim |
 | `scripts/preparar-host.sh` | o passo que o compose não dá conta de fazer: acha a VRAM, confere o Ollama e baixa o modelo se faltar. Idempotente — **issue #7** | sim |
 | `opencode.json` | MCP do Context7 e permissões de `bash` por agente | sim |
 | `docs/` | documentação versionada (abaixo) | sim |
@@ -45,6 +45,7 @@ agente Implementar localizar o ponto de impacto sem varrer o repositório inteir
 | `docs/agents/` | contratos de tracker, labels, domínio e formato de PR | sim |
 | `docs/adr/` | decisões de arquitetura, com o que foi descartado e por quê | sim |
 | `docs/adr/0004-vram-por-maquina.md` | a VRAM é declarada por máquina: o contrato, como descobrir o valor e o que fazer sem GPU dedicada — **issue #7** | sim |
+| `docs/adr/0005-estado-da-conversa.md` | o estado da conversa vive num arquivo, isolado por `chat_id`, com TTL e ordem FIFO por conversa — **issue #9** | sim |
 | `docs/sprints/` | plano legível da 1.1 e da 1.2 | sim |
 | `docs/medicao-modelo/` | a sondagem, o script de medição e a saída de cada máquina — **issue #3** | sim |
 | `docs/tempo-primeira-resposta.md` | o tempo de primeira resposta na GTX 1650 do ADR-0002, com as condições e a nota dos números antigos da RX 7600 — **issue #7** | sim |
@@ -75,18 +76,18 @@ classificação da intenção, e a 1.2 entra como rota nova **dentro** desse mes
 grafo, não como serviço à parte.
 
 | Caminho | O que faz | Ticket | Existe |
-| `sau/config.py` | lê do ambiente o que a #4 precisa: modelo, timeout, porta, a URL base do Ollama no host e a VRAM total da máquina; e o que a #5 precisa: as duas credenciais do Telegram, a porta do webhook e a URL da API. A #8 não acrescenta campo novo — o `webhook` passa a ler o mesmo `OLLAMA_*` que o `bot` já lia. Temperatura e `k` do semáforo ainda não são lidos — chegam nos tickets que vão escrevê-los, e a linha cresce aqui quando eles existirem | #4, #5, #8 | sim |
+| `sau/config.py` | lê do ambiente o que a #4 precisa: modelo, timeout, porta, a URL base do Ollama no host e a VRAM total da máquina; o que a #5 precisa: as duas credenciais do Telegram, a porta do webhook e a URL da API; e o que a #9 precisa: o caminho do arquivo de conversas e o TTL em minutos. A #8 não acrescenta campo novo — o `webhook` passa a ler o mesmo `OLLAMA_*` que o `bot` já lia. Temperatura e `k` do semáforo ainda não são lidos — chegam nos tickets que vão escrevê-los, e a linha cresce aqui quando eles existirem | #4, #5, #8, #9 | sim |
 | `sau/prereqs.py` | checagem rigorosa de pré-requisitos (conectividade, modelo e GPU no host) | #4 | sim |
 | `sau/main.py` | entrypoint do serviço com logs estruturados e health server. O prefixo da linha é `[SAU]`, do S.A.U.; o serviço que emitiu a linha é identificado pelo nome do módulo nela mesma (`sau.main` contra `sau.telegram.webhook`), e não pelo prefixo | #4 | sim |
 | `sau/persona.py` | o prompt versionado do S.A.U., com todas as regras de comportamento | #10 | não |
-| `sau/telegram/webhook.py` | handler do webhook: registro do update bruto, conferência do `secret_token` e acuse de recibo fixo ao Aluno antes de qualquer inferência. Desde a #8 é também quem dispara o turno (em thread, fora do request) e quem vira a falha do modelo em mensagem amigável | #5, #8 | sim |
+| `sau/telegram/webhook.py` | handler do webhook: registro do update bruto, conferência do `secret_token` e acuse de recibo fixo ao Aluno antes de qualquer inferência. Desde a #8 é também quem dispara o turno (em thread, fora do request) e quem vira a falha do modelo em mensagem amigável. Desde a #9 é quem monta o registro de conversas e quem roda o turno dentro da fila FIFO da conversa do Aluno | #5, #8, #9 | sim |
 | `sau/telegram/__main__.py` | entrypoint do serviço `webhook`, para o log sair com o nome do módulo e não `__main__` | #5 | sim |
 | `sau/inference/ollama.py` | cliente do Ollama, que roda **no host** e é alcançado por `host.docker.internal:11434` ([ADR-0002](./adr/0002-topologia-do-ollama.md)). Desde a #8 é usado pelos dois serviços: o `bot` na checagem e na fumaça, o `webhook` no turno | #7, #8 | sim |
 | `sau/inference/fumaca.py` | prova de fumaça: roda as checagens, pede uma geração e mostra o tempo de cada etapa | #7 | sim |
 | `sau/inference/semaphore.py` | fila com teto e semáforo em frente à inferência | #11 | não |
-| `sau/graph/state.py` | estado da conversa, isolado por Aluno | #9 | não |
-| `sau/graph/graph.py` | monta o grafo LangGraph do turno. Nasceu com um caminho só (`START → responder → END`) e os nós de classificação, recuperação e encaminhamento entram aqui | #8 | sim |
-| `sau/graph/nodes.py` | os nós do grafo. A #8 criou o `responder` e o `montar_prompt`, a costura onde a #10 injeta a persona; classificar intenção, recuperar e encaminhar são os nós seguintes | #8, #10, P5 | sim |
+| `sau/graph/state.py` | o estado da conversa, isolado por Aluno: o registro em arquivo, o TTL que apaga a conversa ociosa e a fila FIFO por `chat_id` | #9 | sim |
+| `sau/graph/graph.py` | monta o grafo LangGraph do turno. Nasceu com um caminho só (`START → responder → END`) e os nós de classificação, recuperação e encaminhamento entram aqui. Desde a #9 `executar_turno` recebe o histórico da conversa do Aluno | #8, #9 | sim |
+| `sau/graph/nodes.py` | os nós do grafo. A #8 criou o `responder` e o `montar_prompt`, a costura onde a #10 injeta a persona; classificar intenção, recuperar e encaminhar são os nós seguintes. Desde a #9 o `montar_prompt` recebe as últimas mensagens do Aluno para que ele não precise repetir a pergunta a cada turno | #8, #9, #10, P5 | sim |
 | `sau/rag/embed.py` | embeddings locais via Ollama e indexação do corpus | P3 | não |
 | `sau/rag/retrieve.py` | busca os `k` chunks mais próximos, com a Fonte | P4 | não |
 
@@ -97,7 +98,7 @@ grafo, não como serviço à parte.
 | `perguntas-teste/` | as 10 Perguntas-teste, com o comportamento esperado de cada uma | #6 | sim |
 | `corpus/` | os quatro documentos autorados, um por categoria, com as contradições plantadas | P1 | não |
 | `outputs/` | saída bruta do harness, ignorada pelo git | #12 | não |
-| `tests/` | suíte `pytest`, com `test_config.py` e `test_prereqs.py` da #4, `test_webhook.py` da #5 (e o caminho do turno da #8), `test_graph.py` da #8 e `test_ollama.py` e `test_fumaca.py` da #7 | #4, #5, #7, #8 | sim |
+| `tests/` | suíte `pytest`, com `test_config.py` e `test_prereqs.py` da #4, `test_webhook.py` da #5 (o caminho do turno da #8 e o isolamento por Aluno da #9), `test_graph.py` da #8, `test_state.py` da #9 e `test_ollama.py` e `test_fumaca.py` da #7 | #4, #5, #7, #8, #9 | sim |
 
 O `corpus/` é quebrado em unidades de recuperação pela própria equipe: cada
 `##` dentro de um documento responde a uma Pergunta Frequente, então **o chunk é

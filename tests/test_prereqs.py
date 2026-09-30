@@ -415,6 +415,8 @@ def _config_de_teste(vram_total_bytes: int | None) -> Configuracao:
         telegram_webhook_secret_token=None,
         telegram_webhook_port=8080,
         telegram_api_base="https://api.telegram.org",
+        conversa_caminho="conversas.db",
+        conversa_ttl_minutos=30,
     )
 
 

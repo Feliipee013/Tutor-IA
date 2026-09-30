@@ -155,6 +155,15 @@ consumindo o **Ollama rodando nativamente no host**, conforme
   - `TELEGRAM_API_BASE`: padrão `https://api.telegram.org`. Existe para apontar
     para uma Bot API local em desenvolvimento, e para isso só. O compose **não**
     a expõe, porque o canal conversa com a API do Telegram
+- **Variáveis da conversa (issue #9), opcionais — o `webhook` só:**
+  - `CONVERSA_TTL_MINUTOS`: padrão `30` (minutos sem contato antes de a conversa
+    ser apagada). Precisa ser inteiro positivo
+  - `CONVERSA_CAMINHO`: o compose **não repassa** esta variável. Ele fixa o caminho
+    dentro do container, em `/var/lib/sau/conversas.db`, e monta o volume nomeado
+    `conversas` nesse caminho — é esse volume que faz o histórico sobreviver ao
+    `docker compose down`. A variável vale para quem roda o `webhook` direto no
+    host, e ali o padrão é `conversas.db` no diretório de trabalho. Ver
+    [A conversa](#a-conversa-issue-9)
 - **Variável do host, fora do container:** `OLLAMA_HOST=0.0.0.0:11434`, consumida
   pelo `ollama serve` e não pelo serviço. Ver o passo 2 logo abaixo.
 - **Logs estruturados:** formato padronizado com prefixo `[SAU]` no stdout.
@@ -306,13 +315,48 @@ condições e os limites dela.
 
 O acuse e a resposta continuam sendo **duas mensagens separadas**, e é assim que
 o `webhook` garante o que o ADR-0001 pede: o Aluno leva o primeiro retorno antes
-de qualquer inferência. O turno é executado em uma thread, fora do request — a
-fila e o semáforo são da #11.
+de qualquer inferência. O turno é executado em uma thread, fora do request — o
+semáforo e a fila com backpressure são da #11.
 
 O `webhook` **não responde a pergunta do Aluno com a persona do S.A.U.** ainda: o
 prompt do turno é a mensagem com a instrução mínima de respondê-la, e é a #10 que
-troca esse texto. Também ainda não há histórico por conversa (#9), então o turno
-não enxerga mensagens anteriores do mesmo Aluno.
+troca esse texto.
+
+### A conversa (issue #9)
+
+O `webhook` é o dono do estado da conversa. O que o Aluno perguntou e o que o
+S.A.U. respondeu ficam num arquivo SQLite, isolados por `chat_id`, e as últimas
+mensagens da conversa entram no prompt do turno seguinte. Nada disso precisa ser
+configurado: o serviço sobe, cria o arquivo no volume nomeado e guarda trinta
+minutos de conversa ociosa.
+
+Para conferir o que está guardado:
+
+```sh
+docker compose exec -T webhook ls -l /var/lib/sau
+```
+
+O caminho `/var/lib/sau` é o volume nomeado `conversas`, e ele é do `webhook` e
+não do `bot` porque o `bot` não roda turno — ele não tem conversa para guardar.
+`docker compose down` **não** apaga esse volume; `docker compose down -v` apaga,
+e com ele todo o histórico. É o comportamento esperado de `down -v` em qualquer
+compose, e vale saber antes de rodar o comando com `-v` por engano.
+
+Ajustar o TTL é mexer em `CONVERSA_TTL_MINUTOS` no `.env` e subir de novo:
+
+```sh
+CONVERSA_TTL_MINUTOS=120 docker compose up -d --build webhook
+```
+
+Passado o TTL, a próxima mensagem do Aluno começa uma conversa nova, do zero. O
+motivo está no [ADR-0005](./docs/adr/0005-estado-da-conversa.md): o histórico de
+um Aluno é dado guardado por um bot de faculdade, e não há por que guardar para
+sempre o que ele perguntou às 3h da manhã.
+
+**Rodando o `webhook` no host, sem container.** Aí o caminho não é o volume, e
+sim o `CONVERSA_CAMINHO` — cujo padrão é `conversas.db`, relativo a onde você
+está. O `.gitignore` cobre `*.db`, então o arquivo não sobe para o Git por
+acidente, mas ele fica ali e some com ele o histórico.
 
 ### Pré-requisitos de host: o Ollama
 

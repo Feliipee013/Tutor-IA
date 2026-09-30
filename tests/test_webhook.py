@@ -2,8 +2,10 @@
 
 O que se prova aqui é o fio do canal: update chega, update bruto é registrado, o
 Aluno recebe o acuse de recibo sem esperar o modelo e, desde a #8, recebe a
-resposta do modelo depois do acuse. O transporte do Telegram e o do modelo são
-falsos (`httpx.MockTransport`), então a suíte verifica as requisições que
+resposta do modelo depois do acuse. Desde a #9 o turno também carrega a conversa do
+Aluno: o histórico de um não vaza para o prompt de outro, e duas mensagens do mesmo
+Aluno são respondidas na ordem em que chegaram. O transporte do Telegram e o do
+modelo são falsos (`httpx.MockTransport`), então a suíte verifica as requisições que
 sairiam de verdade em vez de simular o S.A.U.
 """
 
@@ -11,7 +13,9 @@ from __future__ import annotations
 
 import json
 import logging
+import tempfile
 import threading
+from pathlib import Path
 from typing import Any, Callable, Iterator
 
 import httpx
@@ -19,6 +23,7 @@ import pytest
 from flask import Flask
 
 from sau.config import carregar_configuracao
+from sau.graph.state import RegistroDeConversas
 from sau.inference.ollama import ErroDeInferencia, Resposta, TempoEsgotadoError
 from sau.main import configurar_logging
 from sau.telegram import webhook
@@ -280,9 +285,17 @@ def _anotando(registros: list[str]) -> ExecutorTurno:
 
     O que interessa nesses testes é a lista, não o executor: o grafo está sendo
     ignorado de propósito, e a pergunta é só o que o `webhook` entregou a ele.
+
+    A assinatura acompanha a do `ExecutorTurno` inteiro, `registro` incluído, porque
+    é o que o `_atender_webhook` passa. Um executor com menos parâmetros funciona em
+    tempo de execução e quebra o mypy — e o que o mypy barra aqui é o caminho em que
+    a assinatura do executor sai de sincronia com a do turno de produção sem ninguém
+    perceber, que é a forma como o turno real deixaria de ser testado.
     """
 
-    def anotar(_config: Any, _chat_id: int, texto: str, _client: Any) -> None:
+    def anotar(
+        _config: Any, _chat_id: int, texto: str, _registro: Any, _client: Any
+    ) -> None:
         registros.append(texto)
 
     return anotar
@@ -295,11 +308,12 @@ def _sincrono(acao: Callable[[], None]) -> None:
 
 def _app(
     telegram: TelegramFalso,
+    registro: RegistroDeConversas | None = None,
     env: dict[str, str] | None = None,
     executor: ExecutorTurno | None = _sem_turno,
     agendar: Callable[[Callable[[], None]], None] | None = _sincrono,
 ) -> Flask:
-    """Monta o app com o turno e o agendamento injetados.
+    """Monta o app com o registro, o turno e o agendamento injetados.
 
     O executor e o agendamento são substituídos em **quase** todos os testes daqui.
     O executor de produção monta um `ClienteOllama` de verdade e tentaria falar
@@ -308,13 +322,68 @@ def _app(
     o que aconteceu na primeira versão desta PR — o teste do acuse ficou vermelho
     por causa de um `RuntimeError` de thread órfã.
 
-    Passar `None` em vez do executor falso é o caminho de produção: `criar_app` recoloca o
-    executor e o agendamento reais, e só o modelo e o transporte ficam falsos. É
+    O `registro` é substituído pela mesma razão e por uma a mais: sem ele o `criar_app`
+    abriria `conversas.db` no diretório de trabalho, que é a raiz do repositório, e a
+    suíte passaria a escrever no meio dos arquivos versionados. Passar `None` é o
+    caminho de produção: `criar_app` monta o registro a partir da configuração. É
     assim que os testes do turno rodam o `webhook` de verdade sem sair da rede — e,
     nos dois que passam `agendar=None`, a thread de verdade também.
     """
     config = carregar_configuracao({**_ENV_PADRAO, **(env or {})})
-    return criar_app(config, telegram.cliente, executor, agendar)
+    registro_do_turno = registro or _registro_de_teste()
+    return criar_app(config, telegram.cliente, registro_do_turno, executor, agendar)
+
+
+class RegistroDeTeste:
+    """Um `RegistroDeConversas` num arquivo temporário, com a pasta que o segura.
+
+    Existe como classe e não como função porque o `TemporaryDirectory` precisa
+    sobreviver ao registro: apagada a pasta antes de `fechar()`, a conexão fica
+    apontando para arquivo que não existe. A pasta é do `TemporaryDirectory`, e o
+    `TemporaryDirectory` é registrado para ser limpo no fim do teste pela fixture
+    `_fecha_registros`, que é o que garante que nem o `.db` nem o `-wal` fiquem na
+    raiz do repositório.
+
+    O caminho é único por instância justamente para que dois testes rodando ao mesmo
+    tempo não compartilhem arquivo — o SQLite serializa escrita, e um teste que
+    espera outro é um teste que passa por acidente.
+    """
+
+    def __init__(self, diretorio: Path | None = None) -> None:
+        self.dono: tempfile.TemporaryDirectory[str] | None = None
+        if diretorio is None:
+            self.dono = tempfile.TemporaryDirectory(prefix="sau-conversas-")
+            pasta = Path(self.dono.name)
+        else:
+            pasta = diretorio
+        self.registro = RegistroDeConversas(str(pasta / "conversas.db"))
+
+
+_REISTROS_ABERTOS: list[RegistroDeTeste] = []
+
+
+def _registro_de_teste() -> RegistroDeConversas:
+    """Fabrica o registro do turno com um arquivo temporário atrás dele."""
+    teste = RegistroDeTeste()
+    _REISTROS_ABERTOS.append(teste)
+    return teste.registro
+
+
+@pytest.fixture(autouse=True)
+def _fecha_registros() -> Iterator[None]:
+    """Fecha os registros que os testes abriram e apaga os arquivos deles.
+
+    Autouse e depois das outras fixtures de propósito: um `registro` aberto
+    sobreviveria ao fim do teste com a conexão viva, e o `TemporaryDirectory`
+    apagado embaixo dela deixaria a pasta `-wal` para trás. Fechar na saída garante
+    que a pasta some inteira.
+    """
+    yield
+    for teste in _REISTROS_ABERTOS:
+        teste.registro.fechar()
+        if teste.dono is not None:
+            teste.dono.cleanup()
+    _REISTROS_ABERTOS.clear()
 
 
 def _postar(app: Flask, update: Any, *, segredo: str | None = _SEGREDO) -> Any:
@@ -900,6 +969,226 @@ def test_o_turno_usa_o_timeout_do_ambiente(
     assert timeouts == [12.5]
 
 
+# --- O estado por conversa, que é a #9 ---
+
+
+def _update_de(chat_id: int, texto: str) -> dict[str, Any]:
+    """Um update do Telegram de um `chat_id` qualquer, com o texto dado.
+
+    Existe para os dois testes da conversa: o isolamento e a ordem precisam de duas
+    contas, e construir o update na mão em cada um dos dois evitaria a dependência do
+    `UPDATE_DO_ALUNO`, que é de um `chat_id` só. O corpo é o mesmo que o Telegram
+    manda; só o `chat.id` e o `text` mudam.
+    """
+    return {
+        "update_id": chat_id,
+        "message": {
+            "message_id": 1,
+            "chat": {"id": chat_id, "type": "private"},
+            "from": {"id": chat_id, "is_bot": False, "first_name": "Aluna"},
+            "text": texto,
+        },
+    }
+
+
+class ModeloQueEspelha(ModeloFalso):
+    """O modelo do turno, que guarda o prompt e responde com um texto por turno.
+
+    A resposta precisa variar por turno porque o teste da ordem afirma que o segundo
+    prompt carrega a troca **completa**: pergunta e resposta. Com a resposta fixa dos
+    outros testes, a afirmação passaria com a pergunta do primeiro turno no histórico e
+    a resposta errada — que ainda é um histórico, ainda é um bug, mas é outro.
+    """
+
+    prompts: list[str] = []
+    """Os prompts de todos os turnos, na ordem. É de classe porque o modelo é
+    recriado a cada turno — o `webhook` monta um `ClienteOllama` por turno — e a
+    lista precisa sobreviver à recriação."""
+
+    respostas: list[str] = ["primeira resposta", "segunda resposta"]
+    """A resposta de cada turno, na ordem dos prompts. Variar por turno é o que
+    permite ao teste da ordem afirmar que o histórico do segundo turno tem a troca
+    inteira, e não só a pergunta anterior."""
+
+    def responder(self, prompt: str, *, opcoes: dict[str, Any] | None = None) -> Resposta:
+        ModeloQueEspelha.prompts.append(prompt)
+        indice = len(ModeloQueEspelha.prompts) - 1
+        return Resposta(
+            texto=ModeloQueEspelha.respostas[indice % len(ModeloQueEspelha.respostas)],
+            primeiro_token_segundos=0.0,
+            carga_segundos=0.0,
+            avaliacao_prompt_segundos=0.0,
+            segundos_totais=0.0,
+            tokens_por_segundo=None,
+            tokens_gerados=None,
+            concluida=True,
+            motivo_de_parada="stop",
+        )
+
+
+def test_o_historico_de_um_aluno_nao_vai_para_o_prompt_de_outro(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """O critério de isolamento da #9, com duas contas e o webhook de verdade.
+
+    Duas contas, e não dois `chat_id` num teste de unidade: o defeito que este teste
+    fecha é o `webhook` entregar o histórico de um Aluno ao turno de outro, e ele mora
+    no caminho entre o update e o prompt — que é o caminho que o `webhook` de verdade
+    percorre.
+
+    São três turnos porque o critério tem duas metades, e elas precisam das duas
+    afirmadas no mesmo teste. A segunda pergunta da primeira Aluna carrega a troca
+    anterior — sem isso, um registro que devolvesse sempre lista vazia passaria, e esse
+    é o defeito oposto ao deste ticket, com a mesma causa. O turno da segunda Aluna não
+    traz nada da primeira — que é o isolamento.
+
+    O modelo falso guarda os prompts. Um registro que devolvesse a conversa errada
+    passaria se o teste afirmasse só que "o histórico aparece", e o defeito é justamente
+    o histórico *a mais*, não o de menos.
+
+    O registro entra por injeção com o `tmp_path` do pytest, e não pelo padrão
+    relativo ao diretório de trabalho: um teste que cria `conversas.db` na raiz do
+    repositório deixa o arquivo para trás e continua passando.
+    """
+    telegram = TelegramFalso()
+    registro = RegistroDeConversas(str(tmp_path / "conversas.db"))
+    ModeloQueEspelha.prompts = []
+    try:
+        monkeypatch.setattr(webhook, "ClienteOllama", ModeloQueEspelha)
+        app = _app(telegram, registro=registro, executor=None)
+
+        # Três turnos: duas perguntas da primeira Aluna e uma da segunda. Com duas
+        # perguntas só, a conversa da primeira nunca é lida de volta e o teste não
+        # distingue "o histórico funciona" de "o histórico é sempre vazio" — e as duas
+        # coisas são defeitos, um pelo motivo oposto ao outro.
+        _postar(app, _update_de(11, "qual o prazo da Atividade 2?"))
+        _postar(app, _update_de(11, "e a de matemática?"))
+        _postar(app, _update_de(22, "e aquela atividade de inglês?"))
+    finally:
+        registro.fechar()
+        telegram.fechar()
+
+    assert len(ModeloQueEspelha.prompts) == 3, "um dos turnos não chegou ao modelo"
+    da_aluna, da_aluna_ainda, da_outra = ModeloQueEspelha.prompts
+    # A segunda pergunta da primeira Aluna carrega a troca inteira da primeira vez.
+    assert "Atividade 2" in da_aluna_ainda, (
+        f"o segundo turno da Aluna não recebeu o histórico: {da_aluna_ainda!r}"
+    )
+    assert "primeira resposta" in da_aluna_ainda, (
+        f"o histórico não trouxe a resposta anterior: {da_aluna_ainda!r}"
+    )
+    # E a outra Aluna não viu nada da primeira, nem da pergunta nem da resposta.
+    assert "Atividade 2" not in da_outra, "a pergunta da primeira Aluna vazou para a segunda"
+    assert "matemática" not in da_outra, "a conversa da primeira Aluna vazou inteira"
+    assert "primeira resposta" not in da_outra, "a resposta da primeira Aluna vazou"
+    assert "atividade de inglês" in da_outra
+
+
+def test_as_mensagens_do_mesmo_aluno_sao_respondidas_em_ordem(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    threads_do_turno: list[threading.Thread],
+) -> None:
+    """O critério de ordem da #9, com o primeiro turno segurado por um evento.
+
+    A prova é o **prompt** do segundo turno: sem a fila, ele leria o histórico antes de
+    o primeiro turno ter gravado a resposta, e o prompt dele não teria a troca. Como o
+    grafo e o nó são os de verdade e o modelo é falso, o que se vê é o que o modelo
+    receberia.
+
+    Determinismo é o ponto, e é por isso que o primeiro turno é segurado por um
+    `threading.Event` em vez de um `time.sleep`: o teste solta o primeiro turno só
+    depois de o segundo ter entrado na fila, o que torna a corrida impossível em vez de
+    improvável. Um `sleep` seria um teste que passa quase sempre e falha uma vez em
+    vinte, na máquina carregada.
+
+    O agendamento é o de produção, `agendar=None`, e a thread é esperada pela fixture
+    `threads_do_turno`. É o caminho real do serviço: grafo, nó, registro e fila reais.
+    """
+    telegram = TelegramFalso()
+    registro = RegistroDeConversas(str(tmp_path / "conversas.db"))
+    ModeloQueEspelha.prompts = []
+    chegou_na_fila = threading.Event()
+    solta_o_primeiro = threading.Event()
+    try:
+        class ModeloQueEspera(ModeloQueEspelha):
+            """O modelo do primeiro turno, que segura o turno até o teste soltar."""
+
+            def responder(
+                self, prompt: str, *, opcoes: dict[str, Any] | None = None
+            ) -> Resposta:
+                resposta = super().responder(prompt, opcoes=opcoes)
+                if len(ModeloQueEspelha.prompts) == 1:
+                    chegou_na_fila.set()
+                    solta_o_primeiro.wait(timeout=5.0)
+                return resposta
+
+        monkeypatch.setattr(webhook, "ClienteOllama", ModeloQueEspera)
+        app = _app(telegram, registro=registro, executor=None, agendar=None)
+
+        _postar(app, _update_de(31, "qual o prazo da Atividade 1?"))
+        assert chegou_na_fila.wait(5.0), "o primeiro turno não chegou ao modelo"
+
+        _postar(app, _update_de(31, "e a de matemática?"))
+
+        solta_o_primeiro.set()
+        for thread in threads_do_turno:
+            thread.join(timeout=5.0)
+    finally:
+        solta_o_primeiro.set()
+        registro.fechar()
+        telegram.fechar()
+
+    assert len(ModeloQueEspelha.prompts) == 2, "um dos turnos não chegou ao modelo"
+    primeiro, segundo = ModeloQueEspelha.prompts
+    # O segundo turno só existe depois do primeiro ter gravado a resposta, e é isso
+    # que a fila garante.
+    assert "primeira resposta" in segundo, (
+        f"o segundo turno rodou antes do primeiro gravar a resposta: {segundo!r}"
+    )
+    assert "Atividade 1" in segundo
+    assert "matemática" in segundo
+    # E a entrega saiu na ordem em que o Aluno perguntou.
+    assert telegram.textos == [TEXTO_ACK, TEXTO_ACK, "primeira resposta", "segunda resposta"]
+
+
+def test_a_conversa_registra_a_falha_como_parte_do_que_o_aluno_viu(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A `TEXTO_FALHA` entra no histórico, e o turno seguinte sabe que houve falha.
+
+    Sem isso, o histórico mostraria ao modelo uma conversa em que a pergunta do Aluno
+    foi seguida de uma resposta que não veio — e o modelo tenderia a responder como se
+    a pergunta anterior tivesse sido atendida. O histórico não pode divergir da conversa
+    que o Aluno teve, e ele viu a mensagem de falha.
+    """
+    telegram = TelegramFalso()
+    registro = RegistroDeConversas(str(tmp_path / "conversas.db"))
+    ModeloQueEspelha.prompts = []
+    try:
+        monkeypatch.setattr(webhook, "ClienteOllama", ModeloQueFalha)
+        app = _app(telegram, registro=registro, executor=None)
+        _postar(app, _update_de(41, "qual o prazo da Atividade 1?"))
+        monkeypatch.setattr(webhook, "ClienteOllama", ModeloQueEspelha)
+        _postar(app, _update_de(41, "e a de matemática?"))
+        # A conversa é lida antes do `fechar`: ler depois é ler um registro fechado,
+        # e o teste passaria a estar exercitando o `sqlite3` e não o turno.
+        historico = registro.historico(41)
+    finally:
+        registro.fechar()
+        telegram.fechar()
+
+    assert [(m.papel, m.texto) for m in historico] == [
+        ("aluno", "qual o prazo da Atividade 1?"),
+        ("sau", TEXTO_FALHA),
+        ("aluno", "e a de matemática?"),
+        ("sau", "primeira resposta"),
+    ], f"a conversa gravada não é a que o Aluno teve: {historico}"
+    assert TEXTO_FALHA in ModeloQueEspelha.prompts[0], (
+        f"o turno seguinte não viu a falha anterior: {ModeloQueEspelha.prompts[0]!r}"
+    )
+
+
 # --- Payload inválido ---
 
 
@@ -1012,7 +1301,11 @@ def test_webhook_falha_de_rede_nao_vira_5xx(caplog: pytest.LogCaptureFixture) ->
         with caplog.at_level(logging.ERROR, logger=LOGGER):
             resposta = _postar(
                 criar_app(
-                    carregar_configuracao(_ENV_PADRAO), cliente, _sem_turno, _sincrono
+                    carregar_configuracao(_ENV_PADRAO),
+                    cliente,
+                    _registro_de_teste(),
+                    _sem_turno,
+                    _sincrono,
                 ),
                 UPDATE_DO_ALUNO,
             )
@@ -1078,7 +1371,11 @@ def test_sem_token_o_acuse_e_registrado_como_ausente(
         with caplog.at_level(logging.ERROR, logger=LOGGER):
             _postar(
                 criar_app(
-                    carregar_configuracao({}), telegram.cliente, _sem_turno, _sincrono
+                    carregar_configuracao({}),
+                    telegram.cliente,
+                    _registro_de_teste(),
+                    _sem_turno,
+                    _sincrono,
                 ),
                 UPDATE_DO_ALUNO,
             )

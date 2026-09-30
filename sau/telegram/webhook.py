@@ -30,6 +30,7 @@ from flask import Flask, Response, jsonify, request
 
 from sau.config import Configuracao, carregar_configuracao
 from sau.graph.graph import executar_turno
+from sau.graph.state import RegistroDeConversas
 from sau.inference.ollama import ClienteOllama, ErroDeInferencia
 
 logger = logging.getLogger(__name__)
@@ -207,11 +208,22 @@ def enviar_mensagem(
         )
 
 
-ExecutorTurno = Callable[[Configuracao, int, str, "httpx.Client | None"], None]
-"""O que roda um turno: recebe a configuração, o chat do Aluno e a mensagem dele,
-e é responsável por entregar a resposta — ou a mensagem de falha. É injetável
-porque o turno é o passo que o teste precisa controlar, e um `threading.Thread`
-de verdade é o que torna isso impossível de afirmar."""
+ExecutorTurno = Callable[
+    [Configuracao, int, str, "RegistroDeConversas", "httpx.Client | None"],
+    None,
+]
+"""O que roda um turno: recebe a configuração, o chat do Aluno, a mensagem dele e o
+registro de conversas, e é responsável por gravar a conversa e por entregar a
+resposta — ou a mensagem de falha. É injetável porque o turno é o passo que o teste
+precisa controlar, e um `threading.Thread` de verdade é o que torna isso impossível
+de afirmar.
+
+O `registro` entra no executor e não numa closure porque o turno roda numa thread
+criada depois do request: a conversa precisa ser resolvida **dentro** da thread, no
+momento do turno, e não no momento em que o `agendar` foi chamado. Uma conversa
+montada no request e passada por valor carregaria um histórico velho e, pior, não
+seria o mesmo objeto que segura a fila.
+"""
 
 
 def _agendar(acao: Callable[[], None]) -> None:
@@ -231,9 +243,25 @@ def _processar_turno(
     config: Configuracao,
     chat_id: int,
     texto: str,
+    registro: RegistroDeConversas,
     client: httpx.Client | None = None,
 ) -> None:
     """Roda o grafo do turno e entrega ao Aluno a resposta, ou a mensagem de falha.
+
+    O turno inteiro acontece dentro de `conversa.em_ordem()`, e a conversa é resolvida
+    aqui dentro e não no request: a fila por conversa só existe se o turno N souber
+    qual é a conversa do Aluno, e o `chat_id` do update é a única coisa que sabe
+    disso. Resolver antes de agendar daria uma conversa possivelmente já expirada
+    e, pior, um objeto de fila que não é o mesmo que o registro segura.
+
+    Dentro da fila, a ordem das três coisas é o que faz o histórico ser a conversa
+    que o Aluno teve:
+
+    1. **lê** o histórico — é o que o modelo vai ver como conversa anterior;
+    2. **grava a mensagem do Aluno**, antes do grafo, porque se o turno falhar a
+       pergunta foi dada e é parte da conversa de qualquer jeito;
+    3. **grava a resposta entregue**, depois da entrega ser montada, e inclusive a
+       `TEXTO_FALHA` — o histórico não pode divergir do que o Aluno leu.
 
     O `ClienteOllama` é montado aqui, com o `OLLAMA_TIMEOUT` da configuração: o
     `webhook` não roda a checagem de pré-requisito do `bot` (ADR-0002), e essa é
@@ -255,6 +283,11 @@ def _processar_turno(
     O `Exception` largo é o ponto, e o motivo técnico fica inteiro no log, onde
     quem opera o serviço o encontra. O Aluno recebe a mesma frase, porque para ele
     é a mesma coisa: não houve resposta.
+
+    Uma falha de leitura ou escrita do registro também vira `TEXTO_FALHA`, e não
+    sobe: o arquivo de conversas é infraestrutura, e um disco cheio não pode
+    derrubar o canal do Telegram — que ainda acuseja e ainda precisa atender quem
+    não depende de histórico nenhum para a primeira pergunta.
     """
     cliente = ClienteOllama(
         config.ollama_base_url,
@@ -263,27 +296,54 @@ def _processar_turno(
     )
     inicio = time.perf_counter()
     try:
-        entrega = executar_turno(cliente, texto)
-    except ErroDeInferencia as err:
-        # `TempoEsgotadoError` é subclasse: o timeout cai aqui com o motivo certo
-        # no log e a mesma frase para o Aluno.
-        logger.error("O turno do Aluno %s falhou: %s", chat_id, err)
-        entrega, desfecho = TEXTO_FALHA, "falha do modelo"
+        conversa = registro.conversa(chat_id)
+        with conversa.em_ordem():
+            historico = conversa.historico()
+            conversa.registrar_do_aluno(texto, time.time())
+            try:
+                entrega = executar_turno(cliente, texto, historico)
+            except ErroDeInferencia as err:
+                # `TempoEsgotadoError` é subclasse: o timeout cai aqui com o motivo
+                # certo no log e a mesma frase para o Aluno.
+                logger.error("O turno do Aluno %s falhou: %s", chat_id, err)
+                entrega, desfecho = TEXTO_FALHA, "falha do modelo"
+            except Exception:
+                logger.exception(
+                    "O turno do Aluno %s falhou por um erro que não é do modelo.", chat_id
+                )
+                entrega, desfecho = TEXTO_FALHA, "erro inesperado"
+            else:
+                if entrega.strip():
+                    desfecho = "resposta do modelo"
+                else:
+                    # Resposta vazia não é erro do `ClienteOllama`: ele entrega o que
+                    # veio, e o Ollama devolve `response: ""` com `done: true` quando o
+                    # modelo para sem escrever nada. Mandar esse vazio ao Telegram é pior
+                    # do que falhar — o `sendMessage` é recusado com 400 e o Aluno fica
+                    # com o acuse e nenhum sinal do motivo. A mesma frase cobre os três
+                    # jeitos de não responder.
+                    logger.error(
+                        "O turno do Aluno %s voltou do modelo sem texto nenhum.", chat_id
+                    )
+                    entrega, desfecho = TEXTO_FALHA, "resposta vazia"
+
+            # A resposta entregue vai para o histórico **dentro** da fila e antes do
+            # envio. A ordem é o que importa: se o registro falhasse depois do envio, o
+            # Aluno leria uma resposta que não está no histórico, e o turno seguinte
+            # mostraria ao modelo uma conversa que ele não teve.
+            conversa.registrar_do_sau(entrega, time.time())
     except Exception:
-        logger.exception("O turno do Aluno %s falhou por um erro que não é do modelo.", chat_id)
-        entrega, desfecho = TEXTO_FALHA, "erro inesperado"
-    else:
-        if entrega.strip():
-            desfecho = "resposta do modelo"
-        else:
-            # Resposta vazia não é erro do `ClienteOllama`: ele entrega o que veio,
-            # e o Ollama devolve `response: ""` com `done: true` quando o modelo
-            # para sem escrever nada. Mandar esse vazio ao Telegram é pior do que
-            # falhar — o `sendMessage` é recusado com 400 e o Aluno fica com o
-            # acuse e nenhum sinal do motivo. A mesma frase cobre os três jeitos
-            # de não responder.
-            logger.error("O turno do Aluno %s voltou do modelo sem texto nenhum.", chat_id)
-            entrega, desfecho = TEXTO_FALHA, "resposta vazia"
+        # Falha do registro de conversas: disco cheio, arquivo corrompido, caminho
+        # sem permissão. O Aluno ainda leva o acuse e ainda recebe `TEXTO_FALHA`, e o
+        # motivo técnico vai inteiro no log. O canal do Telegram não pode cair porque
+        # o histórico não pôde ser lido — foi o que o ADR-0001 deixou escrito: confirmar
+        # o recebimento é requisito, não polimento.
+        logger.exception(
+            "O turno do Aluno %s falhou antes de entregar: o registro de conversas "
+            "não respondeu.",
+            chat_id,
+        )
+        entrega, desfecho = TEXTO_FALHA, "falha do registro"
 
     # Uma entrega só, e uma linha só: os três jeitos de não responder convergem
     # para a `TEXTO_FALHA` antes de sair daqui, e o que difere entre eles — o
@@ -305,6 +365,7 @@ def _processar_turno(
 def _atender_webhook(
     config: Configuracao,
     client: httpx.Client | None,
+    registro: RegistroDeConversas,
     executor: ExecutorTurno,
     agendar: Callable[[Callable[[], None]], None],
 ) -> RespostaWebhook:
@@ -365,7 +426,9 @@ def _atender_webhook(
         return jsonify({"status": "ok"}), 200
 
     def iniciar() -> None:
-        executor(config, chat_id, texto, client)
+        # O registro vai por parâmetro e a conversa não: `registro.conversa(chat_id)`
+        # é chamado dentro do turno, na thread, e é aí que a fila precisa existir.
+        executor(config, chat_id, texto, registro, client)
 
     agendar(iniciar)
     return jsonify({"status": "ok"}), 200
@@ -374,6 +437,7 @@ def _atender_webhook(
 def criar_app(
     config: Configuracao,
     client: httpx.Client | None = None,
+    registro: RegistroDeConversas | None = None,
     executor: ExecutorTurno | None = None,
     agendar: Callable[[Callable[[], None]], None] | None = None,
 ) -> Flask:
@@ -388,19 +452,27 @@ def criar_app(
     diferentes — `executor` é o callable injetado, `executar_turno` é a função
     que chama o modelo — e a armadilha é rara o bastante para o nome não ser o mesmo.
 
-    `executor` e `agendar` existem para o teste afirmar duas coisas que com a
-    thread real não são afirmáveis: que o turno começa depois do acuse, e que o
-    turno acontece. Com a thread de verdade, o turno pode rodar depois do fim do
-    teste, ou nunca rodar, e a suíte passaria sem provar nada. Os dois padrões
-    são o de serviço; só a substituição é do teste.
+    `registro`, `executor` e `agendar` existem para o teste afirmar três coisas que
+    com a thread real e o arquivo real não são afirmáveis: que o turno começa depois
+    do acuse, que o turno acontece, e que a conversa do Aluno sobrevive ao teste sem
+    deixar `conversas.db` na raiz do repositório. Os padrões são o de serviço; só a
+    substituição é do teste.
+
+    Sem `registro`, o app monta o seu a partir da configuração — `CONVERSA_CAMINHO` e
+    `CONVERSA_TTL_MINUTOS` — e é o que faz `python -m sau.telegram` funcionar no host
+    sem nenhuma configuração. O compose aponta o caminho para o volume nomeado, que é
+    o que faz o histórico sobreviver ao `docker compose down`.
     """
+    registro_do_turno = registro or RegistroDeConversas(
+        config.conversa_caminho, ttl_minutos=config.conversa_ttl_minutos
+    )
     rodar_turno = executor or _processar_turno
     disparar = agendar or _agendar
     app = Flask(__name__)
 
     @app.post("/webhook")
     def webhook() -> RespostaWebhook:
-        return _atender_webhook(config, client, rodar_turno, disparar)
+        return _atender_webhook(config, client, registro_do_turno, rodar_turno, disparar)
 
     return app
 
@@ -440,6 +512,11 @@ def main() -> None:
     logger.info("S.A.U. - webhook do Telegram")
     logger.info("Endpoint: POST /webhook na porta %d", config.telegram_webhook_port)
     logger.info("Modelo do turno: %s em %s", config.ollama_model, config.ollama_base_url)
+    logger.info(
+        "Conversas em %s, expirando depois de %d minutos sem contato.",
+        config.conversa_caminho,
+        config.conversa_ttl_minutos,
+    )
     logger.info(
         "URL pública do túnel: registre com setWebhook antes de usar. "
         "O Telegram só entrega em 443, 80, 88 e 8443, então o túnel precisa ser HTTPS."
