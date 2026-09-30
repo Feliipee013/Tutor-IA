@@ -50,6 +50,7 @@ agente Implementar localizar o ponto de impacto sem varrer o repositório inteir
 | `docs/sprints/` | plano legível da 1.1 e da 1.2 | sim |
 | `docs/medicao-modelo/` | a sondagem, o script de medição e a saída de cada máquina — **issue #3** | sim |
 | `docs/tempo-primeira-resposta.md` | o tempo de primeira resposta na GTX 1650 do ADR-0002, com as condições e a nota dos números antigos da RX 7600 — **issue #7** | sim |
+| `docs/relato-1.1.md` | a página de relato da 1.1: a régua declarada, as duas taxas e as limitações. Os números dependem da bateria rodada — **issue #13** | sim |
 | `docs/limitacoes.md` | documento de limitações do modelo — **issue #14** | não |
 
 ## `docs/medicao-modelo/` — a evidência da escolha do modelo
@@ -98,8 +99,8 @@ grafo, não como serviço à parte.
 | --- | --- | --- | --- |
 | `perguntas-teste/` | as 10 Perguntas-teste, com o comportamento esperado de cada uma | #6 | sim |
 | `corpus/` | os quatro documentos autorados, um por categoria, com as contradições plantadas | P1 | não |
-| `outputs/` | evidência bruta do harness: as rodadas são rascunho ignorado, as linhas de base entram no repositório | #12 | não |
-| `tests/` | suíte `pytest`, com `test_config.py` e `test_prereqs.py` da #4, `test_webhook.py` da #5 (o caminho do turno da #8, o isolamento por Aluno da #9 e a sentinela que afasta a persona da conversa, que ele precisa desde que a persona entra em todo prompt na #10), `test_graph.py` da #8, `test_state.py` da #9, `test_ollama.py` e `test_fumaca.py` da #7, `test_persona.py` da #10 e `test_harness.py` da #12 | #4, #5, #7, #8, #9, #10, #12 | sim |
+| `outputs/` | evidência bruta do harness: as rodadas são rascunho ignorado, as linhas de base entram no repositório. Desde a #13 a mesma exceção preserva os três artefatos da linha de base juntos: a rodada, o julgamento e o JSON das taxas | #12, #13 | não |
+| `tests/` | suíte `pytest`, com `test_config.py` e `test_prereqs.py` da #4, `test_webhook.py` da #5 (o caminho do turno da #8, o isolamento por Aluno da #9 e a sentinela que afasta a persona da conversa, que ele precisa desde que a persona entra em todo prompt na #10), `test_graph.py` da #8, `test_state.py` da #9, `test_ollama.py` e `test_fumaca.py` da #7, `test_persona.py` da #10, `test_harness.py` da #12 e `test_metrics.py` da #13 | #4, #5, #7, #8, #9, #10, #12, #13 | sim |
 
 O `corpus/` é quebrado em unidades de recuperação pela própria equipe: cada
 `##` dentro de um documento responde a uma Pergunta Frequente, então **o chunk é
@@ -110,7 +111,7 @@ a seção** e o chunking vira uma escolha da equipe, não uma heurística.
 | Caminho | O que faz | Ticket | Existe |
 | --- | --- | --- | --- |
 | `harness/run.py` | roda as 10 Perguntas-teste, 3 repetições cada, e grava os outputs brutos com as condições da medição | #12 | sim |
-| `harness/metrics.py` | taxa de não-saber e taxa de recusa de Atividade | #13 | não |
+| `harness/metrics.py` | taxa de não-saber e taxa de recusa de Atividade, com a folha de julgamento humano e a evidência de cada contagem | #13 | sim |
 | `harness/casos.py` | os cinco casos de alucinação, com o motivo do erro de cada um | P2 | não |
 
 O harness é a régua das duas sprints: a 1.2 roda **o mesmo** harness sobre
@@ -121,9 +122,17 @@ A evidência que ele grava vai para `outputs/`, e a pasta só passa a existir na
 primeira rodada: `harness/run.py` cria na hora. As rodadas são ignoradas pelo
 git porque são resultado descartável, com uma exceção — `outputs/baseline-*.json`
 entra, e é o que permite comparar a 1.2 com a 1.1 em vez de afirmar que a
-comparação foi feita. O que a comparação mede só é conferível depois, lendo do
-próprio arquivo o modelo, a alocação e o `sha256` do prompt: são esses campos
-que separam "o RAG mudou" de "a persona ou a máquina mudou".
+comparação foi feita. Desde a #13 a exceção cobre os três artefatos da linha de
+base de uma vez, e pela mesma razão: a rodada sem o julgamento é output cru, e o
+julgamento sem as taxas é opinião. O que a comparação mede só é conferível
+depois, lendo do próprio arquivo o modelo, a alocação e o `sha256` do prompt: são
+esses campos que separam "o RAG mudou" de "a persona ou a máquina mudou".
+
+O `harness/metrics.py` é a metade do harness que **não** mede o modelo: ele
+transforma o julgamento humano da folha em número com evidência, e por isso não
+fala com o Ollama nem importa nada de `sau/`. O veredito é de uma pessoa
+(decisão da #6) — `metrics.py` escreve a folha com o `conforme quando` de cada
+Pergunta-teste ao lado do output, e quem decide é quem lê.
 
 O `harness/run.py` também é o único lugar do repositório que **mede**: ele trava
 `temperature 0`, uma `seed` fixa e `num_predict 256`, e registra o que usou.

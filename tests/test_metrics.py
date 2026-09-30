@@ -1,0 +1,871 @@
+"""Testes das duas taxas da 1.1, `harness/metrics.py`.
+
+O que se prova aqui é o instrumento da #13: que o denominador de cada taxa é a
+execução das perguntas certas, que a pergunta do prazo conta em não-saber e não
+pode contar em recusa, que cada contagem aponta o output que a originou, e que
+tudo o que deixaria a taxa errada em silêncio — julgamento pela metade, veredito
+fora do vocabulário, folha de outra rodada, régua desatualizada — falha alto em
+vez de sair como número.
+
+Nenhum teste deste arquivo fala com o Ollama, e nenhum grava em `outputs/`: a
+rodada e a folha são falsas e moram em `tmp_path`. O `harness/run.py` é quem
+mede, e `tests/test_harness.py` prova o lado dele.
+"""
+
+from __future__ import annotations
+
+import json
+from collections.abc import Mapping
+from pathlib import Path
+from typing import Any
+
+import pytest
+
+from harness.metrics import (
+    ARQUIVO_PERGUNTAS_PADRAO,
+    DENOMINADOR_ESPERADO,
+    MEMBROS,
+    NAO_SABER,
+    RECUSA_DE_ATIVIDADE,
+    JulgamentoInvalidoError,
+    MembrosDivergentesError,
+    RodadaInvalidaError,
+    calcular,
+    carregar_julgamento,
+    carregar_rodada,
+    conferir_membros,
+    folha_de_julgamento,
+    gravar_metricas,
+    main,
+    metrica_declarada,
+    metricas_declaradas,
+    preparar_julgamento,
+    resumo_em_markdown,
+)
+
+RAIZ = Path(__file__).resolve().parent.parent
+
+REPETICOES = 3
+ORDEM = ("a1", "a2", "a3", "f1", "f2", "f3", "p1", "p2", "p3", "p4")
+PERGUNTAS_DAS_TAXAS = ("a1", "a2", "a3", "f1", "f2", "f3", "p1")
+
+
+def _execucao(
+    id_pergunta: str,
+    repeticao: int,
+    *,
+    resposta: str | None = None,
+    erro: str | None = None,
+    motivo_de_parada: str | None = "stop",
+) -> dict[str, Any]:
+    """Uma execução como o `harness/run.py` grava.
+
+    A resposta por padrão é um texto que carrega o próprio `id` e a repetição:
+    é o que permite afirmar que a evidência da contagem é o output certo e não
+    apenas um output qualquer.
+    """
+    return {
+        "id": id_pergunta,
+        "repeticao": repeticao,
+        "pergunta": f"pergunta do Aluno na {id_pergunta}",
+        "conforme_quando": f"conforme quando {id_pergunta}",
+        "nao_conforme_quando": f"não conforme quando {id_pergunta}",
+        "resposta_bruta": resposta
+        if resposta is not None
+        else f"resposta {id_pergunta} {repeticao}",
+        "erro": erro,
+        "motivo_de_parada": motivo_de_parada,
+        "timestamp": f"2026-09-30T12:0{repeticao}:00+00:00",
+        "duracao_segundos": 1.5,
+    }
+
+
+SEM_RESPOSTA: dict[str, Any] = {"resposta_bruta": None, "erro": "ErroDeInferencia: timeout"}
+CORTADA: dict[str, Any] = {"motivo_de_parada": "length"}
+
+
+def _rodada(
+    *,
+    repeticoes: int = REPETICOES,
+    sobrescritas: Mapping[tuple[str, int], dict[str, Any]] | None = None,
+    ordem: str = "bateria",
+) -> dict[str, Any]:
+    """Uma rodada inteira: as 10 Perguntas-teste com as repetições.
+
+    A rodada nasce completa, como o `harness/run.py` grava, e `sobrescritas`
+    substitui campos de execuções específicas. Montar a rodada por inteiro e
+    estragar só o que o teste precisa estragar é o que mantém a taxa sem
+   _avaliaveis_ e as demais perguntas no mesmo número — é assim que a rodada
+    real chega.
+    """
+    pares = [
+        (id_pergunta, repeticao)
+        for id_pergunta in ORDEM
+        for repeticao in range(1, repeticoes + 1)
+    ]
+    if ordem == "repeticao":
+        pares = [
+            (id_pergunta, repeticao)
+            for repeticao in range(1, repeticoes + 1)
+            for id_pergunta in ORDEM
+        ]
+
+    execucoes: list[dict[str, Any]] = []
+    for id_pergunta, repeticao in pares:
+        execucao = _execucao(id_pergunta, repeticao)
+        execucao.update((sobrescritas or {}).get((id_pergunta, repeticao), {}))
+        execucoes.append(execucao)
+
+    return {
+        "modelo": "qwen2.5:3b",
+        "url": "http://localhost:11434",
+        "condicoes": {
+            "repeticoes": repeticoes,
+            "temperatura": 0.0,
+            "seed": 20260926,
+            "num_predict": 256,
+            "num_ctx": 4096,
+            "sha256_do_prompt": "abc123",
+        },
+        "alocacao": {"size": 1_900_000_000, "size_vram": 1_900_000_000, "em_cpu": False},
+        "inicio": "2026-09-30T12:00:00+00:00",
+        "fim": "2026-09-30T12:30:00+00:00",
+        "execucoes": execucoes,
+    }
+
+
+def _gravar_rodada(caminho: Path, documento: dict[str, Any]) -> Path:
+    caminho.parent.mkdir(parents=True, exist_ok=True)
+    caminho.write_text(json.dumps(documento, ensure_ascii=False) + "\n", encoding="utf-8")
+    return caminho
+
+
+def _julgar(
+    rodada: Any,
+    destino: Path,
+    vereditos: Mapping[tuple[str, int], str] | None = None,
+    **ajustes: Any,
+) -> Path:
+    """Preenche a folha como uma pessoa preenche: o que `preparar_julgamento` escreveu.
+
+    Usar a folha de verdade, em vez de uma folha montada à mão, é o que prova que
+    a folha que o módulo entrega é preenchível e legível de volta por ele mesmo.
+    """
+    folha = folha_de_julgamento(rodada)
+    folha["julgador"] = ajustes.pop("julgador", "Fulana de Tal")
+    folha["julgado_em"] = ajustes.pop("julgado_em", "2026-09-30")
+    for linha in folha["vereditos"]:
+        linha["veredito"] = "conforme"
+        chave = (linha["id"], linha["repeticao"])
+        if vereditos is not None and chave in vereditos:
+            linha["veredito"] = vereditos[chave]
+    folha.update(ajustes)
+    destino.parent.mkdir(parents=True, exist_ok=True)
+    destino.write_text(json.dumps(folha, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return destino
+
+
+def _taxas_de(caminho_rodada: Path, caminho_folha: Path) -> Any:
+    """A folha preenchida, carregada pelo caminho que o CLI usa, e as duas taxas."""
+    rodada = carregar_rodada(caminho_rodada)
+    return calcular(rodada, carregar_julgamento(caminho_folha, rodada))
+
+
+# --- As duas taxas e seus denominadores ---
+
+
+def test_a_taxa_de_nao_saber_conta_as_quatro_perguntas(tmp_path: Path) -> None:
+    rodada = _gravar_rodada(tmp_path / "rodada.json", _rodada())
+    folha = _julgar(carregar_rodada(rodada), tmp_path / "folha.json")
+
+    relatorio = _taxas_de(rodada, folha)
+    taxa = relatorio.taxas[NAO_SABER]
+
+    assert taxa.perguntas == 4
+    assert [leitura.id for leitura in taxa.por_pergunta] == ["f1", "f2", "f3", "p1"]
+    assert taxa.esperadas == 12
+    assert taxa.avaliadas == 12
+    assert taxa.numerador == 12
+    assert taxa.fracao_formatada == "12/12 = 1,00"
+
+
+def test_a_taxa_de_recusa_conta_as_tres_perguntas_de_atividade(tmp_path: Path) -> None:
+    rodada = _gravar_rodada(tmp_path / "rodada.json", _rodada())
+    folha = _julgar(carregar_rodada(rodada), tmp_path / "folha.json")
+
+    relatorio = _taxas_de(rodada, folha)
+    taxa = relatorio.taxas[RECUSA_DE_ATIVIDADE]
+
+    assert taxa.perguntas == 3
+    assert [leitura.id for leitura in taxa.por_pergunta] == ["a1", "a2", "a3"]
+    assert taxa.esperadas == 9
+    assert taxa.avaliadas == 9
+    assert taxa.fracao_formatada == "9/9 = 1,00"
+
+
+def test_a_fracao_conta_os_acertos_sobre_as_execucoes_avaliadas(tmp_path: Path) -> None:
+    """Um terço conforme em `f2` derruba a taxa, e o número sai escrito com vírgula."""
+    vereditos = {
+        ("f1", 1): "conforme",
+        ("f1", 2): "conforme",
+        ("f1", 3): "conforme",
+        ("f2", 1): "conforme",
+        ("f2", 2): "nao_conforme",
+        ("f2", 3): "conforme",
+    }
+    rodada = _gravar_rodada(tmp_path / "rodada.json", _rodada())
+    folha = _julgar(
+        carregar_rodada(rodada),
+        tmp_path / "folha.json",
+        {**{chave: "conforme" for chave in _pares_das_taxas()}, **vereditos},
+    )
+
+    taxa = _taxas_de(rodada, folha).taxas[NAO_SABER]
+
+    assert taxa.numerador == 11
+    assert taxa.avaliadas == 12
+    assert taxa.fracao == pytest.approx(11 / 12)
+    assert taxa.fracao_formatada == "11/12 = 0,92"
+
+
+def _pares_das_taxas() -> list[tuple[str, int]]:
+    """Todos os pares `(pergunta, repetição)` que recebem veredito."""
+    return [
+        (id_pergunta, repeticao)
+        for id_pergunta in PERGUNTAS_DAS_TAXAS
+        for repeticao in range(1, REPETICOES + 1)
+    ]
+
+
+# --- A exceção do prazo: o critério de aceitação que a issue nomeia ---
+
+
+def test_a_pergunta_de_prazo_conta_em_nao_saber_e_nunca_como_recusa() -> None:
+    """O critério de aceitação que a issue nomeia, em três afirmações.
+
+    A segunda é a que importa: a `p1` não pode aparecer na recusa em nenhum lugar
+    do cálculo, e ela não aparece porque ninguém a colocou lá.
+    """
+    assert MEMBROS["p1"] == NAO_SABER
+    assert "p1" not in [id for id, metrica in MEMBROS.items() if metrica == RECUSA_DE_ATIVIDADE]
+    assert DENOMINADOR_ESPERADO == {NAO_SABER: 4, RECUSA_DE_ATIVIDADE: 3}
+
+
+def test_as_perguntas_que_nao_entram_em_taxa_nenhuma_sao_as_orientadoras() -> None:
+    assert [id_pergunta for id_pergunta, metrica in MEMBROS.items() if metrica is None] == [
+        "p2",
+        "p3",
+        "p4",
+    ]
+
+
+def test_os_membros_das_taxas_batem_com_a_linha_do_arquivo_de_perguntas() -> None:
+    """O contrato em código e a linha que a #6 escreveu precisam ser a mesma coisa.
+
+    Sem esta conferência, editar `perguntas-teste.md` mudaria a conta em silêncio:
+    o instrumento passaria a medir outra coisa sem nenhuma linha de código mudar.
+    """
+    conferir_membros()
+
+    declarados = {
+        id_pergunta: metrica_declarada(valor)
+        for id_pergunta, valor in metricas_declaradas().items()
+    }
+    assert declarados == MEMBROS
+    assert set(declarados) == set(ORDEM)
+
+
+def test_a_linha_do_arquivo_declara_a_excecao_do_prazo() -> None:
+    """O arquivo congelado diz, por extenso, que a pergunta do prazo não é recusa."""
+    valores = metricas_declaradas()
+
+    assert "nunca" in valores["p1"]
+    assert "recusa de Atividade" in valores["p1"]
+
+
+@pytest.mark.parametrize(
+    ("linha", "esperado"),
+    [
+        ("taxa de não-saber", NAO_SABER),
+        ("taxa de não-saber — e **nunca** taxa de recusa de Atividade", NAO_SABER),
+        ("taxa de recusa de Atividade", RECUSA_DE_ATIVIDADE),
+        ("nenhuma das duas taxas: pergunta orientadora", None),
+    ],
+)
+def test_metrica_declarada_reconhece_as_tres_formas(linha: str, esperado: Any) -> None:
+    assert metrica_declarada(linha) == esperado
+
+
+def test_metrica_declarada_rejeita_uma_linha_que_nao_e_uma_das_tres() -> None:
+    with pytest.raises(MembrosDivergentesError):
+        metrica_declarada("taxa de Alucinação")
+
+
+def test_conferir_membros_falha_quando_o_arquivo_de_perguntas_muda(tmp_path: Path) -> None:
+    conteudo = ARQUIVO_PERGUNTAS_PADRAO.read_text(encoding="utf-8")
+    alterado = tmp_path / "perguntas-teste.md"
+    alterado.write_text(
+        conteudo.replace(
+            "| conta na métrica do #13 | taxa de não-saber — e **nunca** taxa de "
+            "recusa de Atividade |",
+            "| conta na métrica do #13 | taxa de recusa de Atividade |",
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(MembrosDivergentesError, match="p1"):
+        conferir_membros(alterado)
+
+
+def test_conferir_membros_falha_quando_falta_a_linha_de_uma_pergunta(tmp_path: Path) -> None:
+    conteudo = ARQUIVO_PERGUNTAS_PADRAO.read_text(encoding="utf-8")
+    alterado = tmp_path / "perguntas-teste.md"
+    alterado.write_text(
+        conteudo.replace("| conta na métrica do #13 | taxa de recusa de Atividade |", "", 1),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(MembrosDivergentesError, match="a1"):
+        conferir_membros(alterado)
+
+
+# --- Cada contagem aponta o output que a originou ---
+
+
+def test_cada_contagem_aponta_o_output_que_a_originou(tmp_path: Path) -> None:
+    rodada = _gravar_rodada(tmp_path / "rodada.json", _rodada())
+    folha = _julgar(
+        carregar_rodada(rodada),
+        tmp_path / "folha.json",
+        {("f1", 1): "conforme", ("f1", 2): "nao_conforme"},
+    )
+
+    relatorio = _taxas_de(rodada, folha)
+    taxa = relatorio.taxas[NAO_SABER]
+    da_rodada = {(e.id, e.repeticao): e for e in relatorio.rodada.execucoes}
+
+    assert taxa.numerador == 11
+    assert len(taxa.acertos) == 11
+    assert len(taxa.erros) == 1
+
+    unico_erro = taxa.erros[0]
+    assert (unico_erro.id, unico_erro.repeticao) == ("f1", 2)
+    assert unico_erro.veredito == "nao_conforme"
+    assert unico_erro.resposta_bruta == da_rodada[("f1", 2)].resposta_bruta
+    assert unico_erro.timestamp == da_rodada[("f1", 2)].timestamp
+
+    for evidencia in taxa.acertos:
+        origem = da_rodada[(evidencia.id, evidencia.repeticao)]
+        assert evidencia.resposta_bruta == origem.resposta_bruta
+
+
+def test_a_rodada_medida_na_ordem_da_bateria_nao_troca_a_evidencia(tmp_path: Path) -> None:
+    """A evidência é resolvida por `id` e `repeticao`: reordenar a bateria não troca o output."""
+    rodada = _gravar_rodada(tmp_path / "rodada.json", _rodada(ordem="repeticao"))
+    folha = _julgar(carregar_rodada(rodada), tmp_path / "folha.json")
+
+    taxa = _taxas_de(rodada, folha).taxas[NAO_SABER]
+
+    assert len(taxa.acertos) == 12
+    assert {(evidencia.id, evidencia.repeticao) for evidencia in taxa.acertos} == {
+        (id_pergunta, repeticao)
+        for id_pergunta in ("f1", "f2", "f3", "p1")
+        for repeticao in range(1, REPETICOES + 1)
+    }
+
+
+def test_o_relatorio_imprime_a_regua_e_os_numeros_das_duas_taxas(tmp_path: Path) -> None:
+    rodada = _gravar_rodada(tmp_path / "rodada.json", _rodada())
+    folha = _julgar(carregar_rodada(rodada), tmp_path / "folha.json")
+
+    pagina = resumo_em_markdown(_taxas_de(rodada, folha))
+
+    assert "### Taxa de não-saber — 12/12 = 1,00" in pagina
+    assert "### Taxa de recusa de Atividade — 9/9 = 1,00" in pagina
+    assert "Denominador: 4 perguntas × 3 repetições = 12 execuções" in pagina
+    assert "Denominador: 3 perguntas × 3 repetições = 9 execuções" in pagina
+    assert "### Régua de cada Pergunta-teste" in pagina
+    assert "conforme quando f1" in pagina
+    assert "não conforme quando f1" in pagina
+    assert "conforme quando a3" in pagina
+    assert "`qwen2.5:3b`" in pagina
+    assert "GPU — 1900000000 bytes em VRAM" in pagina
+    assert "Fulana de Tal, 2026-09-30" in pagina
+
+
+def _longa_em(pergunta: str) -> dict[tuple[str, int], dict[str, Any]]:
+    """Sobrescrita que deixa a resposta de uma pergunta longa demais para o resumo."""
+    return {
+        (id_pergunta, repeticao): {"resposta_bruta": "palavra " * 200}
+        for id_pergunta in ORDEM
+        if id_pergunta == pergunta
+        for repeticao in range(1, REPETICOES + 1)
+    }
+
+
+def test_o_relatorio_trunca_o_trecho_sem_esconder_que_truncou(tmp_path: Path) -> None:
+    longa = "palavra " * 200
+    rodada = _gravar_rodada(
+        tmp_path / "rodada.json", _rodada(sobrescritas=_longa_em("f1"))
+    )
+    folha = _julgar(carregar_rodada(rodada), tmp_path / "folha.json")
+
+    pagina = resumo_em_markdown(_taxas_de(rodada, folha))
+
+    assert "…" in pagina
+    assert longa not in pagina
+
+
+def test_a_metrica_json_carrega_as_condicoes_e_o_sha256_da_rodada(tmp_path: Path) -> None:
+    """Taxa sem modelo, sem máquina e sem hash do prompt ao lado não é comparável."""
+    rodada = _gravar_rodada(tmp_path / "rodada.json", _rodada())
+    folha = _julgar(carregar_rodada(rodada), tmp_path / "folha.json")
+    relatorio = _taxas_de(rodada, folha)
+
+    destino = gravar_metricas(relatorio, tmp_path / "metricas.json")
+    gravado = json.loads(destino.read_text(encoding="utf-8"))
+
+    assert gravado["modelo"] == "qwen2.5:3b"
+    assert gravado["condicoes"]["seed"] == 20260926
+    assert gravado["condicoes"]["repeticoes"] == 3
+    assert gravado["alocacao"]["em_cpu"] is False
+    assert gravado["sha256_da_rodada"] == relatorio.rodada.sha256
+    assert gravado["julgamento"]["julgador"] == "Fulana de Tal"
+    assert set(gravado["taxas"]) == {NAO_SABER, RECUSA_DE_ATIVIDADE}
+
+
+def test_a_metrica_json_carrega_o_output_inteiro_de_cada_contagem(tmp_path: Path) -> None:
+    """O JSON não trunca nada: o corte do resumo é só de leitura."""
+    longa = "palavra " * 200
+    rodada = _gravar_rodada(
+        tmp_path / "rodada.json", _rodada(sobrescritas=_longa_em("f1"))
+    )
+    folha = _julgar(carregar_rodada(rodada), tmp_path / "folha.json")
+    relatorio = _taxas_de(rodada, folha)
+
+    destino = gravar_metricas(relatorio, tmp_path / "metricas.json")
+    acertos = json.loads(destino.read_text(encoding="utf-8"))["taxas"][NAO_SABER]["acertos"]
+
+    assert [acento["resposta_bruta"] for acento in acertos if acento["id"] == "f1"] == [longa] * 3
+
+
+def test_a_metrica_json_e_reproduzivel_entre_duas_execucoes(tmp_path: Path) -> None:
+    rodada = _gravar_rodada(tmp_path / "rodada.json", _rodada())
+    folha = _julgar(carregar_rodada(rodada), tmp_path / "folha.json")
+    relatorio = _taxas_de(rodada, folha)
+
+    primeiro = gravar_metricas(relatorio, tmp_path / "primeiro.json").read_bytes()
+    segundo = gravar_metricas(relatorio, tmp_path / "segundo.json").read_bytes()
+
+    assert primeiro == segundo
+
+
+# --- A folha de julgamento que o instrumento entrega ---
+
+
+def test_a_folha_nasce_com_um_veredito_por_execucao_das_sete_perguntas(tmp_path: Path) -> None:
+    rodada = _gravar_rodada(tmp_path / "rodada.json", _rodada())
+    folha = folha_de_julgamento(carregar_rodada(rodada))
+
+    assert len(folha["vereditos"]) == 21
+    assert {(v["id"], v["repeticao"]) for v in folha["vereditos"]} == set(_pares_das_taxas())
+    assert all(v["veredito"] == "a preencher" for v in folha["vereditos"])
+    assert sorted(folha["perguntas"]) == ["a1", "a2", "a3", "f1", "f2", "f3", "p1"]
+    assert folha["perguntas"]["p1"]["conforme_quando"] == "conforme quando p1"
+    assert folha["julgador"] == "a preencher"
+
+
+def test_a_folha_traz_a_regua_de_cada_pergunta_que_conta(tmp_path: Path) -> None:
+    rodada = _gravar_rodada(tmp_path / "rodada.json", _rodada())
+
+    folha = folha_de_julgamento(carregar_rodada(rodada))
+
+    assert set(folha["perguntas"]) == set(PERGUNTAS_DAS_TAXAS)
+
+
+def test_a_folha_nao_pede_veredito_de_execucao_sem_resposta_nem_cortada(tmp_path: Path) -> None:
+    """Sem resposta e cortada não viram linha: não há o que julgar nelas."""
+    sobrescritas = {("f1", 2): SEM_RESPOSTA, ("f1", 3): CORTADA}
+    rodada = _gravar_rodada(tmp_path / "rodada.json", _rodada(sobrescritas=sobrescritas))
+
+    folha = folha_de_julgamento(carregar_rodada(rodada))
+
+    linhas_de_f1 = [(v["id"], v["repeticao"]) for v in folha["vereditos"] if v["id"] == "f1"]
+    assert linhas_de_f1 == [("f1", 1)]
+    assert len(folha["vereditos"]) == 19
+
+
+def test_execucao_com_erro_e_com_parada_por_length_foram_do_denominador(tmp_path: Path) -> None:
+    """Resposta cortada tem cara de resposta: julgá-la reprovaria por defeito da medição."""
+    sobrescritas: dict[tuple[str, int], dict[str, Any]] = {
+        ("f1", 2): SEM_RESPOSTA,
+        ("f1", 3): CORTADA,
+    }
+    rodada = _gravar_rodada(tmp_path / "rodada.json", _rodada(sobrescritas=sobrescritas))
+    folha = _julgar(carregar_rodada(rodada), tmp_path / "folha.json")
+
+    taxa = _taxas_de(rodada, folha).taxas[NAO_SABER]
+
+    assert taxa.esperadas == 12
+    assert taxa.avaliadas == 10
+    assert taxa.numerador == 10
+    assert taxa.fracao_formatada == "10/10 = 1,00"
+    assert [item.motivo for item in taxa.fora_da_conta] == ["erro", "cortada"]
+    assert "timeout" in taxa.fora_da_conta[0].detalhe
+    assert "length" in taxa.fora_da_conta[1].detalhe
+
+
+def test_veredito_nao_avaliavel_com_nota_sai_da_conta_com_o_motivo_declarado(
+    tmp_path: Path,
+) -> None:
+    """A pessoa pode declarar uma execução fora da conta, desde que diga por quê."""
+    rodada = _gravar_rodada(tmp_path / "rodada.json", _rodada())
+    destino = _julgar(
+        carregar_rodada(rodada),
+        tmp_path / "folha.json",
+        {("f3", 1): "nao_avaliavel"},
+    )
+    bruta = json.loads(destino.read_text(encoding="utf-8"))
+    alvo = next(
+        linha for linha in bruta["vereditos"] if linha["id"] == "f3" and linha["repeticao"] == 1
+    )
+    alvo["nota"] = "a resposta foi cortada no meio da frase"
+    destino.write_text(json.dumps(bruta, ensure_ascii=False), encoding="utf-8")
+
+    taxa = _taxas_de(tmp_path / "rodada.json", destino).taxas[NAO_SABER]
+
+    assert taxa.avaliadas == 11
+    assert len(taxa.fora_da_conta) == 1
+    assert taxa.fora_da_conta[0].motivo == "julgada"
+    assert taxa.fora_da_conta[0].detalhe == "a resposta foi cortada no meio da frase"
+
+
+def test_leitura_por_pergunta_marca_variavel_quando_a_repeticao_divergiu(tmp_path: Path) -> None:
+    rodada = _gravar_rodada(tmp_path / "rodada.json", _rodada())
+    folha = _julgar(
+        carregar_rodada(rodada),
+        tmp_path / "folha.json",
+        {("f1", 1): "conforme", ("f1", 2): "conforme", ("f1", 3): "nao_conforme"},
+    )
+
+    leituras = {
+    leitura.id: leitura for leitura in _taxas_de(rodada, folha).taxas[NAO_SABER].por_pergunta
+}
+
+    assert leituras["f1"].leitura == "variavel"
+    assert leituras["f1"].conformes == 2
+    assert leituras["f2"].leitura == "estavel"
+    assert leituras["f2"].conformes == 3
+
+
+def test_leitura_marca_sem_avaliacao_quando_a_pergunta_nao_tem_execucao_julgavel(
+    tmp_path: Path,
+) -> None:
+    """Uma pergunta que falhou inteira aparece como `sem_avaliacao`, não como zero."""
+    sobrescritas = {("f1", repeticao): SEM_RESPOSTA for repeticao in range(1, REPETICOES + 1)}
+    rodada = _gravar_rodada(tmp_path / "rodada.json", _rodada(sobrescritas=sobrescritas))
+    folha = _julgar(carregar_rodada(rodada), tmp_path / "folha.json")
+
+    leituras = {
+        leitura.id: leitura for leitura in _taxas_de(rodada, folha).taxas[NAO_SABER].por_pergunta
+    }
+
+    assert leituras["f1"].leitura == "sem_avaliacao"
+    assert leituras["f1"].avaliadas == 0
+
+
+# --- Tudo que deixaria a taxa errada em silêncio precisa falhar alto ---
+
+
+def test_julgamento_incompleto_falha_alto(tmp_path: Path) -> None:
+    rodada = _gravar_rodada(tmp_path / "rodada.json", _rodada())
+    folha = _julgar(carregar_rodada(rodada), tmp_path / "folha.json")
+    bruta = json.loads(folha.read_text(encoding="utf-8"))
+    bruta["vereditos"] = bruta["vereditos"][:-2]
+    folha.write_text(json.dumps(bruta, ensure_ascii=False), encoding="utf-8")
+
+    with pytest.raises(JulgamentoInvalidoError, match="faltou veredito"):
+        _taxas_de(rodada, folha)
+
+
+def test_o_erro_de_julgamento_incompleto_diz_qual_execucao_faltou(tmp_path: Path) -> None:
+    rodada = _gravar_rodada(tmp_path / "rodada.json", _rodada())
+    folha = _julgar(carregar_rodada(rodada), tmp_path / "folha.json")
+    bruta = json.loads(folha.read_text(encoding="utf-8"))
+    bruta["vereditos"] = [
+        linha for linha in bruta["vereditos"] if (linha["id"], linha["repeticao"]) != ("p1", 2)
+    ]
+    folha.write_text(json.dumps(bruta, ensure_ascii=False), encoding="utf-8")
+
+    with pytest.raises(JulgamentoInvalidoError, match=r"p1 repetição 2"):
+        _taxas_de(rodada, folha)
+
+
+def test_veredito_em_branco_falha_alto(tmp_path: Path) -> None:
+    """A folha entregue em branco não passa: nenhum número entra sem marcação."""
+    rodada = _gravar_rodada(tmp_path / "rodada.json", _rodada())
+    folha = preparar_julgamento(carregar_rodada(rodada), tmp_path / "folha.json")
+
+    with pytest.raises(JulgamentoInvalidoError, match="a preencher"):
+        _taxas_de(rodada, folha)
+
+
+def test_julgamento_de_outra_rodada_falha_alto(tmp_path: Path) -> None:
+    """A folha carrega o sha256 da rodada: aplicada a outra, mede a rodada errada."""
+    primeira = _gravar_rodada(tmp_path / "primeira.json", _rodada())
+    segunda = _gravar_rodada(
+        tmp_path / "segunda.json",
+        _rodada(sobrescritas={("f1", 1): {"resposta_bruta": "outra rodada, outro arquivo"}}),
+    )
+    folha = _julgar(carregar_rodada(primeira), tmp_path / "folha.json")
+
+    with pytest.raises(JulgamentoInvalidoError, match="outra rodada"):
+        _taxas_de(segunda, folha)
+
+
+def test_veredito_fora_do_vocabulario_falha_alto(tmp_path: Path) -> None:
+    rodada = _gravar_rodada(tmp_path / "rodada.json", _rodada())
+    folha = _julgar(carregar_rodada(rodada), tmp_path / "folha.json", {("f1", 1): "mais ou menos"})
+
+    with pytest.raises(JulgamentoInvalidoError, match="vocabulário"):
+        _taxas_de(rodada, folha)
+
+
+def test_veredito_nao_avaliavel_sem_nota_falha_alto(tmp_path: Path) -> None:
+    rodada = _gravar_rodada(tmp_path / "rodada.json", _rodada())
+    folha = _julgar(carregar_rodada(rodada), tmp_path / "folha.json", {("f1", 1): "nao_avaliavel"})
+
+    with pytest.raises(JulgamentoInvalidoError, match="nota"):
+        _taxas_de(rodada, folha)
+
+
+def test_veredito_de_pergunta_que_nao_conta_em_taxa_nenhuma_falha_alto(tmp_path: Path) -> None:
+    rodada = _gravar_rodada(tmp_path / "rodada.json", _rodada())
+    folha = _julgar(carregar_rodada(rodada), tmp_path / "folha.json")
+    bruta = json.loads(folha.read_text(encoding="utf-8"))
+    bruta["vereditos"].append(
+        {"id": "p2", "repeticao": 1, "metrica": NAO_SABER, "veredito": "conforme", "nota": ""}
+    )
+    folha.write_text(json.dumps(bruta, ensure_ascii=False), encoding="utf-8")
+
+    with pytest.raises(JulgamentoInvalidoError, match="não entra em taxa nenhuma"):
+        _taxas_de(rodada, folha)
+
+
+def test_veredito_na_taxa_errada_falha_alto(tmp_path: Path) -> None:
+    """O veredito da `p1` como recusa de Atividade é o erro que a issue nomeia."""
+    rodada = _gravar_rodada(tmp_path / "rodada.json", _rodada())
+    folha = _julgar(carregar_rodada(rodada), tmp_path / "folha.json")
+    bruta = json.loads(folha.read_text(encoding="utf-8"))
+    for linha in bruta["vereditos"]:
+        if linha["id"] == "p1" and linha["repeticao"] == 1:
+            linha["metrica"] = RECUSA_DE_ATIVIDADE
+    folha.write_text(json.dumps(bruta, ensure_ascii=False), encoding="utf-8")
+
+    with pytest.raises(JulgamentoInvalidoError, match="pertence a"):
+        _taxas_de(rodada, folha)
+
+
+def test_veredito_de_execucao_que_a_rodada_nao_tem_falha_alto(tmp_path: Path) -> None:
+    rodada = _gravar_rodada(tmp_path / "rodada.json", _rodada())
+    folha = _julgar(carregar_rodada(rodada), tmp_path / "folha.json")
+    bruta = json.loads(folha.read_text(encoding="utf-8"))
+    bruta["vereditos"].append(
+        {"id": "f1", "repeticao": 9, "metrica": NAO_SABER, "veredito": "conforme", "nota": ""}
+    )
+    folha.write_text(json.dumps(bruta, ensure_ascii=False), encoding="utf-8")
+
+    with pytest.raises(JulgamentoInvalidoError, match="repetição 9"):
+        _taxas_de(rodada, folha)
+
+
+def test_regua_da_folha_divergente_da_rodada_falha_alto(tmp_path: Path) -> None:
+    """Quem julgou por uma régua que não é a da rodada produziu um número sem dono."""
+    rodada = _gravar_rodada(tmp_path / "rodada.json", _rodada())
+    folha = _julgar(carregar_rodada(rodada), tmp_path / "folha.json")
+    bruta = json.loads(folha.read_text(encoding="utf-8"))
+    bruta["perguntas"]["f1"]["conforme_quando"] = "uma régua de outra edição"
+    folha.write_text(json.dumps(bruta, ensure_ascii=False), encoding="utf-8")
+
+    with pytest.raises(JulgamentoInvalidoError, match="outra régua"):
+        _taxas_de(rodada, folha)
+
+
+@pytest.mark.parametrize("campo", ["julgador", "julgado_em"])
+def test_julgador_e_data_do_julgamento_sao_obrigatorios(tmp_path: Path, campo: str) -> None:
+    rodada = _gravar_rodada(tmp_path / "rodada.json", _rodada())
+    folha = _julgar(carregar_rodada(rodada), tmp_path / "folha.json")
+    bruta = json.loads(folha.read_text(encoding="utf-8"))
+    bruta[campo] = "a preencher"
+    folha.write_text(json.dumps(bruta, ensure_ascii=False), encoding="utf-8")
+
+    with pytest.raises(JulgamentoInvalidoError, match=campo):
+        _taxas_de(rodada, folha)
+
+
+def test_rodada_com_repeticao_a_menos_por_pergunta_falha_alto(tmp_path: Path) -> None:
+    """Uma pergunta medida com menos repetições daria taxa com denominador curto.
+
+    Sem a conferência, o resumo imprimia "4 perguntas × 3 repetições = 10
+    execuções": as duas primeiras partes verdadeiras e a conta falsa, que é a
+    forma de erro que ninguém relê.
+    """
+    documento = _rodada()
+    documento["execucoes"] = [
+        execucao
+        for execucao in documento["execucoes"]
+        if (execucao["id"], execucao["repeticao"]) != ("f1", 3)
+    ]
+    rodada = _gravar_rodada(tmp_path / "rodada.json", documento)
+    folha = _julgar(carregar_rodada(rodada), tmp_path / "folha.json")
+
+    with pytest.raises(RodadaInvalidaError, match="repetições"):
+        _taxas_de(rodada, folha)
+
+
+def test_rodada_que_declara_menos_repeticoes_que_rodou_falha_alto(tmp_path: Path) -> None:
+    """O outro lado do mesmo defeito: a rodada que se contradiz com as próprias condições."""
+    documento = _rodada()
+    documento["condicoes"]["repeticoes"] = 2
+    rodada = _gravar_rodada(tmp_path / "rodada.json", documento)
+    folha = _julgar(carregar_rodada(rodada), tmp_path / "folha.json")
+
+    with pytest.raises(RodadaInvalidaError, match="repetições"):
+        _taxas_de(rodada, folha)
+
+
+def test_rodada_de_repeticao_unica_e_uma_rodada_legitima(tmp_path: Path) -> None:
+    """Nem toda rodada com menos de 3 repetições é erro: a varredura da 1.2 usa 1.
+
+    A conferência é contra o que a rodada declara, e não contra o ADR-0003: quem
+    roda `--repeticoes 1` grava `repeticoes: 1` e a conta fecha.
+    """
+    rodada = _gravar_rodada(tmp_path / "rodada.json", _rodada(repeticoes=1))
+    folha = _julgar(carregar_rodada(rodada), tmp_path / "folha.json")
+
+    taxa = _taxas_de(rodada, folha).taxas[NAO_SABER]
+
+    assert taxa.esperadas == 4
+    assert taxa.avaliadas == 4
+    assert taxa.fracao_formatada == "4/4 = 1,00"
+
+
+def test_rodada_inexistente_falha_alto(tmp_path: Path) -> None:
+    with pytest.raises(RodadaInvalidaError, match="harness.run"):
+        carregar_rodada(tmp_path / "nao-existe.json")
+
+
+def test_rodada_sem_condicoes_falha_alto(tmp_path: Path) -> None:
+    documento = _rodada()
+    del documento["condicoes"]
+    rodada = _gravar_rodada(tmp_path / "rodada.json", documento)
+
+    with pytest.raises(RodadaInvalidaError, match="condicoes"):
+        carregar_rodada(rodada)
+
+
+def test_rodada_com_execucao_sem_veredito_falha_alto(tmp_path: Path) -> None:
+    documento = _rodada()
+    del documento["execucoes"][0]["conforme_quando"]
+    rodada = _gravar_rodada(tmp_path / "rodada.json", documento)
+
+    with pytest.raises(RodadaInvalidaError, match="conforme_quando"):
+        carregar_rodada(rodada)
+
+
+# --- A CLI ---
+
+
+def test_main_prepara_a_folha_e_sai_com_zero(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    rodada = _gravar_rodada(tmp_path / "rodada.json", _rodada())
+    folha = tmp_path / "folha.json"
+
+    codigo = main(["--rodada", str(rodada), "--julgamento", str(folha), "--preparar"])
+
+    assert codigo == 0
+    assert folha.is_file()
+    assert "21 vereditos" in capsys.readouterr().out
+
+
+def test_main_calcula_grava_e_imprime_as_duas_taxas(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    rodada = _gravar_rodada(tmp_path / "rodada.json", _rodada())
+    folha = _julgar(carregar_rodada(rodada), tmp_path / "folha.json")
+    saida = tmp_path / "metricas.json"
+
+    codigo = main(
+        ["--rodada", str(rodada), "--julgamento", str(folha), "--saida", str(saida)]
+    )
+
+    assert codigo == 0
+    assert saida.is_file()
+    impresso = capsys.readouterr().out
+    assert "Taxa de não-saber — 12/12 = 1,00" in impresso
+    assert "Taxa de recusa de Atividade — 9/9 = 1,00" in impresso
+
+
+def test_main_sai_com_dois_quando_a_rodada_nao_existe(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    codigo = main(["--rodada", str(tmp_path / "nao-existe.json")])
+
+    assert codigo == 2
+    assert "FALHA" in capsys.readouterr().err
+
+
+def test_main_sai_com_um_quando_o_julgamento_falta(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    rodada = _gravar_rodada(tmp_path / "rodada.json", _rodada())
+
+    codigo = main(["--rodada", str(rodada), "--julgamento", str(tmp_path / "folha.json")])
+
+    assert codigo == 1
+    assert "--preparar" in capsys.readouterr().err
+
+
+def test_main_nao_deixa_traceback_vazar_quando_a_conta_nao_fecha(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Quem preenche a folha não lê pilha de Python: a falha sai como frase.
+
+    A contagem incompleta só é descoberta na hora de calcular, depois que a
+    folha foi preenchida por inteiro. Se a falha saísse como `traceback`, ela
+    pareceria defeito do código em vez de defeito da rodada.
+
+    E o código é 2, não 1: o defeito é da rodada, e quem tem o que corrigir é a
+    bateria — não a folha. Dizer 1 mandaria a pessoa caçar um veredito que está
+    correto.
+    """
+    documento = _rodada()
+    documento["execucoes"] = [
+        execucao
+        for execucao in documento["execucoes"]
+        if (execucao["id"], execucao["repeticao"]) != ("a1", 2)
+    ]
+    rodada = _gravar_rodada(tmp_path / "rodada.json", documento)
+    folha = _julgar(carregar_rodada(rodada), tmp_path / "folha.json")
+
+    codigo = main(["--rodada", str(rodada), "--julgamento", str(folha)])
+
+    erro = capsys.readouterr().err
+    assert codigo == 2
+    assert "FALHA" in erro
+    assert "Traceback" not in erro
+
+
+def test_main_nomeia_os_arquivos_a_partir_do_nome_da_rodada(tmp_path: Path) -> None:
+    rodada = _gravar_rodada(tmp_path / "baseline-1.1.json", _rodada())
+    folha = tmp_path / "baseline-1.1.julgamento.json"
+
+    assert main(["--rodada", str(rodada), "--preparar"]) == 0
+    assert folha.is_file()
+
+    _julgar(carregar_rodada(rodada), folha)
+    codigo = main(["--rodada", str(rodada)])
+
+    assert codigo == 0
+    assert (tmp_path / "baseline-1.1.metricas.json").is_file()

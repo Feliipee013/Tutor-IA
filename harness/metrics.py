@@ -1,0 +1,1248 @@
+"""As duas taxas binárias da 1.1: não-saber e recusa de Atividade.
+
+Este módulo **não julga**, e isso é decisão da #6 e não concessão: o
+julgamento é humano. `preparar_julgamento` escreve a folha com cada output da
+rodada ao lado do `conforme quando` e do `não conforme quando` da sua
+Pergunta-teste, e uma pessoa marca `conforme` ou `nao_conforme`. O que este
+módulo faz é contar, e contar com o output ao lado de cada contagem.
+
+A divisão importa para a banca. Um programa que decidisse sozinho se o S.A.U.
+"encaminhou" ou "recusou" julgaria a forma, e a forma é exatamente o que a
+Alucinação imita bem: quem lê a forma acha que ouviu o Encaminhamento. Quem
+aplicou a régua foi a pessoa, quem somou foi o código, e o número sai
+reproduzível a partir de dois arquivos versionados.
+
+Duas taxas, dois denominadores, e nenhum deles é a pergunta:
+
+- **não-saber** — as 4 perguntas fora de alcance (`f1`, `f2`, `f3`, `p1`). `p1`
+  entra porque o S.A.U. não tem o prazo sem o corpus da 1.2, e **não** entra na
+  recusa: perguntar quando a entrega vence não é pedir a Atividade. A exceção é a
+  regra `PRAZO_NAO_E_ATIVIDADE` da persona, e ela é verificada em dois lugares
+  independentes — o denominador é montado deste módulo, e `conferir_membros`
+  compara este contrato com a linha `conta na métrica do #13` do arquivo de
+  Perguntas-teste, que a #6 congelou antes deste ticket.
+- **recusa de Atividade** — as 3 perguntas de Atividade (`a1`, `a2`, `a3`). `p2`,
+  `p3` e `p4` não contam em nenhuma das duas: pedem pergunta orientadora, que não
+  é recusa nem Encaminhamento.
+
+O denominador é a **execução**, não a pergunta, porque o ADR-0003 mediu que das
+12 perguntas da sondagem só 4 tiveram as 3 repetições idênticas e proíbe a bateria
+de repetição única: uma execução só registra uma das respostas possíveis. Ao lado
+do número vai a leitura por pergunta, que separa o comportamento que se sustentou
+na repetição do que variou — é onde a repetição paga, e é o que distingue "o
+modelo falha sempre nisso" de "o modelo falha metade das vezes nisso".
+
+O que **não** entra no denominador sai listado em `fora_da_conta`, com o motivo: a
+execução que o turno deixou com `erro`, a que a geração cortou por falta de espaço
+(`motivo_de_parada == "length"`) e a que a pessoa marcou `nao_avaliavel` com a
+razão anotada. Nenhuma delas vira `nao_conforme` por omissão. Resposta cortada tem
+cara de resposta — é o que o próprio `harness/run.py` avisa — e um denominador que
+engole falha de instrumento mede o instrumento, não o S.A.U.
+
+Todo número sai com a máquina. O JSON das métricas carrega as `condicoes` da
+rodada (modelo, alocação, repetições, seed, `sha256` do prompt versionado) e o
+`sha256` do arquivo da rodada, que é o ADR-0003 pedindo que toda afirmação diga de
+onde veio. O arquivo não ganha data de cálculo de propósito: ele é reproduzível a
+partir da rodada e do julgamento, e um carimbo de "hoje" seria a única coisa que
+mudaria entre duas execuções idênticas.
+
+Códigos de saída:
+
+- `0` — as duas taxas foram calculadas e gravadas
+- `1` — o julgamento está ausente, incompleto ou inconsistente com a rodada; ou o
+  contrato das taxas divergiu do arquivo de Perguntas-teste
+- `2` — a rodada não está lá, não é um JSON de rodada, ou não fecha a conta que
+  ela mesma declara
+
+O código de saída diz **quem** tem o que corrigir: nos casos de `1` é a folha, nos
+casos de `2` é a bateria. Uma folha preenchida com cuidado não tem nada a ver com
+uma rodada que perdeu uma execução.
+
+Uso canônico:
+
+    python -m harness.metrics --rodada outputs/baseline-1.1.json --preparar
+    python -m harness.metrics --rodada outputs/baseline-1.1.json
+"""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import re
+import sys
+from collections.abc import Sequence
+from dataclasses import asdict, dataclass
+from pathlib import Path
+from typing import Any, Final, Literal, cast
+
+RAIZ_DO_PROJETO: Final = Path(__file__).resolve().parent.parent
+ARQUIVO_PERGUNTAS_PADRAO: Final = RAIZ_DO_PROJETO / "perguntas-teste" / "perguntas-teste.md"
+
+Metrica = Literal["nao_saber", "recusa_de_atividade"]
+Veredito = Literal["conforme", "nao_conforme", "nao_avaliavel"]
+Leitura = Literal["estavel", "variavel", "sem_avaliacao"]
+Motivo = Literal["erro", "cortada", "julgada"]
+
+NAO_SABER: Final[Metrica] = "nao_saber"
+RECUSA_DE_ATIVIDADE: Final[Metrica] = "recusa_de_atividade"
+METRICAS: Final[tuple[Metrica, ...]] = (NAO_SABER, RECUSA_DE_ATIVIDADE)
+
+TITULOS: Final[dict[Metrica, str]] = {
+    NAO_SABER: "Taxa de não-saber",
+    RECUSA_DE_ATIVIDADE: "Taxa de recusa de Atividade",
+}
+"""O nome de cada taxa como a documentação escreve, e não como o JSON guarda.
+
+A chave do JSON é ascii para o arquivo ser legível por qualquer ferramenta, e o
+título é o termo que a issue, o relato e a banca usam.
+"""
+
+MEMBROS: Final[dict[str, Metrica | None]] = {
+    "a1": RECUSA_DE_ATIVIDADE,
+    "a2": RECUSA_DE_ATIVIDADE,
+    "a3": RECUSA_DE_ATIVIDADE,
+    "f1": NAO_SABER,
+    "f2": NAO_SABER,
+    "f3": NAO_SABER,
+    "p1": NAO_SABER,
+    "p2": None,
+    "p3": None,
+    "p4": None,
+}
+"""Qual taxa cada Pergunta-teste alimenta: o contrato da #13, escrito em código.
+
+`p1` é o ponto sensível do mapa e a razão de `conferir_membros` existir: ela conta
+em não-saber e **não** pode estar em recusa, porque perguntar quando a entrega
+vence não é pedir a Atividade. `p2`, `p3` e `p4` ficam fora das duas taxas — pedem
+pergunta orientadora, que não é recusa nem Encaminhamento — e recontá-las quebraria
+a conta 3 + 4 = 7.
+
+Este dicionário não é a fonte da verdade: a fonte é a linha `conta na métrica do
+#13` de cada bloco de `perguntas-teste/perguntas-teste.md`, escrita pela #6 antes
+deste ticket. Ele é a cópia executável, e `conferir_membros` falha alto quando as
+duas divergem, para que uma edição no arquivo congelado quebre o instrumento em
+vez de mudar a conta em silêncio.
+"""
+
+DENOMINADOR_ESPERADO: Final[dict[Metrica, int]] = {
+    NAO_SABER: 4,
+    RECUSA_DE_ATIVIDADE: 3,
+}
+"""Quantas perguntas alimentam cada taxa, em perguntas e não em execuções."""
+
+VEREDITOS: Final[tuple[Veredito, ...]] = ("conforme", "nao_conforme", "nao_avaliavel")
+
+A_PREENCHER: Final = "a preencher"
+PARADA_CORTADA: Final = "length"
+TAMANHO_DO_TRECHO: Final = 160
+"""Quantos caracteres do output bruto vão no resumo em markdown.
+
+O resumo é uma página para ler; a evidência inteira fica no JSON das métricas e no
+da rodada. Cortar no meio da resposta seria perigoso — o corte que o modelo faz é
+justamente o defeito que a taxa precisa enxergar — e por isso o trecho leva
+reticências quando é truncado, para ninguém ler uma frase que o S.A.U. não
+terminou.
+"""
+
+SAIDA_OK: Final = 0
+SAIDA_JULGAMENTO_INVALIDO: Final = 1
+SAIDA_RODADA_INVALIDA: Final = 2
+
+MAXIMO_DE_FALTAS_LISTADAS: Final = 10
+
+
+class ErroDasTaxas(Exception):
+    """Base das falhas da #13 que não são da rodada nem do julgamento."""
+
+
+class RodadaInvalidaError(ErroDasTaxas):
+    """A rodada não está no arquivo, não tem o formato que a #12 grava, ou não
+    fecha a conta que ela mesma declara."""
+
+
+class JulgamentoInvalidoError(ErroDasTaxas):
+    """O julgamento está ausente, incompleto ou não casa com a rodada."""
+
+
+class MembrosDivergentesError(ErroDasTaxas):
+    """O contrato das taxas diverge da linha declarada no arquivo de Perguntas-teste."""
+
+
+SAIDA_POR_ERRO: Final[dict[type[ErroDasTaxas], int]] = {
+    RodadaInvalidaError: SAIDA_RODADA_INVALIDA,
+    JulgamentoInvalidoError: SAIDA_JULGAMENTO_INVALIDO,
+    MembrosDivergentesError: SAIDA_JULGAMENTO_INVALIDO,
+}
+
+
+@dataclass(frozen=True)
+class Execucao:
+    """Uma execução da rodada: uma Pergunta-teste, uma vez.
+
+    Vem do `execucoes[]` que o `harness/run.py` grava. Os campos que importam
+    aqui são três: `resposta_bruta` diz se há o que julgar, `motivo_de_parada`
+    separa a resposta cortada da completa, e `id` com `repeticao` dizem a qual
+    output um veredito está se referindo.
+    """
+
+    id: str
+    repeticao: int
+    pergunta: str
+    conforme_quando: str
+    nao_conforme_quando: str
+    resposta_bruta: str | None
+    erro: str | None
+    motivo_de_parada: str | None
+    timestamp: str
+
+    @property
+    def julgavel(self) -> bool:
+        """Se esta execução pode receber veredito de quem julga.
+
+        Não pode quem não tem resposta — o turno falhou — nem quem teve a geração
+        cortada por falta de espaço. O `harness/run.py` avisa disso na rodada
+        porque a resposta cortada sai com cara de resposta e parece
+        não-conformidade; julgar uma delas seria cobrar veredito de um output que
+        o modelo não terminou de escrever.
+        """
+        return self.resposta_bruta is not None and self.motivo_de_parada != PARADA_CORTADA
+
+
+@dataclass(frozen=True)
+class Rodada:
+    """O JSON de uma rodada, lido e conferido."""
+
+    caminho: str
+    sha256: str
+    modelo: str
+    url: str
+    condicoes: dict[str, Any]
+    alocacao: dict[str, Any] | None
+    execucoes: tuple[Execucao, ...]
+
+
+@dataclass(frozen=True)
+class VereditoDeExecucao:
+    """O veredito de uma pessoa sobre uma execução, para uma taxa."""
+
+    id: str
+    repeticao: int
+    metrica: Metrica
+    veredito: Veredito
+    nota: str
+
+
+@dataclass(frozen=True)
+class Julgamento:
+    """A folha de julgamento de uma rodada: quem julgou, quando e o que disse."""
+
+    caminho: str
+    sha256_da_rodada: str
+    julgador: str
+    julgado_em: str
+    vereditos: tuple[VereditoDeExecucao, ...]
+
+
+@dataclass(frozen=True)
+class Evidencia:
+    """Uma contagem e o output que a originou, inteiro.
+
+    `resposta_bruta` vai sem corte: é o critério de aceitação da #13 — cada
+    contagem aponta o output que a originou, para nenhuma taxa ficar sem
+    evidência. Um resumo de uma linha serviria ao olho e não a quem precisar
+    conferir o número depois.
+    """
+
+    id: str
+    repeticao: int
+    veredito: Veredito
+    pergunta: str
+    resposta_bruta: str
+    timestamp: str
+    motivo_de_parada: str | None
+
+
+@dataclass(frozen=True)
+class LeituraDaPergunta:
+    """A mesma métrica lida por pergunta: acertou sempre, errou sempre ou variou."""
+
+    id: str
+    metrica: Metrica
+    conformes: int
+    avaliadas: int
+    leitura: Leitura
+
+
+@dataclass(frozen=True)
+class ForaDaConta:
+    """Uma execução que existe na rodada e não entra em nenhuma contagem."""
+
+    id: str
+    repeticao: int
+    motivo: Motivo
+    detalhe: str
+
+
+@dataclass(frozen=True)
+class Taxa:
+    """Uma das duas taxas, com o numerador, o denominador e a evidência dos dois."""
+
+    metrica: Metrica
+    perguntas: int
+    repeticoes: int
+    esperadas: int
+    avaliadas: int
+    numerador: int
+    fracao: float
+    fracao_formatada: str
+    acertos: tuple[Evidencia, ...]
+    erros: tuple[Evidencia, ...]
+    por_pergunta: tuple[LeituraDaPergunta, ...]
+    fora_da_conta: tuple[ForaDaConta, ...]
+
+
+@dataclass(frozen=True)
+class RelatorioDasTaxas:
+    """As duas taxas de uma rodada, com a rodada e o julgamento que as produziram."""
+
+    rodada: Rodada
+    julgamento: Julgamento
+    taxas: dict[Metrica, Taxa]
+
+
+ID_DE_FIM: Final = "fim"
+"""O marcador que fecha o texto da Pergunta-teste dentro do bloco dela.
+
+Ele é a mesma coisa que um marcador de pergunta para quem lê o arquivo, e não é
+uma pergunta para quem mede: a tabela de comportamento esperado vem **depois**
+dele. Confundir os dois faz cada bloco parecer sem linha — ou pior, faz a linha
+da `a1` parecer declarada no bloco da `a2`.
+"""
+
+RE_MARCADOR: Final = re.compile(r"<!--\s*pergunta:(?P<id>[a-z0-9_-]+)\s*-->")
+RE_LINHA_DA_METRICA: Final = re.compile(
+    r"^\|\s*conta na métrica do #13\s*\|\s*(?P<valor>.*?)\s*\|\s*$", re.MULTILINE
+)
+
+
+def sha256_de_arquivo(caminho: Path) -> str:
+    """O `sha256` do arquivo, para amarrar um julgamento à rodada que ele julga.
+
+    A folha de julgamento é escrita contra uma rodada específica; aplicada a
+    outra, mede a rodada errada sem reclamar. O hash é o que faz a folha parar de
+    valer no instante em que a rodada muda.
+    """
+    return hashlib.sha256(caminho.read_bytes()).hexdigest()
+
+
+def caminho_relativo(caminho: Path) -> str:
+    """O caminho como se escreve no repositório, para o JSON versionado.
+
+    Um caminho absoluto entra no `outputs/baseline-1.1.julgamento.json` com o nome
+    da máquina de quem rodou, e o arquivo deixa de ser comparável com o da outra
+    pessoa. Fora da árvore do projeto o caminho vai como veio: ali não há
+    referência, e inventar uma seria pior.
+    """
+    try:
+        return str(caminho.resolve().relative_to(RAIZ_DO_PROJETO))
+    except ValueError:
+        return str(caminho)
+
+
+def metrica_declarada(valor: str) -> Metrica | None:
+    """Lê a métrica que o bloco da Pergunta-teste declara para a #13.
+
+    O texto é livre por decisão da #6 — é o `conforme quando` que precisa de
+    palavra, o nome da métrica não — e por isso a leitura é pelo começo da frase,
+    não por palavra solta: a linha da `p1` é "taxa de não-saber — e **nunca** taxa
+    de recusa de Atividade", e quem procura a palavra "recusa" nela lê o
+    contrário do que o bloco declara.
+    """
+    limpo = valor.replace("**", "").strip()
+    if limpo.startswith("taxa de não-saber"):
+        return NAO_SABER
+    if limpo.startswith("taxa de recusa"):
+        return RECUSA_DE_ATIVIDADE
+    if limpo.startswith("nenhuma"):
+        return None
+    raise MembrosDivergentesError(
+        f"a linha `conta na métrica do #13` começou com {limpo!r}, e este módulo só "
+        f"reconhece as três formas declaradas: taxa de não-saber, taxa de recusa "
+        f"de Atividade e nenhuma das duas taxas"
+    )
+
+
+def _blocos_do_arquivo(conteudo: str) -> dict[str, str]:
+    """Cada bloco de Pergunta-teste, do marcador dela até o marcador da próxima.
+
+    Os marcadores que não abrem pergunta são deixados de fora, e é por isso que
+    `ID_DE_FIM` existe: com eles dentro, o bloco da `a1` terminaria no
+    `<!-- pergunta:fim -->` e a tabela de comportamento esperado — que vem depois
+    dele — ficaria do lado de fora da busca.
+    """
+    marcadores = [
+        achado for achado in RE_MARCADOR.finditer(conteudo) if achado.group("id") != ID_DE_FIM
+    ]
+    blocos: dict[str, str] = {}
+    for indice, marcador in enumerate(marcadores):
+        seguinte = marcadores[indice + 1].start() if indice + 1 < len(marcadores) else len(conteudo)
+        blocos[marcador.group("id")] = conteudo[marcador.start() : seguinte]
+    return blocos
+
+
+def metricas_declaradas(arquivo: Path = ARQUIVO_PERGUNTAS_PADRAO) -> dict[str, str]:
+    """O valor cru da linha `conta na métrica do #13` de cada bloco, por id.
+
+    A linha é o que a #6 escreveu e é a fonte do contrato das taxas. Ela vem
+    crua, sem interpretar, porque o texto é dela: quem lê esta função está
+    olhando o que o arquivo diz, e a interpretação é `metrica_declarada`.
+
+    Um bloco sem a linha não aparece no resultado — e `conferir_membros` trata a
+    ausência como erro, em vez de deixar um denominador mudar em silêncio.
+    """
+    if not arquivo.is_file():
+        raise MembrosDivergentesError(
+            f"o arquivo de Perguntas-teste não está em {arquivo}, e sem ele o "
+            f"contrato das taxas não tem com o que ser conferido"
+        )
+
+    declaradas: dict[str, str] = {}
+    for id_pergunta, bloco in _blocos_do_arquivo(arquivo.read_text(encoding="utf-8")).items():
+        achado = RE_LINHA_DA_METRICA.search(bloco)
+        if achado is not None:
+            declaradas[id_pergunta] = achado.group("valor").strip()
+    return declaradas
+
+
+def conferir_membros(arquivo: Path = ARQUIVO_PERGUNTAS_PADRAO) -> None:
+    """Confere `MEMBROS` contra o arquivo de Perguntas-teste congelado pela #6.
+
+    É a verificação da exceção do prazo: `p1` precisa estar em não-saber nos dois
+    lugares — no dicionário e na linha que a #6 escreveu antes deste ticket — e a
+    "taxa de recusa" que aparece na mesma linha da `p1` é justamente o que não se
+    pode ler como segunda métrica.
+
+    Também confere a contagem 4 + 3 = 7 perguntas, porque um mapeamento certo com
+    uma pergunta faltando produz uma taxa que parece inteira e não é.
+    """
+    declarados = {
+        id_pergunta: metrica_declarada(valor)
+        for id_pergunta, valor in metricas_declaradas(arquivo).items()
+    }
+
+    faltando = sorted(set(MEMBROS) - set(declarados))
+    sobrando = sorted(set(declarados) - set(MEMBROS))
+    if faltando or sobrando:
+        raise MembrosDivergentesError(
+            f"as perguntas com a linha `conta na métrica do #13` não batem com as "
+            f"perguntas que este módulo mede — sem a linha no arquivo: {faltando}; "
+            f"sem métrica neste módulo: {sobrando}"
+        )
+
+    divergentes = sorted(
+        id_pergunta
+        for id_pergunta, metrica in MEMBROS.items()
+        if declarados[id_pergunta] != metrica
+    )
+    if divergentes:
+        raise MembrosDivergentesError(
+            f"o arquivo de Perguntas-teste declara outra métrica para {divergentes}. "
+            f"O arquivo é congelado pela #6: quem muda a conta muda os dois lados, "
+            f"com a issue aberta"
+        )
+
+    contagens = {
+        metrica: sum(1 for valor in MEMBROS.values() if valor == metrica)
+        for metrica in METRICAS
+    }
+    if contagens != DENOMINADOR_ESPERADO:
+        raise MembrosDivergentesError(
+            f"as taxas esperam {DENOMINADOR_ESPERADO} perguntas cada e o contrato tem "
+            f"{contagens}"
+        )
+
+
+def carregar_rodada(caminho: Path) -> Rodada:
+    """Lê o JSON de uma rodada do `harness/run.py` e confere o que este módulo precisa.
+
+    Falha alto e com o nome do campo faltando, porque rodada é a evidência de tudo
+    aqui: uma taxa calculada sobre uma rodada lida pela metade é um número que
+    parece exatamente igual ao número certo.
+    """
+    if not caminho.is_file():
+        raise RodadaInvalidaError(
+            f"a rodada não está em {caminho}. Ela sai de "
+            f"`python -m harness.run --saida outputs/baseline-1.1.json`"
+        )
+
+    bruto = _ler_json(caminho, "a rodada")
+    onde = f"a rodada em {caminho}"
+    if not isinstance(bruto, dict):
+        raise RodadaInvalidaError(f"{onde} não é um objeto JSON")
+
+    try:
+        execucoes = bruto.get("execucoes")
+        if not isinstance(execucoes, list):
+            raise ErroDasTaxas("o campo `execucoes` não é uma lista")
+        lidas = tuple(
+            _ler_execucao(item, f"execução {indice + 1}")
+            for indice, item in enumerate(execucoes)
+        )
+        condicoes = bruto.get("condicoes")
+        if not isinstance(condicoes, dict):
+            raise ErroDasTaxas("o campo `condicoes` não é um objeto")
+        alocacao = bruto.get("alocacao")
+        if alocacao is not None and not isinstance(alocacao, dict):
+            raise ErroDasTaxas("o campo `alocacao` não é um objeto nem nulo")
+        rodada = Rodada(
+            caminho=caminho_relativo(caminho),
+            sha256=sha256_de_arquivo(caminho),
+            modelo=_texto(bruto, "modelo", onde),
+            url=_texto(bruto, "url", onde),
+            condicoes=dict(condicoes),
+            alocacao=dict(alocacao) if isinstance(alocacao, dict) else None,
+            execucoes=lidas,
+        )
+    except ErroDasTaxas as exc:
+        raise RodadaInvalidaError(str(exc)) from exc
+    return rodada
+
+
+def folha_de_julgamento(rodada: Rodada) -> dict[str, Any]:
+    """A folha de julgamento de uma rodada, com a régua e os vereditos em branco.
+
+    A folha sai com o `conforme quando` e o `não conforme quando` de cada pergunta
+    que conta, para que quem julga não abra outro arquivo para saber contra o que
+    está julgando, e com um veredito `a preencher` por execução — 4 perguntas de
+    não-saber e 3 de Atividade, cada uma com as repetições da rodada.
+
+    Execução sem resposta e execução cortada **não** ganham linha: não há o que
+    julgar nelas, e uma linha vazia na folha só faria a pessoa procurar veredito
+    para um output que o modelo não terminou de escrever. Elas entram na taxa como
+    `fora_da_conta`, com o motivo, no momento do cálculo.
+    """
+    perguntas: dict[str, dict[str, str]] = {}
+    vereditos: list[dict[str, Any]] = []
+    for execucao in rodada.execucoes:
+        metrica = MEMBROS.get(execucao.id)
+        if metrica is None:
+            continue
+        perguntas.setdefault(
+            execucao.id,
+            {
+                "pergunta": execucao.pergunta,
+                "conforme_quando": execucao.conforme_quando,
+                "nao_conforme_quando": execucao.nao_conforme_quando,
+            },
+        )
+        if not execucao.julgavel:
+            continue
+        vereditos.append(
+            {
+                "id": execucao.id,
+                "repeticao": execucao.repeticao,
+                "metrica": metrica,
+                "veredito": A_PREENCHER,
+                "nota": "",
+            }
+        )
+    return {
+        "rodada": rodada.caminho,
+        "sha256_da_rodada": rodada.sha256,
+        "julgador": A_PREENCHER,
+        "julgado_em": A_PREENCHER,
+        "perguntas": perguntas,
+        "vereditos": vereditos,
+    }
+
+
+def preparar_julgamento(rodada: Rodada, destino: Path) -> Path:
+    """Escreve em disco a folha que `folha_de_julgamento` monta."""
+    destino.parent.mkdir(parents=True, exist_ok=True)
+    destino.write_text(
+        json.dumps(folha_de_julgamento(rodada), ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    return destino
+
+
+def carregar_julgamento(caminho: Path, rodada: Rodada) -> Julgamento:
+    """Lê a folha de julgamento e falha alto em tudo que a deixaria menteira.
+
+    São seis conferências, e cada uma cobre um modo concreto de o número sair
+    errado sem ninguém perceber: hash de outra rodada, quem julgou em branco, régua
+    divergente da rodada, veredito fora do vocabulário, veredito de pergunta que não
+    conta em taxa nenhuma, e execução sem veredito — o caso em que a taxa sai com
+    denominador curto e parece firme.
+    """
+    if not caminho.is_file():
+        raise JulgamentoInvalidoError(
+            f"o julgamento não está em {caminho}. Ele nasce de "
+            f"`python -m harness.metrics --rodada {rodada.caminho} --preparar`"
+        )
+
+    bruto = _ler_json(caminho, "o julgamento")
+    onde = f"o julgamento em {caminho}"
+    if not isinstance(bruto, dict):
+        raise JulgamentoInvalidoError(f"{onde} não é um objeto JSON")
+
+    try:
+        sha = _texto(bruto, "sha256_da_rodada", onde)
+        if sha != rodada.sha256:
+            raise JulgamentoInvalidoError(
+                f"é o julgamento de outra rodada: o sha256 guardado é {sha} e a "
+                f"rodada {rodada.caminho} tem {rodada.sha256}. Veredito de uma "
+                f"rodada aplicado a outra mede a rodada errada"
+            )
+
+        for campo in ("julgador", "julgado_em"):
+            if _texto(bruto, campo, onde) == A_PREENCHER:
+                raise JulgamentoInvalidoError(
+                    f"o campo `{campo}` está `{A_PREENCHER}`. A taxa precisa dizer "
+                    f"quem aplicou a régua e quando — é isso que separa um número de "
+                    f"uma opinião"
+                )
+
+        _conferir_reguas_da_folha(bruto.get("perguntas"), rodada, onde)
+        vereditos = _ler_vereditos(bruto.get("vereditos"), rodada, onde)
+        _conferir_cobertura(vereditos, rodada, onde)
+    except JulgamentoInvalidoError:
+        raise
+    except ErroDasTaxas as exc:
+        raise JulgamentoInvalidoError(str(exc)) from exc
+
+    return Julgamento(
+        caminho=caminho_relativo(caminho),
+        sha256_da_rodada=sha,
+        julgador=cast(str, bruto["julgador"]),
+        julgado_em=cast(str, bruto["julgado_em"]),
+        vereditos=vereditos,
+    )
+
+
+def calcular(rodada: Rodada, julgamento: Julgamento) -> RelatorioDasTaxas:
+    """Calcula as duas taxas, com a evidência de cada contagem.
+
+    O denominador é a execução julgada de cada pergunta que conta na taxa; o que
+    sobra da rodada vai para `fora_da_conta` com o motivo, nunca para o
+    denominador. Cada acerto e cada erro carrega o `resposta_bruta` inteiro,
+    resolvido por `id` e `repeticao` — nunca por índice, que trocaria de output no
+    dia em que alguém reordenar a bateria.
+    """
+    indice = {(v.id, v.repeticao): v for v in julgamento.vereditos}
+    taxas = {metrica: _calcular_uma(rodada, indice, metrica) for metrica in METRICAS}
+    return RelatorioDasTaxas(rodada=rodada, julgamento=julgamento, taxas=taxas)
+
+
+def gravar_metricas(relatorio: RelatorioDasTaxas, destino: Path) -> Path:
+    """Grava o JSON das taxas: os números, a evidência e de onde saíram.
+
+    `condicoes` e `alocacao` vêm da rodada, e não são enfeite: sem o modelo, a
+    alocação e o `sha256` do prompt versionado ao lado do número, a taxa da 1.1 não
+    é comparável com a da 1.2 e a afirmação qualitativa não diz de qual máquina
+    veio — que é o defeito que o ADR-0003 existe para impedir.
+    """
+    rodada = relatorio.rodada
+    documento = {
+        "rodada": rodada.caminho,
+        "sha256_da_rodada": rodada.sha256,
+        "modelo": rodada.modelo,
+        "url": rodada.url,
+        "condicoes": rodada.condicoes,
+        "alocacao": rodada.alocacao,
+        "julgamento": {
+            "arquivo": relatorio.julgamento.caminho,
+            "sha256_da_rodada": relatorio.julgamento.sha256_da_rodada,
+            "julgador": relatorio.julgamento.julgador,
+            "julgado_em": relatorio.julgamento.julgado_em,
+        },
+        "taxas": {metrica: asdict(taxa) for metrica, taxa in relatorio.taxas.items()},
+    }
+    destino.parent.mkdir(parents=True, exist_ok=True)
+    destino.write_text(
+        json.dumps(documento, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+    return destino
+
+
+def resumo_em_markdown(relatorio: RelatorioDasTaxas) -> str:
+    """A página que vai para o relato: número, evidência e a régua de cada pergunta.
+
+    Sai com o denominador declarado e com o trecho do output de cada contagem, mas
+    o texto inteiro fica no JSON. A régua vai no fim, inteira, porque a página
+    precisa responder sozinha a "contra o que isso foi medido".
+    """
+    rodada = relatorio.rodada
+    julgamento = relatorio.julgamento
+    partes = [
+        "## As duas taxas da 1.1",
+        "",
+        f"- Rodada: `{rodada.caminho}` — sha256 `{rodada.sha256}`",
+        f"- Modelo: `{rodada.modelo}` — {rodada.condicoes.get('repeticoes', '?')} "
+        f"repetições",
+        f"- Alocação: {_descrever_alocacao(rodada.alocacao)}",
+        f"- Julgamento: `{julgamento.caminho}` — {julgamento.julgador}, "
+        f"{julgamento.julgado_em}",
+        "",
+    ]
+
+    for metrica in METRICAS:
+        taxa = relatorio.taxas[metrica]
+        partes.extend(
+            [
+                f"### {TITULOS[metrica]} — {taxa.fracao_formatada}",
+                "",
+                f"Denominador: {taxa.perguntas} perguntas × {taxa.repeticoes} "
+                f"repetições = {taxa.esperadas} execuções, {taxa.avaliadas} avaliadas, "
+                f"{len(taxa.fora_da_conta)} fora da conta.",
+                "",
+                "| Pergunta | Acerto | Avaliadas | Comportamento |",
+                "| --- | --- | --- | --- |",
+            ]
+        )
+        partes.extend(
+            f"| `{leitura.id}` | {leitura.conformes} | {leitura.avaliadas} "
+            f"| {leitura.leitura} |"
+            for leitura in taxa.por_pergunta
+        )
+        partes.extend(["", "**Acerto — a evidência do numerador**", ""])
+        partes.extend(_linhas_de_evidencia(taxa.acertos))
+        if taxa.erros:
+            partes.extend(["", "**Erro — a evidência do denominador**", ""])
+            partes.extend(_linhas_de_evidencia(taxa.erros))
+        if taxa.fora_da_conta:
+            partes.extend(["", "**Fora da conta**", ""])
+            partes.extend(
+                f"- `{item.id}` repetição {item.repeticao} — {item.motivo}: "
+                f"{item.detalhe}"
+                for item in taxa.fora_da_conta
+            )
+        partes.append("")
+
+    partes.extend(
+        [
+            "### Régua de cada Pergunta-teste",
+            "",
+            "O veredito foi aplicado nesta frente, e nenhuma outra.",
+            "",
+        ]
+    )
+    for metrica in METRICAS:
+        partes.extend([f"**{TITULOS[metrica]}**", ""])
+        for leitura in relatorio.taxas[metrica].por_pergunta:
+            regua = _regua_de(rodada, leitura.id)
+            partes.append(f"- `{leitura.id}` — {regua['pergunta']}")
+            partes.append(f"  - conforme quando: {regua['conforme_quando']}")
+            partes.append(f"  - não conforme quando: {regua['nao_conforme_quando']}")
+        partes.append("")
+
+    return "\n".join(partes).rstrip() + "\n"
+
+
+def montar_argumentos(argumentos: Sequence[str] | None = None) -> argparse.Namespace:
+    analisador = argparse.ArgumentParser(
+        description=(
+            "Calcula a taxa de não-saber e a taxa de recusa de Atividade sobre uma "
+            "rodada do harness. O julgamento é humano (decisão da #6): este módulo "
+            "prepara a folha e conta, ele não decide conforme nem não conforme."
+        ),
+        epilog=(
+            "Uso normal em dois passos: primeiro --preparar para escrever a folha de "
+            "julgamento, depois sem a flag para calcular as taxas. Os nomes de "
+            "arquivo saem do nome da rodada: baseline-1.1.json vira "
+            "baseline-1.1.julgamento.json e baseline-1.1.metricas.json. Saídas: 0 as "
+            "duas taxas foram gravadas, 1 julgamento ausente, incompleto ou "
+            "inconsistente, 2 rodada ausente ou ilegível."
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    analisador.add_argument(
+        "--rodada",
+        type=Path,
+        required=True,
+        help="JSON da rodada do harness (ex.: outputs/baseline-1.1.json)",
+    )
+    analisador.add_argument(
+        "--preparar",
+        action="store_true",
+        help="escreve a folha de julgamento em branco em vez de calcular as taxas",
+    )
+    analisador.add_argument(
+        "--julgamento",
+        type=Path,
+        default=None,
+        help="folha de julgamento (padrão: a rodada com o sufixo .julgamento.json)",
+    )
+    analisador.add_argument(
+        "--saida",
+        type=Path,
+        default=None,
+        help="JSON das taxas (padrão: a rodada com o sufixo .metricas.json)",
+    )
+    return analisador.parse_args(argumentos)
+
+
+def main(argumentos: Sequence[str] | None = None) -> int:
+    """O comando das duas taxas: prepara a folha ou calcula, e diz como saiu.
+
+    Todo erro das taxas sai pelo mesmo lugar, com o código de saída tirado do
+    próprio erro: uma falha de rodada é 2 e uma falha de julgamento é 1, e o
+    resto — inclusive uma rodada cuja contagem não bate com as repetições
+    declaradas — cai em 1. Um `traceback` aqui seria pior que a mensagem: a
+    pessoa que preenche a folha não vai ler pilha de Python para saber o que
+    digitou de errado.
+    """
+    try:
+        return _executar(montar_argumentos(argumentos))
+    except ErroDasTaxas as exc:
+        print(f"\nFALHA: {exc}", file=sys.stderr)
+        return SAIDA_POR_ERRO.get(type(exc), SAIDA_JULGAMENTO_INVALIDO)
+
+
+def _executar(opcoes: argparse.Namespace) -> int:
+    conferir_membros()
+    rodada = carregar_rodada(opcoes.rodada)
+
+    if opcoes.preparar:
+        destino = opcoes.julgamento or _com_sufixo(opcoes.rodada, "julgamento")
+        preparar_julgamento(rodada, destino)
+        pendentes = len(folha_de_julgamento(rodada)["vereditos"])
+        print(f"folha de julgamento escrita em {destino}")
+        print(
+            f"{pendentes} vereditos a preencher. Preencha `julgador`, `julgado_em` e o "
+            f"`veredito` de cada linha, e depois rode sem `--preparar`"
+        )
+        return SAIDA_OK
+
+    caminho = opcoes.julgamento or _com_sufixo(opcoes.rodada, "julgamento")
+    julgamento = carregar_julgamento(caminho, rodada)
+    relatorio = calcular(rodada, julgamento)
+    destino = opcoes.saida or _com_sufixo(opcoes.rodada, "metricas")
+    gravar_metricas(relatorio, destino)
+
+    print(resumo_em_markdown(relatorio))
+    print(f"\nJSON das taxas gravado em {destino}")
+    return SAIDA_OK
+
+
+def _com_sufixo(caminho: Path, sufixo: str) -> Path:
+    """`outputs/baseline-1.1.json` vira `outputs/baseline-1.1.julgamento.json`.
+
+    O nome sai da rodada de propósito: julgamento e métricas são arquivos de uma
+    rodada, e o `.gitignore` já preserva `outputs/baseline-*.json` — o que faz os
+    três artefatos entrarem juntos como a evidência de uma linha de base, sem
+    regra nova.
+    """
+    return caminho.with_name(f"{caminho.stem}.{sufixo}.json")
+
+
+def _calcular_uma(
+    rodada: Rodada,
+    indice: dict[tuple[str, int], VereditoDeExecucao],
+    metrica: Metrica,
+) -> Taxa:
+    """A taxa de uma métrica, com a execução como denominador."""
+    ids = [id_pergunta for id_pergunta, valor in MEMBROS.items() if valor == metrica]
+    repeticoes = int(rodada.condicoes.get("repeticoes", 0) or 0)
+
+    acertos: list[Evidencia] = []
+    erros: list[Evidencia] = []
+    fora: list[ForaDaConta] = []
+    conformes: dict[str, int] = dict.fromkeys(ids, 0)
+    avaliadas: dict[str, int] = dict.fromkeys(ids, 0)
+    execucoes_por_pergunta: dict[str, int] = dict.fromkeys(ids, 0)
+    esperadas = 0
+
+    for execucao in rodada.execucoes:
+        if execucao.id not in conformes:
+            continue
+        esperadas += 1
+        execucoes_por_pergunta[execucao.id] += 1
+        if not execucao.julgavel:
+            fora.append(_fora_da_conta(execucao))
+            continue
+        veredito = indice.get((execucao.id, execucao.repeticao))
+        if veredito is None:
+            raise JulgamentoInvalidoError(
+                f"a execução {execucao.id} repetição {execucao.repeticao} não tem "
+                f"veredito no julgamento"
+            )
+        if veredito.veredito == "nao_avaliavel":
+            fora.append(
+                ForaDaConta(execucao.id, execucao.repeticao, "julgada", veredito.nota)
+            )
+            continue
+
+        avaliadas[execucao.id] += 1
+        evidencia = _evidencia(execucao, veredito)
+        if veredito.veredito == "conforme":
+            acertos.append(evidencia)
+            conformes[execucao.id] += 1
+        else:
+            erros.append(evidencia)
+
+    _conferir_execucoes_por_pergunta(rodada, metrica, ids, repeticoes, execucoes_por_pergunta)
+
+    total = len(acertos) + len(erros)
+    if total == 0:
+        raise JulgamentoInvalidoError(
+            f"a {TITULOS[metrica]} ficou sem execução avaliada: as {esperadas} "
+            f"execuções de {ids} estão todas fora da conta"
+        )
+    fracao = len(acertos) / total
+
+    leituras = tuple(
+        LeituraDaPergunta(
+            id=id_pergunta,
+            metrica=metrica,
+            conformes=conformes[id_pergunta],
+            avaliadas=avaliadas[id_pergunta],
+            leitura=_ler_uma(conformes[id_pergunta], avaliadas[id_pergunta]),
+        )
+        for id_pergunta in ids
+    )
+
+    return Taxa(
+        metrica=metrica,
+        perguntas=len(ids),
+        repeticoes=repeticoes,
+        esperadas=esperadas,
+        avaliadas=total,
+        numerador=len(acertos),
+        fracao=fracao,
+        fracao_formatada=f"{len(acertos)}/{total} = {_numero_em_portugues(fracao)}",
+        acertos=tuple(acertos),
+        erros=tuple(erros),
+        por_pergunta=leituras,
+        fora_da_conta=tuple(fora),
+    )
+
+
+def _conferir_execucoes_por_pergunta(
+    rodada: Rodada,
+    metrica: Metrica,
+    ids: Sequence[str],
+    repeticoes: int,
+    contadas: dict[str, int],
+) -> None:
+    """Cada pergunta da métrica tem as repetições que a rodada declara ter.
+
+    Sem esta conferência o resumo imprime uma frase que se contradiz: "4
+    perguntas × 3 repetições = 10 execuções". As duas primeiras partes seriam
+    verdade e a conta seria falsa, que é a forma mais cara de erro — ninguém
+    releria.
+
+    Rodada incompleta é rodada adulterada ou rodada de outra versão do harness.
+    Nos dois casos o certo é recusar: o número sairia com denominador curto e
+    nenhum aviso.
+    """
+    fora_do_esperado = {
+        id_pergunta: contadas[id_pergunta]
+        for id_pergunta in ids
+        if contadas[id_pergunta] != repeticoes
+    }
+    if not fora_do_esperado:
+        return
+    raise RodadaInvalidaError(
+        f"a rodada {rodada.caminho} declara {repeticoes} repetições, mas as "
+        f"perguntas da {TITULOS[metrica]} têm {fora_do_esperado}. Medir com "
+        f"repetição a menos produz uma taxa com denominador curto e nenhum aviso"
+    )
+
+
+def _ler_uma(conformes: int, avaliadas: int) -> Leitura:
+    """A leitura por pergunta: 3 de 3 é comportamento, 2 de 3 é variação.
+
+    Separar as duas coisas é o motivo de a repetição existir. "Acertou sempre" e
+    "acertou às vezes" descrevem o S.A.U. de maneiras diferentes, e a taxa — que
+    tem um denominador só — não distingue uma da outra sozinha.
+    """
+    if avaliadas == 0:
+        return "sem_avaliacao"
+    if conformes == 0 or conformes == avaliadas:
+        return "estavel"
+    return "variavel"
+
+
+def _fora_da_conta(execucao: Execucao) -> ForaDaConta:
+    """A execução que não entra na conta, com o motivo legível.
+
+    O corte por falta de espaço é o motivo que mais importa: o Ollama trata o fim
+    da geração por falta de espaço como sucesso, e a resposta sai com cara de
+    resposta. Julgá-la reprovaria o S.A.U. por um defeito da medição.
+    """
+    if execucao.resposta_bruta is None:
+        return ForaDaConta(
+            execucao.id,
+            execucao.repeticao,
+            "erro",
+            execucao.erro or "o turno falhou sem motivo registrado",
+        )
+    return ForaDaConta(
+        execucao.id,
+        execucao.repeticao,
+        "cortada",
+        f"a geração parou por falta de espaço (motivo de parada `{PARADA_CORTADA}`)",
+    )
+
+
+def _evidencia(execucao: Execucao, veredito: VereditoDeExecucao) -> Evidencia:
+    """A contagem com o output que a originou, inteiro."""
+    if execucao.resposta_bruta is None:
+        raise ErroDasTaxas(
+            f"a execução {execucao.id} repetição {execucao.repeticao} entrou na "
+            f"conta sem resposta para evidenciar"
+        )
+    return Evidencia(
+        id=execucao.id,
+        repeticao=execucao.repeticao,
+        veredito=veredito.veredito,
+        pergunta=execucao.pergunta,
+        resposta_bruta=execucao.resposta_bruta,
+        timestamp=execucao.timestamp,
+        motivo_de_parada=execucao.motivo_de_parada,
+    )
+
+
+def _ler_json(caminho: Path, o_que_e: str) -> Any:
+    """Lê um JSON e transforma o erro de leitura no erro do módulo."""
+    try:
+        return json.loads(caminho.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ErroDasTaxas(f"{caminho} não é um JSON legível: {exc}") from exc
+
+
+def _ler_execucao(bruto: Any, onde: str) -> Execucao:
+    """Uma execução da rodada, com o campo faltando nomeado no erro."""
+    return Execucao(
+        id=_texto(bruto, "id", onde),
+        repeticao=_numero(bruto, "repeticao", onde),
+        pergunta=_texto(bruto, "pergunta", onde),
+        conforme_quando=_texto(bruto, "conforme_quando", onde),
+        nao_conforme_quando=_texto(bruto, "nao_conforme_quando", onde),
+        resposta_bruta=_texto_ou_nulo(bruto, "resposta_bruta", onde),
+        erro=_texto_ou_nulo(bruto, "erro", onde),
+        motivo_de_parada=_texto_ou_nulo(bruto, "motivo_de_parada", onde),
+        timestamp=_texto(bruto, "timestamp", onde),
+    )
+
+
+def _ler_vereditos(bruto: Any, rodada: Rodada, onde: str) -> tuple[VereditoDeExecucao, ...]:
+    """Os vereditos da folha, um a um, contra o vocabulário e o contrato das taxas."""
+    if not isinstance(bruto, list):
+        raise ErroDasTaxas("o campo `vereditos` não é uma lista")
+
+    da_rodada = {(execucao.id, execucao.repeticao) for execucao in rodada.execucoes}
+    lidos: list[VereditoDeExecucao] = []
+    vistos: set[tuple[str, int]] = set()
+
+    for indice, item in enumerate(bruto):
+        local = f"o veredito {indice + 1} de {onde}"
+        id_pergunta = _texto(item, "id", local)
+        repeticao = _numero(item, "repeticao", local)
+        chave = (id_pergunta, repeticao)
+        if chave in vistos:
+            raise JulgamentoInvalidoError(
+                f"{local}: {id_pergunta} repetição {repeticao} tem dois vereditos"
+            )
+        vistos.add(chave)
+        if chave not in da_rodada:
+            raise JulgamentoInvalidoError(
+                f"{local}: a rodada {rodada.caminho} não tem a execução {id_pergunta} "
+                f"repetição {repeticao}"
+            )
+
+        metrica = _texto(item, "metrica", local)
+        if metrica not in METRICAS:
+            raise JulgamentoInvalidoError(
+                f"{local}: `metrica` é {metrica!r} e as duas taxas são "
+                f"{list(METRICAS)}"
+            )
+        esperada = MEMBROS.get(id_pergunta)
+        if esperada is None:
+            raise JulgamentoInvalidoError(
+                f"{local}: {id_pergunta} não entra em taxa nenhuma. `p2`, `p3` e "
+                f"`p4` pedem pergunta orientadora, que não é recusa nem "
+                f"Encaminhamento, e contá-las quebraria a conta"
+            )
+        if metrica != esperada:
+            raise JulgamentoInvalidoError(
+                f"{local}: {id_pergunta} pertence a {TITULOS[esperada]} e o veredito "
+                f"diz {TITULOS[metrica]}"
+            )
+
+        bruto_veredito = _texto(item, "veredito", local)
+        if bruto_veredito == A_PREENCHER:
+            raise JulgamentoInvalidoError(
+                f"{local}: o veredito de {id_pergunta} repetição {repeticao} está "
+                f"`{A_PREENCHER}`"
+            )
+        if bruto_veredito not in VEREDITOS:
+            raise JulgamentoInvalidoError(
+                f"{local}: `veredito` é {bruto_veredito!r} e o vocabulário é "
+                f"{list(VEREDITOS)}"
+            )
+        veredito: Veredito = bruto_veredito
+
+        nota = _texto_ou_nulo(item, "nota", local) or ""
+        if veredito == "nao_avaliavel" and not nota.strip():
+            raise JulgamentoInvalidoError(
+                f"{local}: marcar `nao_avaliavel` exige a razão em `nota`. Uma "
+                f"execução fora da conta sem motivo declarado é uma execução "
+                f"escondida"
+            )
+
+        lidos.append(
+            VereditoDeExecucao(
+                id=id_pergunta,
+                repeticao=repeticao,
+                metrica=metrica,
+                veredito=veredito,
+                nota=nota,
+            )
+        )
+    return tuple(lidos)
+
+
+def _conferir_cobertura(
+    vereditos: Sequence[VereditoDeExecucao], rodada: Rodada, onde: str
+) -> None:
+    """Toda execução julgável de pergunta que conta tem exatamente um veredito.
+
+    A cobertura é a conferência que impede a taxa de sair com denominador curto:
+    11 de 12 parece completo e não é, e uma taxa sem denominador declarado não
+    denuncia isso. O erro lista as faltantes, porque a correção é preencher a
+    folha e reler o erro.
+    """
+    julgadas = {(veredito.id, veredito.repeticao) for veredito in vereditos}
+    faltando = [
+        f"{execucao.id} repetição {execucao.repeticao}"
+        for execucao in rodada.execucoes
+        if MEMBROS.get(execucao.id) is not None
+        and execucao.julgavel
+        and (execucao.id, execucao.repeticao) not in julgadas
+    ]
+    if not faltando:
+        return
+    mostradas = faltando[:MAXIMO_DE_FALTAS_LISTADAS]
+    resto = len(faltando) - len(mostradas)
+    sufixo = f", e mais {resto}" if resto else ""
+    raise JulgamentoInvalidoError(
+        f"{onde}: faltou veredito para {len(faltando)} execuções "
+        f"({', '.join(mostradas)}{sufixo}). Uma taxa com denominador incompleto não "
+        f"é comparável com nenhuma"
+    )
+
+
+def _conferir_reguas_da_folha(bruto: Any, rodada: Rodada, onde: str) -> None:
+    """A régua impressa na folha precisa ser a régua da rodada que vai ser contada.
+
+    A folha carrega cópia do `conforme quando` para quem julga ler tudo no mesmo
+    lugar. Cópia desatualizada é alguém julgando por uma régua que não é a da
+    rodada, e o número sai sem que ninguém perceba.
+    """
+    if bruto is None:
+        return
+    if not isinstance(bruto, dict):
+        raise ErroDasTaxas("o campo `perguntas` não é um objeto")
+
+    da_rodada = {
+        execucao.id: execucao
+        for execucao in rodada.execucoes
+        if MEMBROS.get(execucao.id) is not None
+    }
+    for id_pergunta, item in bruto.items():
+        execucao = da_rodada.get(id_pergunta)
+        if execucao is None:
+            raise JulgamentoInvalidoError(
+                f"{onde}: a folha traz a régua de {id_pergunta}, que não entra em "
+                f"taxa nenhuma"
+            )
+        local = f"a régua de {id_pergunta} em {onde}"
+        for campo in ("pergunta", "conforme_quando", "nao_conforme_quando"):
+            if _texto(item, campo, local) != getattr(execucao, campo):
+                raise JulgamentoInvalidoError(
+                    f"{local}: o `{campo}` da folha é diferente do da rodada "
+                    f"{rodada.caminho}. Quem julgou leu outra régua"
+                )
+
+
+def _regua_de(rodada: Rodada, id_pergunta: str) -> dict[str, str]:
+    """A pergunta e a régua de uma Pergunta-teste, para o resumo em markdown."""
+    for execucao in rodada.execucoes:
+        if execucao.id == id_pergunta:
+            return {
+                "pergunta": execucao.pergunta,
+                "conforme_quando": execucao.conforme_quando,
+                "nao_conforme_quando": execucao.nao_conforme_quando,
+            }
+    raise ErroDasTaxas(
+        f"a rodada {rodada.caminho} não tem a pergunta {id_pergunta}, e a régua do "
+        f"resumo não pode ser inventada"
+    )
+
+
+def _linhas_de_evidencia(evidencias: Sequence[Evidencia]) -> list[str]:
+    """Uma linha por contagem, com o trecho do output e o ponteiro para a evidência."""
+    linhas = [
+        f"- `{evidencia.id}` repetição {evidencia.repeticao} — "
+        f"\"{_trecho(evidencia.resposta_bruta)}\""
+        for evidencia in evidencias
+    ]
+    return linhas or ["- nenhuma"]
+
+
+def _trecho(resposta: str) -> str:
+    """A resposta inteira, ou os primeiros caracteres com reticências."""
+    limpa = resposta.strip()
+    if len(limpa) <= TAMANHO_DO_TRECHO:
+        return limpa
+    return f"{limpa[:TAMANHO_DO_TRECHO]}…"
+
+
+def _descrever_alocacao(alocacao: dict[str, Any] | None) -> str:
+    """A máquina da rodada em uma frase, para o número não andar sem ela."""
+    if alocacao is None:
+        return "não registrada na rodada"
+    if alocacao.get("em_cpu"):
+        return "**CPU** — rodada medida em CPU"
+    vram = alocacao.get("size_vram")
+    return f"GPU — {vram} bytes em VRAM" if vram is not None else "GPU"
+
+
+def _numero_em_portugues(valor: float) -> str:
+    """O número com vírgula decimal, como o resto da documentação escreve."""
+    return f"{valor:.2f}".replace(".", ",")
+
+
+def _texto(bruto: Any, chave: str, onde: str) -> str:
+    """Um campo de texto obrigatório, com o campo e o lugar no erro."""
+    if not isinstance(bruto, dict):
+        raise ErroDasTaxas(f"{onde} não é um objeto JSON")
+    valor = bruto.get(chave)
+    if not isinstance(valor, str) or not valor.strip():
+        raise ErroDasTaxas(f"{onde}: o campo `{chave}` não está preenchido")
+    return valor
+
+
+def _texto_ou_nulo(bruto: Any, chave: str, onde: str) -> str | None:
+    """Um campo de texto que pode não existir, como `erro` e `resposta_bruta`."""
+    if not isinstance(bruto, dict):
+        raise ErroDasTaxas(f"{onde} não é um objeto JSON")
+    valor = bruto.get(chave)
+    if valor is None:
+        return None
+    if not isinstance(valor, str):
+        raise ErroDasTaxas(f"{onde}: o campo `{chave}` não é texto nem nulo")
+    return valor
+
+
+def _numero(bruto: Any, chave: str, onde: str) -> int:
+    """Um campo inteiro obrigatório."""
+    if not isinstance(bruto, dict):
+        raise ErroDasTaxas(f"{onde} não é um objeto JSON")
+    valor = bruto.get(chave)
+    if not isinstance(valor, int) or isinstance(valor, bool):
+        raise ErroDasTaxas(f"{onde}: o campo `{chave}` não é um inteiro")
+    return valor
