@@ -4,6 +4,10 @@ Lê variáveis de ambiente com defaults seguros e tipados. A VRAM total da
 máquina entra por `VRAM_TOTAL_MIB` porque nenhum endpoint do Ollama a expõe, e
 a checagem de pré-requisito do ADR-0002 não consegue confrontar o `size_vram`
 que o Ollama relata sem ela.
+
+O `INFERENCIA_K` e o `INFERENCIA_FILA_TETO` são a #11, e a validação deles é a
+mesma do TTL, com o mesmo motivo: quem escreve o número no `.env` não tem como
+perceber que zero é diferente de um.
 """
 
 from __future__ import annotations
@@ -11,6 +15,8 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from typing import Mapping
+
+from sau.inference.semaphore import K_PADRAO, TETO_PADRAO_DA_FILA
 
 
 @dataclass(frozen=True)
@@ -31,6 +37,8 @@ class Configuracao:
     telegram_api_base: str
     conversa_caminho: str
     conversa_ttl_minutos: int
+    inferencia_k: int
+    inferencia_fila_teto: int
     telegram_public_url: str | None = None
     ngrok_api_url: str | None = None
 
@@ -149,6 +157,46 @@ def carregar_configuracao(origem: Mapping[str, str] | None = None) -> Configurac
             "seria apagado antes de o turno seguinte chegar."
         )
 
+    # O semáforo de inferência: quantos turnos entram no modelo ao mesmo tempo e
+    # quantos podem esperar uma vaga. As duas variáveis nascem aqui na #11, e o
+    # `INFERENCIA_K` é o número que o ADR-0001 exige medir na máquina alvo em vez
+    # de assumir — o valor padrão é o ponto de partida declarado, e o procedimento
+    # de medição está em `docs/fila-e-semaforo.md`.
+    #
+    # Zero é recusado nos dois, e não por formalidade: com `k=0` nenhuma vaga
+    # existiria e todo turno ficaria esperando para sempre, e com teto `0` o
+    # primeiro turno fora de vaga seria recusado antes de a fila chegar a existir.
+    # A validação é a mesma do TTL acima, e vale a mesma razão: quem escreve o
+    # número no `.env` não tem como perceber que zero é diferente de um.
+    k_raw = env.get("INFERENCIA_K", str(K_PADRAO))
+    try:
+        inferencia_k = int(k_raw)
+    except ValueError as err:
+        raise ValueError(
+            f"Valor inválido para INFERENCIA_K: '{k_raw}'. Esperado inteiro."
+        ) from err
+    if inferencia_k <= 0:
+        raise ValueError(
+            f"Valor inválido para INFERENCIA_K: '{k_raw}'. Esperado inteiro "
+            f"positivo: com zero nenhuma vaga de inferência existiria e todo turno "
+            "ficaria esperando para sempre, sem que ninguém percebesse. O valor "
+            "medido na máquina alvo está em docs/fila-e-semaforo.md."
+        )
+
+    teto_raw = env.get("INFERENCIA_FILA_TETO", str(TETO_PADRAO_DA_FILA))
+    try:
+        inferencia_fila_teto = int(teto_raw)
+    except ValueError as err:
+        raise ValueError(
+            f"Valor inválido para INFERENCIA_FILA_TETO: '{teto_raw}'. Esperado inteiro."
+        ) from err
+    if inferencia_fila_teto <= 0:
+        raise ValueError(
+            f"Valor inválido para INFERENCIA_FILA_TETO: '{teto_raw}'. Esperado inteiro "
+            "positivo: com zero o primeiro turno fora de vaga seria recusado antes de "
+            "a fila de espera existir."
+        )
+
     return Configuracao(
         ollama_base_url=ollama_base_url,
         ollama_model=ollama_model,
@@ -164,6 +212,8 @@ def carregar_configuracao(origem: Mapping[str, str] | None = None) -> Configurac
         telegram_api_base=telegram_api_base,
         conversa_caminho=conversa_caminho,
         conversa_ttl_minutos=conversa_ttl_minutos,
+        inferencia_k=inferencia_k,
+        inferencia_fila_teto=inferencia_fila_teto,
         telegram_public_url=telegram_public_url,
         ngrok_api_url=ngrok_api_url,
     )

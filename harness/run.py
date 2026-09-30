@@ -2,8 +2,9 @@
 
 Envia as 10 Perguntas-teste ao S.A.U. pelo caminho real do turno
 (`sau.config` + `ClienteOllama` + `sau.graph.graph.executar_turno`, com
-histórico vazio, como o `webhook` faz) e grava o output bruto de cada
-execução, com o comportamento esperado lado a lado.
+histórico vazio, como o `webhook` faz) e a cadeia especial s1–s5 em sequência
+com histórico acumulado, e grava o output bruto de cada execução, com o
+comportamento esperado lado a lado.
 
 Cada Pergunta-teste roda **3 repetições**, e não uma. O ADR-0003 mediu que das
 12 perguntas da sondagem só 4 tiveram as 3 repetições idênticas na máquina de
@@ -29,9 +30,9 @@ falha ou o timeout de uma execução grava `erro` no registro e a bateria segue.
 
 Códigos de saída:
 
-- `0` — a bateria rodou e produziu ao menos uma resposta
+- `0` — a bateria rodou e produziu ao menos uma resposta (na bateria ou na cadeia)
 - `1` — a bateria rodou e **nenhuma** execução produziu resposta
-- `2` — o arquivo das Perguntas-teste não bate com as 10 esperadas
+- `2` — o arquivo das Perguntas-teste não bate com as 10 esperadas mais a cadeia s1–s5
 - `3` — o pré-requisito falhou (Ollama fora, modelo ausente, CPU não autorizada)
 
 Uso canônico:
@@ -59,6 +60,7 @@ import httpx
 
 from sau.config import carregar_configuracao
 from sau.graph.graph import executar_turno
+from sau.graph.state import Mensagem
 from sau.inference.ollama import (
     NUM_CTX_PADRAO,
     TIMEOUT_PADRAO,
@@ -75,6 +77,17 @@ PASTA_SAIDAS_PADRAO: Final = RAIZ_DO_PROJETO / "outputs"
 
 ORDEM_DA_BATERIA: Final = ("a1", "a2", "a3", "f1", "f2", "f3", "p1", "p2", "p3", "p4")
 IDS_ESPERADOS: Final = frozenset(ORDEM_DA_BATERIA)
+
+ORDEM_DA_CADEIA: Final = ("s1", "s2", "s3", "s4", "s5")
+"""A cadeia especial de Petrolina, na ordem em que o Aluno a disse.
+
+É um caso especial encadeado, e não parte da bateria: as 10 Perguntas-teste
+rodam isoladas com histórico vazio, e estes 5 passos rodam em sequência com
+histórico acumulado, 3 repetições da cadeia inteira.
+"""
+
+IDS_DA_CADEIA: Final = frozenset(ORDEM_DA_CADEIA)
+IDS_TODOS: Final = IDS_ESPERADOS | IDS_DA_CADEIA
 
 REPETICOES_PADRAO: Final = 3
 """Quantas vezes cada Pergunta-teste roda.
@@ -203,6 +216,34 @@ class RegistroDaExecucao:
     duracao_segundos: float
 
 
+@dataclass(frozen=True)
+class RegistroDoPassoDaCadeia:
+    """Um passo da cadeia especial: uma Pergunta-teste encadeada, uma vez.
+
+    É o mesmo formato do `RegistroDaExecucao`, com um campo a mais:
+    `historico_usado` guarda o histórico que o turno recebeu neste passo, como
+    tupla de `Mensagem` do Aluno e do S.A.U. O primeiro passo usa histórico
+    vazio; cada passo seguinte usa o acumulado dos passos anteriores da mesma
+    repetição. Quando o passo falha, só a fala do Aluno entra no acumulado — o
+    S.A.U. não respondeu, e o passo seguinte precisa ver a pergunta mesmo assim.
+    A falha de um passo nunca aborta a cadeia.
+    """
+
+    id: str
+    repeticao: int
+    pergunta: str
+    conforme_quando: str
+    nao_conforme_quando: str
+    resposta_bruta: str | None
+    erro: str | None
+    motivo_de_parada: str | None
+    tokens_gerados: int | None
+    primeiro_token_segundos: float | None
+    historico_usado: tuple[Mensagem, ...]
+    timestamp: str
+    duracao_segundos: float
+
+
 class ClienteMedido(ClienteOllama):
     """O cliente do Ollama com as travas da medição aplicadas, e que guarda a `Resposta`.
 
@@ -246,6 +287,9 @@ def carregar_perguntas_teste(caminho: Path = ARQUIVO_PERGUNTAS_PADRAO) -> list[P
     marcador `<!-- pergunta:<id> -->` seguido do bloco ```text com o texto
     que o harness envia ao S.A.U. O comportamento esperado sai das linhas
     `conforme quando` / `não conforme quando` do bloco de cada Pergunta-teste.
+
+    A cadeia especial s1–s5 mora no mesmo arquivo e não conta como sobra: ela
+    é lida por `carregar_cadeia`, e a bateria continua sendo as 10 isoladas.
     """
     if not caminho.is_file():
         raise ValueError(f"as Perguntas-teste não estão em {caminho}")
@@ -255,7 +299,7 @@ def carregar_perguntas_teste(caminho: Path = ARQUIVO_PERGUNTAS_PADRAO) -> list[P
 
     ids_lidos = set(textos)
     faltando = sorted(IDS_ESPERADOS - ids_lidos)
-    sobrando = sorted(ids_lidos - IDS_ESPERADOS)
+    sobrando = sorted(ids_lidos - IDS_TODOS)
     if faltando or sobrando:
         raise ValueError(
             "as Perguntas-teste do arquivo não batem com as 10 esperadas — "
@@ -279,14 +323,51 @@ def carregar_perguntas_teste(caminho: Path = ARQUIVO_PERGUNTAS_PADRAO) -> list[P
     return perguntas
 
 
+def carregar_cadeia(caminho: Path = ARQUIVO_PERGUNTAS_PADRAO) -> list[PerguntaTeste]:
+    """Lê a cadeia especial s1–s5 do mesmo markdown, na ordem da conversa.
+
+    Cada passo tem o mesmo formato da bateria — marcador, bloco ```text e as
+    linhas `conforme quando` / `não conforme quando` — e a ordem é a da
+    conversa (s1→s5). A cadeia roda com histórico acumulado, e não isolada.
+    """
+    if not caminho.is_file():
+        raise ValueError(f"as Perguntas-teste não estão em {caminho}")
+
+    conteudo = caminho.read_text(encoding="utf-8")
+    textos = {m.group("id"): m.group("texto").strip() for m in RE_BLOCO_PERGUNTA.finditer(conteudo)}
+
+    ids_lidos = set(textos)
+    faltando = sorted(IDS_DA_CADEIA - ids_lidos)
+    if faltando:
+        raise ValueError(
+            "a cadeia do arquivo não bate com os 5 passos esperados — "
+            f"faltando {faltando}, esperados {sorted(IDS_DA_CADEIA)}"
+        )
+
+    passos: list[PerguntaTeste] = []
+    for id_passo in ORDEM_DA_CADEIA:
+        regiao = _regiao_do_bloco(conteudo, id_passo)
+        conforme = _extrair_campo(regiao, RE_CONFORME, "conforme quando", id_passo)
+        nao_conforme = _extrair_campo(regiao, RE_NAO_CONFORME, "não conforme quando", id_passo)
+        passos.append(
+            PerguntaTeste(
+                id=id_passo,
+                texto=textos[id_passo],
+                conforme_quando=conforme,
+                nao_conforme_quando=nao_conforme,
+            )
+        )
+    return passos
+
+
 def _regiao_do_bloco(conteudo: str, id_pergunta: str) -> str:
     """O trecho do markdown do marcador da Pergunta-teste até a próxima Pergunta-teste.
 
     O bloco de texto termina em `<!-- pergunta:fim -->`, e a tabela com o
     `conforme quando` vem depois dele: cortar no `fim` deixaria o
     comportamento esperado fora da região. Por isso a região vai até o
-    marcador da próxima Pergunta-teste com id válido, e não até o próximo
-    marcador qualquer.
+    marcador da próxima Pergunta-teste com id válido (da bateria ou da
+    cadeia), e não até o próximo marcador qualquer.
     """
     marcadores = list(RE_MARCADOR_PERGUNTA.finditer(conteudo))
     inicio = -1
@@ -296,7 +377,7 @@ def _regiao_do_bloco(conteudo: str, id_pergunta: str) -> str:
             inicio = marcador.start()
             for seguinte in marcadores[indice + 1 :]:
                 id_seguinte = seguinte.group("id")
-                if id_seguinte in IDS_ESPERADOS and id_seguinte != id_pergunta:
+                if id_seguinte in IDS_TODOS and id_seguinte != id_pergunta:
                     fim = seguinte.start()
                     break
             break
@@ -374,6 +455,70 @@ def _executar_uma(
     )
 
 
+def executar_cadeia(
+    passos: Sequence[PerguntaTeste],
+    turno_com_historico: Callable[[str, Sequence[Mensagem]], Resposta],
+    repeticoes: int = REPETICOES_PADRAO,
+) -> list[RegistroDoPassoDaCadeia]:
+    """Roda a cadeia s1→s5 `repeticoes` vezes, com histórico acumulado.
+
+    Cada repetição é uma conversa nova: o histórico começa vazio em s1 e cresce
+    passo a passo, na ordem da cadeia. `turno_com_historico` recebe o texto do
+    passo e o histórico até ali, e devolve a `Resposta` do modelo. Erro ou
+    timeout viram `erro` no registro e a cadeia segue para o passo seguinte —
+    a falha de um passo nunca aborta a repetição.
+    """
+    registros: list[RegistroDoPassoDaCadeia] = []
+    for repeticao in range(1, repeticoes + 1):
+        historico: list[Mensagem] = []
+        for passo in passos:
+            registros.append(_executar_passo(passo, repeticao, historico, turno_com_historico))
+            ultimo = registros[-1]
+            agora = time.time()
+            historico.append(Mensagem(papel="aluno", texto=passo.texto, em=agora))
+            if ultimo.resposta_bruta is not None:
+                historico.append(Mensagem(papel="sau", texto=ultimo.resposta_bruta, em=agora))
+    return registros
+
+
+def _executar_passo(
+    passo: PerguntaTeste,
+    repeticao: int,
+    historico: Sequence[Mensagem],
+    turno_com_historico: Callable[[str, Sequence[Mensagem]], Resposta],
+) -> RegistroDoPassoDaCadeia:
+    """Roda um passo da cadeia com o histórico acumulado até ele."""
+    usado = tuple(historico)
+    timestamp = datetime.now(timezone.utc).isoformat()
+    inicio = time.perf_counter()
+    resposta: Resposta | None = None
+    erro: str | None = None
+    try:
+        resposta = turno_com_historico(passo.texto, usado)
+    except Exception as exc:
+        # A exceção larga aqui é deliberada, como na bateria: um passo que
+        # falha é dado, e a cadeia segue para o passo seguinte.
+        erro = f"{type(exc).__name__}: {exc}"
+    duracao = time.perf_counter() - inicio
+    return RegistroDoPassoDaCadeia(
+        id=passo.id,
+        repeticao=repeticao,
+        pergunta=passo.texto,
+        conforme_quando=passo.conforme_quando,
+        nao_conforme_quando=passo.nao_conforme_quando,
+        resposta_bruta=resposta.texto if resposta is not None else None,
+        erro=erro,
+        motivo_de_parada=resposta.motivo_de_parada if resposta is not None else None,
+        tokens_gerados=resposta.tokens_gerados if resposta is not None else None,
+        primeiro_token_segundos=(
+            resposta.primeiro_token_segundos if resposta is not None else None
+        ),
+        historico_usado=usado,
+        timestamp=timestamp,
+        duracao_segundos=duracao,
+    )
+
+
 def sha256_do_prompt() -> str:
     """O `sha256` do prompt versionado, para amarrar a rodada a um estado do código.
 
@@ -406,11 +551,14 @@ def gravar_rodada(
     registros: Sequence[RegistroDaExecucao],
     condicoes: CondicoesDaRodada,
     destino: Path,
+    cadeia: Sequence[RegistroDoPassoDaCadeia] = (),
 ) -> Path:
-    """Grava o JSON de uma rodada: as condições, a máquina e as execuções.
+    """Grava o JSON de uma rodada: as condições, a máquina, as execuções e a cadeia.
 
     `condicoes` vem antes dos registros porque é ele que dá sentido aos
-    registros: os números só se comparam com os mesmos números.
+    registros: os números só se comparam com os mesmos números. A `cadeia` vai
+    em bloco separado porque roda com histórico acumulado, e não isolada como
+    a bateria.
     """
     rodada = {
         "modelo": condicoes.modelo,
@@ -427,6 +575,7 @@ def gravar_rodada(
         "inicio": condicoes.inicio,
         "fim": condicoes.fim,
         "execucoes": [asdict(registro) for registro in registros],
+        "cadeia": [asdict(passo) for passo in cadeia],
     }
     destino.parent.mkdir(parents=True, exist_ok=True)
     destino.write_text(json.dumps(rodada, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -543,6 +692,7 @@ def main(argumentos: Sequence[str] | None = None) -> int:
 
     try:
         perguntas = carregar_perguntas_teste(opcoes.perguntas)
+        cadeia_passos = carregar_cadeia(opcoes.perguntas)
     except ValueError as exc:
         print(f"\nFALHA: {exc}", file=sys.stderr)
         return SAIDA_PERGUNTAS_INVALIDAS
@@ -585,7 +735,21 @@ def main(argumentos: Sequence[str] | None = None) -> int:
             )
         return cliente.ultima
 
+    def turno_com_historico(texto: str, historico: Sequence[Mensagem]) -> Resposta:
+        # O mesmo caminho do turno isolado, mas com o histórico acumulado da
+        # cadeia: é assim que o `webhook` chama em produção, e é o que prova
+        # que o S.A.U. retoma o dado em vez de repedir a pergunta.
+        executar_turno(cliente, texto, historico)
+        if cliente.ultima is None:
+            raise ErroDeInferencia(
+                "FALHA CRÍTICA: o turno rodou e não deixou registro de geração. "
+                "O grafo deixou de chamar o cliente, e um turno sem geração não "
+                "produz resposta nenhuma."
+            )
+        return cliente.ultima
+
     registros = executar_bateria(perguntas, turno, opcoes.repeticoes)
+    registros_da_cadeia = executar_cadeia(cadeia_passos, turno_com_historico, opcoes.repeticoes)
 
     condicoes = CondicoesDaRodada(
         modelo=modelo,
@@ -601,14 +765,24 @@ def main(argumentos: Sequence[str] | None = None) -> int:
         fim=datetime.now(timezone.utc).isoformat(),
     )
     destino = opcoes.saida or _nome_padrao_de_saida()
-    gravar_rodada(registros, condicoes, destino)
+    gravar_rodada(registros, condicoes, destino, registros_da_cadeia)
 
     com_resposta = sum(1 for registro in registros if registro.resposta_bruta is not None)
+    com_resposta_cadeia = sum(
+        1 for passo in registros_da_cadeia if passo.resposta_bruta is not None
+    )
     falhas = len(registros) - com_resposta
+    falhas_cadeia = len(registros_da_cadeia) - com_resposta_cadeia
     cortadas = sum(1 for registro in registros if registro.motivo_de_parada == "length")
+    cortadas += sum(1 for passo in registros_da_cadeia if passo.motivo_de_parada == "length")
     print(
         f"bateria: {len(perguntas)} Perguntas-teste x {opcoes.repeticoes} repetições "
         f"= {len(registros)} execuções, {com_resposta} com resposta, {falhas} com erro"
+    )
+    print(
+        f"cadeia: {len(cadeia_passos)} passos x {opcoes.repeticoes} repetições "
+        f"= {len(registros_da_cadeia)} execuções, {com_resposta_cadeia} com resposta, "
+        f"{falhas_cadeia} com erro"
     )
     if cortadas:
         print(
@@ -618,7 +792,7 @@ def main(argumentos: Sequence[str] | None = None) -> int:
         )
     print(f"JSON bruto gravado em {destino}")
 
-    if com_resposta == 0:
+    if com_resposta + com_resposta_cadeia == 0:
         print(
             "\nFALHA: nenhuma execução produziu resposta. O arquivo foi gravado, "
             "mas ele não é evidência de nada — confira o `erro` do primeiro caso.",

@@ -3,22 +3,31 @@
 Recebe o update do Telegram, registra o update bruto para depuração e entrega ao
 Aluno um acuse de recibo fixo, ainda antes de qualquer inferência. É a primeira
 metade do que o ADR-0001 exige: confirmar o recebimento imediatamente é
-requisito, não polimento. A segunda metade — a posição na fila de espera — é do
-ticket de concorrência (#11).
+requisito, não polimento. A segunda metade — a posição na fila de espera — é da
+#11, e ela mora aqui porque é uma mensagem para o Aluno: `texto_posicao_na_fila`.
 
 Desde a #8 o turno acontece aqui: o acuse sai primeiro, o grafo roda depois, fora
 do request, e a resposta do modelo volta ao Aluno em uma segunda mensagem. O
 serviço `webhook` é quem roda o grafo, e isso é uma emenda ao ADR-0002, não uma
 decisão nova — o modelo continua no host e continua fora do container.
 
-A thread por turno é provisória e é o que a #11 substitui por fila e semáforo.
-Ela existe para que o Aluno não espere o modelo dentro do request, que é a
-promessa do acuse: ele levou o primeiro retorno antes de qualquer inferência.
+Desde a #11 o grafo roda dentro de um semáforo com `k` vagas, e o turno que não
+consegue vaga não desaparece: ou o Aluno recebe a posição e a estimativa, ou,
+acima do teto da fila, recebe a recusa educada. São as duas metades do backpressure
+que o ADR-0001 chama de "comunicado, não escondido".
+
+**A thread por turno continua, e o texto desta verdade mudou.** Antes ela era
+provisória e a #11 a substituiria; a #11 substituiu a thread como mecanismo de
+**escassez**, não como mecanismo de tira-fora-do-request. Ela segue existindo
+porque é ela que tira o turno de dentro do request, que é a promessa do acuse: o
+Aluno levou o primeiro retorno antes de qualquer inferência. O que a #11
+descartou foi o worker dedicado *por Aluno*, e continua descartado.
 """
 
 from __future__ import annotations
 
 import logging
+import math
 import secrets
 import sys
 import threading
@@ -32,6 +41,7 @@ from sau.config import Configuracao, carregar_configuracao
 from sau.graph.graph import executar_turno
 from sau.graph.state import RegistroDeConversas
 from sau.inference.ollama import ClienteOllama, ErroDeInferencia
+from sau.inference.semaphore import FilaCheiaError, PosicaoNaFila, SemaforoDeInferencia
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +49,11 @@ TEXTO_ACK = "Recebi sua mensagem. Vou te responder em instantes."
 """O acuse de recibo, fixo e sem o modelo, e a primeira das duas mensagens que o
 Aluno leva. O texto não promete posição na fila porque a #11 é dona dela; o que
 ele promete é que a mensagem chegou e que alguém respondeu. A resposta do modelo
-é a segunda mensagem, e sai depois desta."""
+é a segunda mensagem, e sai depois desta.
+
+Desde a #11 existe uma terceira mensagem possível entre o acuse e a resposta: a
+de posição na fila. Ela não substitui o acuse nem a resposta, e é a que transforma
+o silêncio em espera — ver `texto_posicao_na_fila`."""
 
 TEXTO_FALHA = (
     "Tive um problema para responder sua mensagem agora. Tente novamente em instantes."
@@ -49,6 +63,31 @@ TEXTO_FALHA = (
 escritos, e esse texto é para o Aluno ler, não para quem depura. O motivo vai
 inteiro para o log do turno, e a exceção nunca chega até aqui — quem vê stack
 trace é o operador, no `stderr` do serviço, e o Aluno leva esta frase."""
+
+TEXTO_FILA_CHEIA = (
+    "Muitos alunos estão me perguntando ao mesmo tempo e a fila de espera está cheia. "
+    "Tente sua pergunta de novo daqui a pouco."
+)
+"""O que o Aluno recebe quando o semáforo recusa o turno, acima do teto da fila.
+
+Educado e curto de propósito, e por duas razões que a #9 e a #11 deixaram claras. A
+primeira é que o Aluno é alguém acordado às duas da manhã pedindo ajuda, e recusa
+seca é o que faz ele achar que o S.A.U. quebrou. A segunda é que a recusa **entra
+no histórico** como resposta da conversa: o histórico não pode divergir do que o
+Aluno leu, e foi essa a invariante que a `TEXTO_FALHA` fixou para a falha.
+
+A frase não promete prazo nem "tente mais tarde" com horário: o que ela promete é
+o que o serviço pode cumprir — que a próxima tentativa entra numa fila nova. E não
+cita número nenhum, porque quem recusa é a válvula: a fila pode estar cheia por um
+motivo que o Aluno não tem como agir sobre ele.
+
+Ela também não pode se fundir com a `TEXTO_FALHA`. A falha diz que algo quebrou e
+convida a tentar; a recusa diz que a fila encheu e que o momento é o problema, não o
+S.A.U. São diagnósticos diferentes para o Aluno e para o log.
+
+O efeito colateral conhecido: o Aluno já leu o `TEXTO_ACK` ("vou te responder em
+instantes") antes da recusa, e a recusa chega logo em seguida. É o que a issue pede
+— recusar educado, e não espera silenciosa."""
 
 CABECALHO_SECRET_TOKEN = "X-Telegram-Bot-Api-Secret-Token"
 """Header que o Telegram anexa a toda entrega quando o `setWebhook` foi feito com
@@ -232,6 +271,56 @@ def registrar_webhook(
             _postar(proprio)
 
 
+def texto_posicao_na_fila(posicao: int, espera_segundos: float) -> str:
+    """A frase que o Aluno lê quando o turno dele entrou atrás de outro.
+
+    É a terceira das mensagens possíveis do turno, e ela existe porque o ADR-0001
+    diz o que acontece sem ela: "um Aluno às 2h da manhã esperando sem saber o que
+    está acontecendo destrói a promessa do produto". O texto informa duas coisas —
+    a **posição** e uma **estimativa** — e a segunda vem com "cerca de", que não é
+    refinamento de texto: é honestidade, porque o semáforo entrega uma média móvel
+    que erra para os dois lados.
+
+    A formatação vive aqui e não no semáforo, e é por isso que este módulo
+    conhece o Telegram e o semáforo não: o semáforo entrega `PosicaoNaFila`, e quem
+    sabe escrever para o Aluno em português é este arquivo, como o `TEXTO_ACK` e a
+    `TEXTO_FALHA`.
+
+    A granularidade é a do **minuto** a partir de um minuto, e não do segundo: a
+    estimativa vem multiplicada por um número de voltas que raramente é inteiro, e
+    "cerca de 3,7 minutos" é pior do que "cerca de 4 minutos" — é o tipo de
+    precisão que não existe e que faz o Aluno desconfiar do resto do número. Abaixo
+    de um minuto a frase é em segundos, porque "cerca de meio minuto" é mais difícil
+    de ler do que "cerca de 30 segundos".
+
+    A guarda de espera negativa é um `ValueError` e não um `assert` por uma razão
+    concreta: `python -O` descarta `assert`, e o serviço roda com o interpretador
+    normal — enquanto um `python -O` acidental em produção deixaria o Aluno ler
+    "cerca de -20 segundos". A faixa de `max(1, ...)` abaixo é o que segura o zero
+    de verdade, que é um caso legítimo: uma posição na frente com média medida em
+    menos de meio segundo arredonda para zero, e "cerca de 0 segundos" é pior do que
+    "cerca de 1 segundo".
+    """
+    if espera_segundos < 0:
+        raise ValueError(
+            f"Estimativa de espera negativa para o Aluno na posição {posicao}: "
+            f"{espera_segundos}. O semáforo nunca devolve espera negativa — a média "
+            "das vagas é uma duração, e duração não é negativa — e um valor assim "
+            "aqui viraria um texto que mente para quem está de fato esperando."
+        )
+    if espera_segundos < 60:
+        return (
+            f"Você está na posição {posicao} da fila, "
+            f"e a resposta deve sair em cerca de {max(1, round(espera_segundos))} segundos."
+        )
+    minutos = math.ceil(espera_segundos / 60)
+    return (
+        f"Você está na posição {posicao} da fila, "
+        f"e a resposta deve sair em cerca de {minutos} minuto"
+        f"{'s' if minutos > 1 else ''}."
+    )
+
+
 def _extrair_chat_id(update: dict[str, Any]) -> int | None:
     """Descobre o chat do Aluno no update, ou None quando ele não é uma mensagem.
 
@@ -336,29 +425,49 @@ def enviar_mensagem(
 
 
 ExecutorTurno = Callable[
-    [Configuracao, int, str, "RegistroDeConversas", "httpx.Client | None"],
+    [
+        Configuracao,
+        int,
+        str,
+        "RegistroDeConversas",
+        "SemaforoDeInferencia",
+        "httpx.Client | None",
+    ],
     None,
 ]
-"""O que roda um turno: recebe a configuração, o chat do Aluno, a mensagem dele e o
-registro de conversas, e é responsável por gravar a conversa e por entregar a
-resposta — ou a mensagem de falha. É injetável porque o turno é o passo que o teste
-precisa controlar, e um `threading.Thread` de verdade é o que torna isso impossível
-de afirmar.
+"""O que roda um turno: recebe a configuração, o chat do Aluno, a mensagem dele, o
+registro de conversas e o semáforo de inferência, e é responsável por gravar a
+conversa e por entregar a resposta — ou a mensagem de falha. É injetável porque o
+turno é o passo que o teste precisa controlar, e um `threading.Thread` de verdade é
+o que torna isso impossível de afirmar.
 
 O `registro` entra no executor e não numa closure porque o turno roda numa thread
 criada depois do request: a conversa precisa ser resolvida **dentro** da thread, no
 momento do turno, e não no momento em que o `agendar` foi chamado. Uma conversa
 montada no request e passada por valor carregaria um histórico velho e, pior, não
 seria o mesmo objeto que segura a fila.
+
+O `semaforo` entra pelo mesmo caminho e pelo mesmo motivo: ele é o limite de quantos
+turnos rodam no modelo, e o app é quem o monta, porque quem tem a `Configuracao` com
+o `INFERENCIA_K` é o `criar_app`. Um semáforo montado dentro do turno seria um
+sinaleiro novo a cada mensagem, e o `k` não limitaria nada.
 """
 
 
 def _agendar(acao: Callable[[], None]) -> None:
     """Roda `acao` em uma thread, fora do request.
 
-    Thread e não fila é escolha provisória da #8, e o motivo é o mesmo da #11:
-    o acuse já saiu, o Telegram já recebeu o 2xx, e o que sobrou para esperar é
-    o modelo. A thread entrega isso hoje sem o estado que a fila exige.
+    A thread **continua** depois da #11, e é preciso dizer por que, porque o texto
+    desta função dizia que ela seria substituída e não foi. O que a #11 substituiu
+    foi a thread como mecanismo de **escassez**: antes, uma thread por turno era o
+    que fazia o serviço aceitar quantos Alunos o Python conseguisse acordar, e o
+    Ollama era o único que não dava conta. Agora quem limita é o semáforo, com `k`
+    medido na máquina alvo.
+
+    A thread fica pelo outro motivo, que é o do acuse: ela tira o turno de dentro
+    do request, e é por isso que o Aluno levou a primeira resposta antes de qualquer
+    inferência. O ADR-0001 descartou worker dedicado *por Aluno*, que é outra coisa
+    e continua descartado.
 
     Daemon de propósito: uma thread presa no timeout do modelo não pode segurar
     o processo do container na hora do `docker compose down`.
@@ -371,6 +480,7 @@ def _processar_turno(
     chat_id: int,
     texto: str,
     registro: RegistroDeConversas,
+    semaforo: SemaforoDeInferencia,
     client: httpx.Client | None = None,
 ) -> None:
     """Roda o grafo do turno e entrega ao Aluno a resposta, ou a mensagem de falha.
@@ -388,7 +498,46 @@ def _processar_turno(
     2. **grava a mensagem do Aluno**, antes do grafo, porque se o turno falhar a
        pergunta foi dada e é parte da conversa de qualquer jeito;
     3. **grava a resposta entregue**, depois da entrega ser montada, e inclusive a
-       `TEXTO_FALHA` — o histórico não pode divergir do que o Aluno leu.
+       `TEXTO_FALHA` e a `TEXTO_FILA_CHEIA` — o histórico não pode divergir do que o
+       Aluno leu.
+
+    **O semáforo é adquirido dentro do `em_ordem()`, e essa é a decisão que sustenta
+    o critério "um Aluno nunca tem dois turnos processados ao mesmo tempo".** Dentro,
+    a fila do semáforo tem no máximo uma entrada por conversa, porque o turno só
+    chega ao semáforo quando já é a vez dele na conversa. Fora, seguraria uma vaga
+    enquanto o turno espera a vez da *própria* conversa, e dois turnos do mesmo Aluno
+    poderiam estar na vaga ao mesmo tempo — o critério viraria uma corrida.
+
+    A consequência boa dessa ordem é que a posição contada é posição **entre
+    Alunos**, que é o que o Aluno entende quando lê "sua vez é a 3ª". Um turno atrás
+    de outro turno do mesmo Aluno não existe aqui: ele está atrás da conversa, e o
+    Aluno já sabe que o mandou antes.
+
+    A ordem dos dois travamentos é sempre conversa e depois semáforo, e o
+    `finally` do semáforo devolve a vaga mesmo com exceção no corpo. Não há caminho
+    que inverta a ordem, então não há deadlock.
+
+    O `aviso` do semáforo chama `enviar_mensagem` de dentro desta thread, e é
+    proposital: a thread do turno é o único lugar do processo onde um `sendMessage`
+    pode demorar sem travar nada, porque o acuse já saiu e o request já voltou 2xx.
+    A espera tem teto de `TIMEOUT_ENVIO_SEGUNDOS`, então um Telegram lento atrasa a
+    fila em até 5 s e não a trava.
+
+    E o `aviso` pode falhar, e a falha não é da fila. O `enviar_mensagem` só captura
+    `httpx.HTTPError`: um `TELEGRAM_API_BASE` malformado levanta `httpx.InvalidURL`,
+    que não é subclasse de `HTTPError`, e a exceção sai direto — como sai qualquer
+    outra falha de I/O. Ela cai no `except Exception` largo abaixo e vira
+    `TEXTO_FALHA` para o Aluno com o motivo no log, que é o mesmo tratamento de
+    qualquer outro turno que falhou. O que o semáforo garante é o resto: o turno que
+    morreu no `aviso` devolve a senha antes de sair, senão ninguém viria servi-la e
+    todo turno posterior esperaria para sempre, em silêncio. Ninguém fica preso por
+    causa de I/O de terceiro — e é por isso que o `aviso` roda dentro do `try` do
+    semáforo: fora da trava de propósito, dentro do `try` por necessidade.
+
+    A `FilaCheiaError` vira `TEXTO_FILA_CHEIA` para o Aluno, `warning` no log e
+    **nenhuma chamada ao modelo**: recusar por fila cheia antes de inferir é o que
+    evita que o modelo seja chamado para um turno que já foi recusado. Ela entra no
+    histórico pelo mesmo `registrar_do_sau` da falha, e é a mesma invariante.
 
     O `ClienteOllama` é montado aqui, com o `OLLAMA_TIMEOUT` da configuração: o
     `webhook` não roda a checagem de pré-requisito do `bot` (ADR-0002), e essa é
@@ -411,6 +560,10 @@ def _processar_turno(
     quem opera o serviço o encontra. O Aluno recebe a mesma frase, porque para ele
     é a mesma coisa: não houve resposta.
 
+    O `FilaCheiaError` é pego **antes** do `Exception` largo, e a ordem importa: se
+    o largo viesse primeiro, a recusa educada viraria `TEXTO_FALHA` e o Aluno leria
+    que algo quebrou, quando o que houve é fila cheia.
+
     Uma falha de leitura ou escrita do registro também vira `TEXTO_FALHA`, e não
     sobe: o arquivo de conversas é infraestrutura, e um disco cheio não pode
     derrubar o canal do Telegram — que ainda acuseja e ainda precisa atender quem
@@ -422,13 +575,44 @@ def _processar_turno(
         timeout=config.ollama_timeout,
     )
     inicio = time.perf_counter()
+
+    def avisar_posicao(posicao: PosicaoNaFila) -> None:
+        """Entrega a posição da fila ao Aluno, uma vez só, antes de esperar.
+
+        O texto vem do `texto_posicao_na_fila` e não do semáforo: o módulo da
+        inferência mede tempo, e quem escreve para o Aluno é este arquivo. A
+        entrega é anônima no log — só a posição e a estimativa — porque o
+        `sendMessage` do `enviar_mensagem` já registra o `chat_id` e o resultado.
+        """
+        logger.info(
+            "Turno do Aluno %s entrou na fila do semáforo na posição %d, "
+            "com espera estimada de %.1fs.",
+            chat_id,
+            posicao.posicao,
+            posicao.espera_estimada,
+        )
+        enviar_mensagem(
+            config,
+            chat_id,
+            texto_posicao_na_fila(posicao.posicao, posicao.espera_estimada),
+            client,
+        )
+
     try:
         conversa = registro.conversa(chat_id)
         with conversa.em_ordem():
             historico = conversa.historico()
             conversa.registrar_do_aluno(texto, time.time())
             try:
-                entrega = executar_turno(cliente, texto, historico)
+                with semaforo.na_fila(aviso=avisar_posicao):
+                    entrega = executar_turno(cliente, texto, historico)
+            except FilaCheiaError as err:
+                # A recusa é do Aluno, não do operador: `warning` e não `error`,
+                # porque nada quebrou — a fila encheu, que é o que o teto existe para
+                # transformar em resposta. O motivo técnico inteiro fica na exceção e
+                # o Aluno leva a frase que não tem número nem prazo.
+                logger.warning("Turno do Aluno %s recusado: %s", chat_id, err)
+                entrega, desfecho = TEXTO_FILA_CHEIA, "fila cheia"
             except ErroDeInferencia as err:
                 # `TempoEsgotadoError` é subclasse: o timeout cai aqui com o motivo
                 # certo no log e a mesma frase para o Aluno.
@@ -457,7 +641,9 @@ def _processar_turno(
             # A resposta entregue vai para o histórico **dentro** da fila e antes do
             # envio. A ordem é o que importa: se o registro falhasse depois do envio, o
             # Aluno leria uma resposta que não está no histórico, e o turno seguinte
-            # mostraria ao modelo uma conversa que ele não teve.
+            # mostraria ao modelo uma conversa que ele não teve. A `TEXTO_FILA_CHEIA`
+            # entra aqui pelo mesmo caminho da `TEXTO_FALHA`, e pelo mesmo motivo: o
+            # Aluno leu a recusa, então a recusa é parte da conversa dele.
             conversa.registrar_do_sau(entrega, time.time())
     except Exception:
         # Falha do registro de conversas: disco cheio, arquivo corrompido, caminho
@@ -493,6 +679,7 @@ def _atender_webhook(
     config: Configuracao,
     client: httpx.Client | None,
     registro: RegistroDeConversas,
+    semaforo: SemaforoDeInferencia,
     executor: ExecutorTurno,
     agendar: Callable[[Callable[[], None]], None],
 ) -> RespostaWebhook:
@@ -553,9 +740,12 @@ def _atender_webhook(
         return jsonify({"status": "ok"}), 200
 
     def iniciar() -> None:
-        # O registro vai por parâmetro e a conversa não: `registro.conversa(chat_id)`
-        # é chamado dentro do turno, na thread, e é aí que a fila precisa existir.
-        executor(config, chat_id, texto, registro, client)
+        # O registro e o semáforo vão por parâmetro e a conversa não:
+        # `registro.conversa(chat_id)` é chamado dentro do turno, na thread, e é aí
+        # que a fila precisa existir. O semáforo vai pelo mesmo motivo e por um
+        # segundo: ele é único no app, e um semáforo novo por turno não limitaria
+        # nada.
+        executor(config, chat_id, texto, registro, semaforo, client)
 
     agendar(iniciar)
     return jsonify({"status": "ok"}), 200
@@ -567,6 +757,7 @@ def criar_app(
     registro: RegistroDeConversas | None = None,
     executor: ExecutorTurno | None = None,
     agendar: Callable[[Callable[[], None]], None] | None = None,
+    semaforo: SemaforoDeInferencia | None = None,
 ) -> Flask:
     """Monta o app do webhook em torno de uma `Configuracao`.
 
@@ -579,19 +770,30 @@ def criar_app(
     diferentes — `executor` é o callable injetado, `executar_turno` é a função
     que chama o modelo — e a armadilha é rara o bastante para o nome não ser o mesmo.
 
-    `registro`, `executor` e `agendar` existem para o teste afirmar três coisas que
-    com a thread real e o arquivo real não são afirmáveis: que o turno começa depois
-    do acuse, que o turno acontece, e que a conversa do Aluno sobrevive ao teste sem
-    deixar `conversas.db` na raiz do repositório. Os padrões são o de serviço; só a
-    substituição é do teste.
+    `registro`, `executor`, `agendar` e `semaforo` existem para o teste afirmar
+    coisas que com a thread real, o arquivo real e o semáforo real não são
+    afirmáveis: que o turno começa depois do acuse, que o turno acontece, que a
+    conversa do Aluno sobrevive ao teste sem deixar `conversas.db` na raiz do
+    repositório, e que o `k` do limite é o que o teste mandou. Os padrões são os de
+    serviço; só a substituição é do teste.
 
     Sem `registro`, o app monta o seu a partir da configuração — `CONVERSA_CAMINHO` e
     `CONVERSA_TTL_MINUTOS` — e é o que faz `python -m sau.telegram` funcionar no host
     sem nenhuma configuração. O compose aponta o caminho para o volume nomeado, que é
     o que faz o histórico sobreviver ao `docker compose down`.
+
+    Sem `semaforo`, o app monta o seu a partir de `INFERENCIA_K` e
+    `INFERENCIA_FILA_TETO`, pelo mesmo desenho do registro. O semáforo é **um só por
+    app**, montado aqui e não dentro do turno: ele é o limite do serviço inteiro, e
+    um semáforo novo a cada mensagem seria um `k` que não limita nada. A medição do
+    `k` na máquina alvo é o procedimento de `docs/fila-e-semaforo.md`, e o campo
+    está em branco porque a medição ainda não aconteceu.
     """
     registro_do_turno = registro or RegistroDeConversas(
         config.conversa_caminho, ttl_minutos=config.conversa_ttl_minutos
+    )
+    semaforo_do_turno = semaforo or SemaforoDeInferencia(
+        config.inferencia_k, config.inferencia_fila_teto
     )
     rodar_turno = executor or _processar_turno
     disparar = agendar or _agendar
@@ -599,7 +801,9 @@ def criar_app(
 
     @app.post("/webhook")
     def webhook() -> RespostaWebhook:
-        return _atender_webhook(config, client, registro_do_turno, rodar_turno, disparar)
+        return _atender_webhook(
+            config, client, registro_do_turno, semaforo_do_turno, rodar_turno, disparar
+        )
 
     return app
 
@@ -659,6 +863,15 @@ def main() -> None:
         "Conversas em %s, expirando depois de %d minutos sem contato.",
         config.conversa_caminho,
         config.conversa_ttl_minutos,
+    )
+    # O `k` vai no banner porque ele é a única configuração do serviço que a
+    # pessoa não escolheu por conta própria: é medido na máquina alvo, e o
+    # procedimento está em `docs/fila-e-semaforo.md`. Quem opera precisa saber
+    # qual é o número sem abrir o `.env`.
+    logger.info(
+        "Inferência: %d turno(s) ao mesmo tempo, fila de espera de até %d.",
+        config.inferencia_k,
+        config.inferencia_fila_teto,
     )
     logger.info(
         "URL pública do túnel: registre com setWebhook antes de usar. "
