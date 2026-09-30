@@ -530,6 +530,73 @@ extra_hosts:
 quantização 4 bits não cabe, então a 1.1 trabalha com a família 3B. A issue #3
 registra esse teto junto da medição.
 
+### Harness das Perguntas-teste (issue #12)
+
+O harness envia as 10 Perguntas-teste ao S.A.U. pelo caminho real do turno
+(o mesmo grafo do `webhook`, com histórico vazio, sem Telegram e sem banco
+de respostas gravado) e grava o output bruto de cada uma, com o comportamento
+esperado lado a lado. O julgamento de conforme/não-conforme é humano: o
+script grava, não avalia. A saída vai para `outputs/`, um JSON por rodada.
+
+Rode no **host**, não no container. O `OLLAMA_BASE_URL` do `.env` aponta para
+`host.docker.internal`, que é o endereço do host visto de dentro do container e
+não resolve a partir do host — sem exportar a URL abaixo, a bateria inteira
+falha.
+
+```sh
+# 1. a URL do Ollama como o host enxerga
+export OLLAMA_BASE_URL=http://localhost:11434
+
+# 2. a VRAM da placa, que o /api/ps não informa e a checagem precisa
+export VRAM_TOTAL_MIB=$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits | head -1)
+
+# 3. a bateria
+python -m harness.run --help
+python -m harness.run
+python -m harness.run --saida outputs/baseline-1.1.json
+```
+
+As flags `--modelo`, `--url` e `--timeout` sobrescrevem o `.env`; `--saida`
+escolhe o arquivo da rodada (o padrão é `outputs/harness-<data-hora>.json`).
+A falha ou o timeout de um turno grava `erro` na execução e a bateria segue.
+
+Cada pergunta roda **3 repetições**, com `temperature 0`, `seed 20260926` e
+`num_predict 256` — as condições do ADR-0003. O número não é detalhe: o ADR
+mediu que 7 das 12 perguntas da sondagem não tiveram as 3 repetições idênticas,
+então uma execução só registra uma das respostas possíveis e a taxa da #13 sai
+de uma amostra que não representa o comportamento. As flags `--repeticoes`,
+`--temperatura`, `--seed` e `--num-predict` existem para a varredura da 1.2, e
+o que foi usado fica gravado em `condicoes` no próprio JSON.
+
+Antes da bateria, o harness roda a checagem de pré-requisito do ADR-0002 (Ollama
+no ar, modelo baixado, modelo inteiro na GPU) e **falha sem gravar nada** se
+ela não passar. Um Ollama desligado produziria dez execuções com `erro` e um
+JSON de aparência válida, que é o tipo de arquivo que alguém lê depois como
+evidência. O que a checagem lê do `/api/ps` não vai para o lixo: vira o campo
+`alocacao` da rodada, e é ele que deixa visível uma rodada de CPU como CPU.
+Para medir em CPU de propósito, sem GPU, acrescente `OLLAMA_ALLOW_CPU=true` e
+saiba que a rodada sai marcada.
+
+O código de saída diz o que aconteceu: `0` rodou e respondeu, `1` rodou sem
+nenhuma resposta, `2` as Perguntas-teste do arquivo não batem com as 10
+esperadas, `3` o pré-requisito falhou. Falha parcial é `0` — uma pergunta que
+responde mal é dado, não motivo de reprovar a rodada.
+
+Cada execução registra o `motivo_de_parada` da geração, e o harness avisa
+quando alguma parou por `length`. Isso importa porque o Ollama trata a falta de
+espaço como sucesso: a resposta sai cortada no meio da frase e parece uma
+resposta, e sem o motivo de parada não há como distinguir "o S.A.U. errou" de
+"a geração não coube".
+
+O diretório `outputs/` é criado pelo harness na primeira rodada. As rodadas são
+ignoradas pelo git, com uma exceção: **`outputs/baseline-*.json` entra no
+repositório**. A comparação da 1.2 com a 1.1 só existe se o arquivo da 1.1
+estiver versionado, e por isso ele sai com o nome `baseline-1.1.json` — a
+linha de base da 1.1 é `qwen2.5:3b` sem RAG. A 1.2 grava
+`outputs/baseline-1.2.json` do mesmo jeito, e as duas declaram no próprio JSON o
+modelo, a alocação, as condições e o `sha256` do prompt versionado: é o que
+separa "o RAG mudou" de "a persona ou a máquina mudou" entre as duas rodadas.
+
 Enquanto isso, o agente de validação é o trio abaixo, e vale rodá-lo a cada
 commit:
 

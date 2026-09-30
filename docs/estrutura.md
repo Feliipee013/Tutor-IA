@@ -99,8 +99,8 @@ grafo, não como serviço à parte.
 | --- | --- | --- | --- |
 | `perguntas-teste/` | as 10 Perguntas-teste, com o comportamento esperado de cada uma | #6 | sim |
 | `corpus/` | os quatro documentos autorados, um por categoria, com as contradições plantadas | P1 | não |
-| `outputs/` | saída bruta do harness, ignorada pelo git | #12 | não |
-| `tests/` | suíte `pytest`, com `test_config.py` e `test_prereqs.py` da #4, `test_webhook.py` da #5 (o caminho do turno da #8, o isolamento por Aluno da #9, a sentinela que afasta a persona da conversa, que ele precisa desde que a persona entra em todo prompt na #10, e a fila e o semáforo da #11), `test_graph.py` da #8, `test_state.py` e `test_semaphore.py` da #9 e da #11, `test_ollama.py` e `test_fumaca.py` da #7 e `test_persona.py` da #10 | #4, #5, #7, #8, #9, #10, #11 | sim |
+| `outputs/` | evidência bruta do harness: as rodadas são rascunho ignorado, as linhas de base entram no repositório | #12 | não |
+| `tests/` | suíte `pytest`, com `test_config.py` e `test_prereqs.py` da #4, `test_webhook.py` da #5 (o caminho do turno da #8, o isolamento por Aluno da #9, a sentinela que afasta a persona da conversa, que ele precisa desde que a persona entra em todo prompt na #10, e a fila e o semáforo da #11), `test_graph.py` da #8, `test_state.py` e `test_semaphore.py` da #9 e da #11, `test_ollama.py` e `test_fumaca.py` da #7, `test_persona.py` da #10 e `test_harness.py` da #12 | #4, #5, #7, #8, #9, #10, #11, #12 | sim |
 
 O `corpus/` é quebrado em unidades de recuperação pela própria equipe: cada
 `##` dentro de um documento responde a uma Pergunta Frequente, então **o chunk é
@@ -110,13 +110,27 @@ a seção** e o chunking vira uma escolha da equipe, não uma heurística.
 
 | Caminho | O que faz | Ticket | Existe |
 | --- | --- | --- | --- |
-| `harness/run.py` | roda as 10 Perguntas-teste e grava os outputs brutos | #12 | não |
+| `harness/run.py` | roda as 10 Perguntas-teste, 3 repetições cada, e grava os outputs brutos com as condições da medição | #12 | sim |
 | `harness/metrics.py` | taxa de não-saber e taxa de recusa de Atividade | #13 | não |
 | `harness/casos.py` | os cinco casos de alucinação, com o motivo do erro de cada um | P2 | não |
 
 O harness é a régua das duas sprints: a 1.2 roda **o mesmo** harness sobre
 **os mesmos** casos, e é por isso que ele precisa ser reexecutável sem refazer
 a implementação.
+
+A evidência que ele grava vai para `outputs/`, e a pasta só passa a existir na
+primeira rodada: `harness/run.py` cria na hora. As rodadas são ignoradas pelo
+git porque são resultado descartável, com uma exceção — `outputs/baseline-*.json`
+entra, e é o que permite comparar a 1.2 com a 1.1 em vez de afirmar que a
+comparação foi feita. O que a comparação mede só é conferível depois, lendo do
+próprio arquivo o modelo, a alocação e o `sha256` do prompt: são esses campos
+que separam "o RAG mudou" de "a persona ou a máquina mudou".
+
+O `harness/run.py` também é o único lugar do repositório que **mede**: ele trava
+`temperature 0`, uma `seed` fixa e `num_predict 256`, e registra o que usou.
+`sau/inference/ollama.py` segue sem amostragem travada de propósito — travar a
+seed ali daria a todo Aluno exatamente a mesma resposta, que é o oposto de
+atender alguém.
 
 ## Onde as coisas entram
 
