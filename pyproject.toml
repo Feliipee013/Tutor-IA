@@ -40,10 +40,11 @@ exclude = [
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I"]
-# `E` traz a quebra de linha e a indentação, mas as regras de continuation-line
-# (`E12x`) são preview e ficam de fora sem isto. Sem elas o lint passa verde em
-# bloco dict/list com o corpo na mesma indentação da linha de abertura — o que
-# já aconteceu na #13 e só apareceu na leitura.
+# As regras de continuation-line do pycodestyle (`E12x`) são preview do ruff e
+# não entram no `E` acima. Sem elas, o lint passa verde em bloco dict/list com o
+# corpo na mesma indentação da linha de abertura — o que aconteceu na #13 e só
+# apareceu na leitura. Habilitar `preview = true` traria `E12x` e outras em
+# preview; fica como dívida, porque ligá-las muda o resultado em código antigo.
 
 [tool.mypy]
 python_version = "3.11"

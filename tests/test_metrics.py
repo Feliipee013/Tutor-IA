@@ -29,6 +29,7 @@ from harness.metrics import (
     MEMBROS,
     NAO_SABER,
     RECUSA_DE_ATIVIDADE,
+    ArquivoInacessivelError,
     JulgamentoInvalidoError,
     MembrosDivergentesError,
     RodadaInvalidaError,
@@ -865,6 +866,55 @@ def test_rodada_que_nao_e_json_falha_alto(tmp_path: Path) -> None:
 
     with pytest.raises(RodadaInvalidaError, match="não é um JSON legível"):
         carregar_rodada(quebrada)
+
+
+def test_rodada_que_nao_e_utf8_falha_alto_sem_traceback(tmp_path: Path) -> None:
+    """Um arquivo com byte inválido é problema da rodada, e sai com o código dela.
+
+    `read_text` levanta `UnicodeDecodeError`, que não é `ErroDasTaxas` e escaparia
+    como traceback — e o `SETUP.md` promete que nenhum caminho sai com traceback.
+    """
+    rodada = tmp_path / "rodada.json"
+    rodada.write_bytes(b'{"execucoes": [], "lixo": "\xff\xfe"}')
+
+    with pytest.raises(RodadaInvalidaError, match="não consegui ler a rodada"):
+        carregar_rodada(rodada)
+
+
+def test_folha_que_nao_e_utf8_falha_alto_sem_traceback(tmp_path: Path) -> None:
+    """Folha ilegível é da folha, e sai com o código da folha."""
+    rodada = _gravar_rodada(tmp_path / "rodada.json", _rodada())
+    lida = carregar_rodada(rodada)
+    folha = tmp_path / "folha.json"
+    folha.write_bytes(b'{"julgador": "X\xff"}')
+
+    with pytest.raises(JulgamentoInvalidoError, match="não consegui ler o julgamento"):
+        carregar_julgamento(folha, lida)
+
+
+def test_destino_que_nao_pode_ser_gravado_falha_alto_sem_traceback(tmp_path: Path) -> None:
+    """Falha de escrita não é da folha nem da bateria, e tem código próprio.
+
+    Sem o `3`, um disco cheio cairia no `1` e mandaria a pessoa caçar um veredito
+    que está correto — que era exatamente o que o código de saída promete evitar.
+    """
+    lida = carregar_rodada(_gravar_rodada(tmp_path / "rodada.json", _rodada()))
+
+    with pytest.raises(ArquivoInacessivelError, match="permissão de escrita"):
+        preparar_julgamento(lida, Path("/proc/nao-existe/folha.json"))
+
+
+def test_o_codigo_tres_chega_ao_shell_e_nao_vem_com_traceback(tmp_path: Path) -> None:
+    """O `3` precisa aparecer no shell, senão o passo seguinte roda sobre nada."""
+    rodada = _gravar_rodada(tmp_path / "rodada.json", _rodada())
+
+    resultado = _rodar_como_modulo(
+        "--rodada", str(rodada), "--preparar", "--julgamento", "/proc/nao-existe/folha.json"
+    )
+
+    assert resultado.returncode == 3, resultado.stderr
+    assert "permissão de escrita" in resultado.stderr
+    assert "Traceback" not in resultado.stderr
 
 
 def test_main_sai_com_dois_quando_a_rodada_esta_corrompida(

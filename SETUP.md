@@ -632,12 +632,18 @@ execução fora da conta sem motivo declarado é uma execução escondida.
 
 O código de saída diz o que aconteceu, e diz quem tem o que corrigir: `0` as
 duas taxas foram calculadas e gravadas; `1` o julgamento está ausente,
-incompleto ou inconsistente com a rodada, e também quando o contrato das taxas
-divergiu do arquivo de Perguntas-teste — em todos esses casos quem age é a
-folha; `2` a rodada não está lá, não é um JSON de rodada, ou não fecha a conta
-que ela mesma declara — e nesses quem age é a bateria. Nenhum dos dois sai com
-`traceback`: a falha sai como frase, porque quem preenche a folha não vai ler
-pilha de Python para descobrir o que digitou de errado.
+ilegível, incompleto ou inconsistente com a rodada, e também quando o contrato
+das taxas divergiu do arquivo de Perguntas-teste — em todos esses casos quem age
+é a folha; `2` a rodada não está lá, não é um JSON de rodada, ou não fecha a
+conta que ela mesma declara — e nesses quem age é a bateria; `3` o caminho não
+pôde ser lido ou gravado, por permissão, disco cheio, ou um arquivo que não é
+UTF-8 — e nesses quem age é o caminho, não a folha nem a bateria.
+
+Nenhum dos três sai com `traceback`: a falha sai como frase, porque quem
+preenche a folha não vai ler pilha de Python para descobrir o que digitou de
+errado. Um cuidado: `argparse` também sai com `2` quando o argumento está
+inválido, e nesse caso o `2` é do `argparse` e vem acompanhado da mensagem de
+uso, não da tabela acima.
 
 Duas decisões que mudam o número e por isso valem ser ditas:
 

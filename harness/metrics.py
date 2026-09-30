@@ -50,14 +50,17 @@ mudaria entre duas execuções idênticas.
 Códigos de saída:
 
 - `0` — as duas taxas foram calculadas e gravadas
-- `1` — o julgamento está ausente, incompleto ou inconsistente com a rodada; ou o
-  contrato das taxas divergiu do arquivo de Perguntas-teste
+- `1` — o julgamento está ausente, ilegível, incompleto ou inconsistente com a
+  rodada; ou o contrato das taxas divergiu do arquivo de Perguntas-teste
 - `2` — a rodada não está lá, não é um JSON de rodada, ou não fecha a conta que
   ela mesma declara
+- `3` — o caminho não pôde ser lido ou gravado: permissão, disco, ou um arquivo
+  que não é UTF-8
 
 O código de saída diz **quem** tem o que corrigir: nos casos de `1` é a folha, nos
-casos de `2` é a bateria. Uma folha preenchida com cuidado não tem nada a ver com
-uma rodada que perdeu uma execução.
+casos de `2` é a bateria, e no `3` é o caminho ou a máquina. Uma folha preenchida
+com cuidado não tem nada a ver com uma rodada que perdeu uma execução — e um disco
+cheio não é defeito de nenhum dos dois.
 
 A folha é o documento que a pessoa leu, e por isso as cópias que ela carrega da
 rodada — a régua e o `resposta_bruta` de cada linha — são conferidas uma a uma
@@ -156,6 +159,7 @@ terminou.
 SAIDA_OK: Final = 0
 SAIDA_JULGAMENTO_INVALIDO: Final = 1
 SAIDA_RODADA_INVALIDA: Final = 2
+SAIDA_ARQUIVO_INACESSIVEL: Final = 3
 
 MAXIMO_DE_FALTAS_LISTADAS: Final = 10
 
@@ -177,10 +181,20 @@ class MembrosDivergentesError(ErroDasTaxas):
     """O contrato das taxas diverge da linha declarada no arquivo de Perguntas-teste."""
 
 
+class ArquivoInacessivelError(ErroDasTaxas):
+    """A ferramenta não conseguiu ler ou gravar um arquivo.
+
+    Não é defeito da folha nem da bateria: é o caminho, a permissão ou o disco.
+    Sem este erro próprio, uma `FileNotFoundError` sozinha cairia no código do
+    julgamento e mandaria a pessoa caçar um veredito que está correto.
+    """
+
+
 SAIDA_POR_ERRO: Final[dict[type[ErroDasTaxas], int]] = {
     RodadaInvalidaError: SAIDA_RODADA_INVALIDA,
     JulgamentoInvalidoError: SAIDA_JULGAMENTO_INVALIDO,
     MembrosDivergentesError: SAIDA_JULGAMENTO_INVALIDO,
+    ArquivoInacessivelError: SAIDA_ARQUIVO_INACESSIVEL,
 }
 
 
@@ -514,6 +528,10 @@ def carregar_rodada(caminho: Path) -> Rodada:
         )
     except ErroDasTaxas as exc:
         raise RodadaInvalidaError(str(exc)) from exc
+    except (OSError, UnicodeDecodeError) as exc:
+        raise RodadaInvalidaError(
+            f"não consegui ler a rodada em {caminho}: {exc}"
+        ) from exc
     return rodada
 
 
@@ -575,11 +593,7 @@ def folha_de_julgamento(rodada: Rodada) -> dict[str, Any]:
 
 def preparar_julgamento(rodada: Rodada, destino: Path) -> Path:
     """Escreve em disco a folha que `folha_de_julgamento` monta."""
-    destino.parent.mkdir(parents=True, exist_ok=True)
-    destino.write_text(
-        json.dumps(folha_de_julgamento(rodada), ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
+    _gravar(destino, folha_de_julgamento(rodada))
     return destino
 
 
@@ -598,12 +612,12 @@ def carregar_julgamento(caminho: Path, rodada: Rodada) -> Julgamento:
             f"`python -m harness.metrics --rodada {rodada.caminho} --preparar`"
         )
 
-    bruto = _ler_json(caminho, "o julgamento")
-    onde = f"o julgamento em {caminho}"
-    if not isinstance(bruto, dict):
-        raise JulgamentoInvalidoError(f"{onde} não é um objeto JSON")
-
     try:
+        bruto = _ler_json(caminho, "o julgamento")
+        if not isinstance(bruto, dict):
+            raise ErroDasTaxas("o julgamento não é um objeto JSON")
+        onde = f"o julgamento em {caminho}"
+
         sha = _texto(bruto, "sha256_da_rodada", onde)
         if sha != rodada.sha256:
             raise JulgamentoInvalidoError(
@@ -627,6 +641,10 @@ def carregar_julgamento(caminho: Path, rodada: Rodada) -> Julgamento:
         raise
     except ErroDasTaxas as exc:
         raise JulgamentoInvalidoError(str(exc)) from exc
+    except (OSError, UnicodeDecodeError) as exc:
+        raise JulgamentoInvalidoError(
+            f"não consegui ler o julgamento em {caminho}: {exc}"
+        ) from exc
 
     return Julgamento(
         caminho=caminho_relativo(caminho),
@@ -675,10 +693,7 @@ def gravar_metricas(relatorio: RelatorioDasTaxas, destino: Path) -> Path:
         },
         "taxas": {metrica: asdict(taxa) for metrica, taxa in relatorio.taxas.items()},
     }
-    destino.parent.mkdir(parents=True, exist_ok=True)
-    destino.write_text(
-        json.dumps(documento, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-    )
+    _gravar(destino, documento)
     return destino
 
 
@@ -776,10 +791,13 @@ def montar_argumentos(argumentos: Sequence[str] | None = None) -> argparse.Names
             "arquivo saem do nome da rodada: baseline-1.1.json vira "
             "baseline-1.1.julgamento.json e baseline-1.1.metricas.json. "
             "Saídas, e cada uma diz quem tem o que corrigir: 0 as duas taxas foram "
-            "gravadas; 1 o julgamento está ausente, incompleto ou inconsistente com "
-            "a rodada, ou o contrato das taxas divergiu do arquivo de "
-            "Perguntas-teste — corrija a folha; 2 a rodada está ausente, ilegível ou "
-            "não fecha a conta que ela declara — corrija a bateria."
+            "gravadas; 1 o julgamento está ausente, ilegível, incompleto ou "
+            "inconsistente com a rodada, ou o contrato das taxas divergiu do "
+            "arquivo de Perguntas-teste — corrija a folha; 2 a rodada está "
+            "ausente, ilegível ou não fecha a conta que ela declara — corrija a "
+            "bateria; 3 o caminho não pôde ser lido ou gravado — confira a "
+            "permissão e o disco. argparse também sai com 2 em argumento "
+            "inválido, e nesse caso o 2 é do argparse, não desta tabela."
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -814,13 +832,17 @@ def main(argumentos: Sequence[str] | None = None) -> int:
 
     Todo erro das taxas sai pelo mesmo lugar, com o código de saída tirado do
     próprio erro, e ele diz **quem** tem o que corrigir: uma falha de rodada é 2 e
-    manda voltar à bateria; uma falha de julgamento é 1 e manda voltar à folha.
-    A rodada cuja contagem não fecha com as repetições que ela declara é falha de
-    rodada como as outras, e sai 2 — dizer 1 mandaria a pessoa caçar um veredito
-    que está correto.
+    manda voltar à bateria; uma falha de julgamento é 1 e manda voltar à folha;
+    um caminho que não abre para leitura ou escrita é 3 e manda conferir a
+    permissão e o disco. A rodada cuja contagem não fecha com as repetições que
+    ela declara é falha de rodada como as outras, e sai 2 — dizer 1 mandaria a
+    pessoa caçar um veredito que está correto.
 
     Um `traceback` aqui seria pior que a mensagem: quem preenche a folha não vai
-    ler pilha de Python para saber o que digitou de errado.
+    ler pilha de Python para saber o que digitou de errado. Por isso as leituras
+    e as escritas convertem `OSError` e `UnicodeDecodeError` no erro do contrato
+    que lhes cabe, em vez de deixá-las escapar: um arquivo que não é UTF-8 e um
+    disco cheio são defeitos de arquivo, não de folha nem de bateria.
     """
     try:
         return _executar(montar_argumentos(argumentos))
@@ -1236,6 +1258,27 @@ def _regua_de(rodada: Rodada, id_pergunta: str) -> dict[str, str]:
         f"a rodada {rodada.caminho} não tem a pergunta {id_pergunta}, e a régua do "
         f"resumo não pode ser inventada"
     )
+
+
+def _gravar(destino: Path, documento: Any) -> None:
+    """Grava um JSON, e converte a recusa do disco num erro que sai pelo contrato.
+
+    `mkdir`, `write_text` e o `json.dumps` levantam `OSError`, `TypeError` e
+    `ValueError` — e nenhuma delas é `ErroDasTaxas`, então sem esta volta a
+    pessoa que preenche a folha receberia uma pilha de Python. A falha de
+    escrever não é defeito da folha nem da bateria, e por isso tem código
+    próprio: quem tem que arrumar é quem rodou o comando.
+    """
+    try:
+        destino.parent.mkdir(parents=True, exist_ok=True)
+        destino.write_text(
+            json.dumps(documento, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+        )
+    except (OSError, TypeError, ValueError) as exc:
+        raise ArquivoInacessivelError(
+            f"não consegui escrever {destino}: {exc}. O caminho existe e tem "
+            f"permissão de escrita?"
+        ) from exc
 
 
 def _linhas_de_evidencia(evidencias: Sequence[Evidencia]) -> list[str]:
