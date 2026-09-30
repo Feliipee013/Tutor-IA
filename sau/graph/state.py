@@ -95,6 +95,31 @@ CREATE INDEX IF NOT EXISTS idx_mensagem_chat ON mensagem (chat_id, id);
 CREATE INDEX IF NOT EXISTS idx_conversa_ultimo ON conversa (ultimo_turno);
 """
 
+"""As tabelas do registro, criadas uma vez e nunca mais reaplicadas.
+
+O `IF NOT EXISTS` em toda linha é o que deixa o serviço abrir em cima de um
+arquivo que já existe, e é o que torna o volume nomeado seguro de montar duas
+vezes. O preço é conhecido e foi apontado em review: o `IF NOT EXISTS` só cria
+o que **não** existe, então o dia em que um ticket mudar o esquema — acrescentar
+uma coluna, renomear uma — o arquivo antigo sobe do mesmo jeito, sem a coluna
+nova, e a falha aparece no primeiro acesso, com o Aluno esperando a resposta. Não
+na subida: na subida o `executescript` também não faz nada.
+
+Não há migração por isso, e é escolha, não falta. A saída que o próprio dado
+permite é apagar o arquivo: o TTL de `MINUTOS_POR_TTL_PADRAO` já joga fora a
+conversa ociosa, o arquivo é `*.db` no `.gitignore` e um `docker volume rm`
+resolve. Apagar o arquivo **é** a migração aqui, e é por isso que ela não é
+código — um framework de migração guardaria com zelo de um estado que o produto
+descarta sozinho. O que não pode é o serviço supor que o `IF NOT EXISTS` cobre a
+troca de esquema: ele não cobre, e quem paga o preço é o Aluno, na hora em que a
+coluna nova ainda não existe.
+
+`PRAGMA user_version` é a saída do dia em que isto deixar de ser descartável, e
+só nesse dia: ele diz qual esquema está no arquivo, e sem ele a única forma de
+descobrir é ler a tabela. O gatilho é o dado deixar de ser descartável — o que
+hoje não é, e o que o ADR-0005 exige que continue sendo.
+"""
+
 
 @dataclass(frozen=True)
 class Mensagem:
@@ -316,12 +341,22 @@ class RegistroDeConversas:
         além da do próprio turno, e o que o teto quer é que a *leitura* nunca
         carregue conversa demais. O arquivo continua guardando tudo até o TTL, que
         é quem apaga de verdade.
+
+        Por isso o `ORDER BY id DESC` com o `LIMIT`, e a inversão em Python depois:
+        as mensagens que interessam são as do fim, e é o `LIMIT` que impede o
+        SQLite de entregar as outras. Filtrar depois de trazê-las todas custaria
+        exatamente o que o teto promete não gastar — carregar a conversa inteira
+        do Aluno na memória do processo para descartar logo em seguida, enquanto
+        ele espera a resposta do outro lado. A inversão devolve a mesma ordem
+        ascendente de sempre, e é por isso que ela é feita aqui e não na
+        montagem das `Mensagem`.
         """
         with self._tranca:
             linhas = self._conexao.execute(
-                "SELECT id, papel, texto, em FROM mensagem WHERE chat_id = ? ORDER BY id",
-                (chat_id,),
-            ).fetchall()[-MAXIMO_DE_MENSAGENS:]
+                "SELECT id, papel, texto, em FROM mensagem WHERE chat_id = ? "
+                "ORDER BY id DESC LIMIT ?",
+                (chat_id, MAXIMO_DE_MENSAGENS),
+            ).fetchall()[::-1]
         return [
             Mensagem(papel=_papel(linha["papel"]), texto=linha["texto"], em=linha["em"])
             for linha in linhas
