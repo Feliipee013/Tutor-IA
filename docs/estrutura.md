@@ -51,7 +51,7 @@ agente Implementar localizar o ponto de impacto sem varrer o repositório inteir
 | `docs/medicao-modelo/` | a sondagem, o script de medição e a saída de cada máquina — **issue #3** | sim |
 | `docs/tempo-primeira-resposta.md` | o tempo de primeira resposta na GTX 1650 do ADR-0002, com as condições e a nota dos números antigos da RX 7600 — **issue #7** | sim |
 | `docs/fila-e-semaforo.md` | a máquina do `k` do semáforo, o roteiro para medi-lo e as duas contas do teste de campo, com os campos em branco que a medição vai preencher — **issue #11** | sim |
-| `docs/relato-1.1.md` | a página de relato da 1.1: a régua declarada, as duas taxas e as limitações. Os números dependem da bateria rodada — **issue #13** | sim |
+| `docs/relato-1.1.md` | a página de relato da 1.1: a régua declarada, as duas taxas, a leitura de tom e acolhimento e as limitações. Os números dependem da bateria rodada — **issue #13** | sim |
 | `docs/limitacoes.md` | documento de limitações do modelo — **issue #14** | não |
 
 ## `docs/medicao-modelo/` — a evidência da escolha do modelo

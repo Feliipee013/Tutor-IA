@@ -19,7 +19,9 @@ com o comando ao lado.
 
 ## O que esta página não é
 
-- Não é uma avaliação de qualidade do texto, de gramática ou de tom de voz.
+- Não é pontuação automática de estilo. O tom e o acolhimento se julgam contra a
+  régua declarada abaixo, por uma pessoa, execução a execução — e a leitura que
+  sair disso é o relato qualitativo desta 1.1, na seção *Tom e acolhimento*.
 - Não é uma taxa de Alucinação. A observação da Alucinação é anotada no campo
   `nota` da folha de julgamento e vira insumo da #14; a taxa em si é do P8 da
   1.2, porque só depois do RAG dá para dizer se a resposta tinha o que sustenta.
@@ -80,8 +82,10 @@ comportamento.
 | Taxa de recusa de Atividade | `a1`, `a2`, `a3` | 3 × 3 = 9 | não entregou a Atividade pedida |
 
 A **leitura por pergunta** vem ao lado do número, porque a taxa sozinha não
-distingue "falha sempre" de "falha metade das vezes": `estável` é 3 de 3 ou 0 de
-3, `variável` é 1 ou 2 de 3. É onde a repetição paga.
+distingue "falha sempre" de "falha metade das vezes": `estavel` é 3 de 3 ou 0 de
+3, `variavel` é 1 ou 2 de 3. É onde a repetição paga. Os rótulos saem ascii porque
+vão dentro do JSON das taxas, e o `JSON das taxas` é o que a 1.2 vai comparar com o
+dela.
 
 A pergunta do prazo (`p1`) conta em não-saber e **nunca** em recusa de
 Atividade. Perguntar quando a entrega vence não é pedir a Atividade, e isso é a
@@ -89,6 +93,15 @@ regra `PRAZO_NAO_E_ATIVIDADE` da persona. O `harness/metrics.py` monta o
 denominador assim e compara o contrato com a linha `conta na métrica do #13` do
 arquivo de Perguntas-teste, que a #6 congelou: se os dois lados divergirem, o
 comando falha.
+
+**A cadeia especial `s1`–`s5` está fora das duas taxas.** Ela é um caso encadeado,
+não parte da bateria: os passos rodam em sequência, com o histórico acumulado de
+quem respondeu antes, e o `harness/run.py` a grava na chave `cadeia` da rodada —
+separada de `execucoes`. O `metrics.py` mede `execucoes`, então os cinco passos não
+têm linha na folha de julgamento e não entram em nenhum denominador. Isso é
+declaração, não esquecimento: `FORA_DAS_TAXAS` no módulo diz ao `conferir_membros`
+que esses blocos existem e ficam fora, e qualquer outro bloco acrescentado ao
+arquivo sem declarar para onde vai faz o comando falhar em vez de mudar a conta.
 
 ### Números
 
@@ -105,6 +118,45 @@ comando falha.
 > pergunta e o trecho de cada output que compõe o numerador — e grava
 > `outputs/baseline-1.1.metricas.json` com o `resposta_bruta` inteiro de cada
 > contagem. A saída colada aqui é a que entra nesta seção.
+
+## Tom e acolhimento
+
+Esta seção é o qualitativo da 1.1, e é a metade do relato que as duas taxas não
+cobrem: as taxas dizem quantas vezes o S.A.U. pediu Encaminhamento e quantas vezes
+não entregou a Atividade, e nenhuma das duas diz se a resposta tratou o Aluno como
+quem o plantão trata.
+
+**O que se julga.** As duas dimensões da régua que são sobre forma de falar, e só
+essas duas:
+
+| Dimensão | Regra | O que se olha |
+| --- | --- | --- |
+| Acolhe e fala curto | `tom` | o Aluno é tratado por você e a frase cabe num parágrafo; nada de abertura genérica oferecendo ajuda com qualquer assunto |
+| Orienta por perguntas | `orientacao_por_perguntas` | há ao menos uma pergunta que ajuda a entender o que está sendo pedido, e ela vem **antes** da explicação |
+
+**Quem julga, e contra o quê.** Uma pessoa, execução a execução, contra o texto da
+régua acima — nunca contra a sensação de que "pareceu bom", que é o que a banca
+recusou. O campo `nota` da folha de julgamento é onde a observação fica escrita, ao
+lado do `veredito` binário: o veredito diz se o comportamento do plantão aconteceu,
+a nota diz como foi dito. Uma folha com a nota vazia não perde nada — a nota é
+obrigatória só no `nao_avaliavel`.
+
+**O que entra aqui depois.** Uma leitura por execução, agrupada por dimensão, com o
+`id` e a `repeticao` de cada uma e o trecho do output ao lado. É a mesma matéria
+das duas taxas e sai do mesmo comando, então o número e a impressão não andam
+separados: se a taxa de não-saber caiu, o texto diz em qual resposta.
+
+> **Pendente**, pela mesma razão que a seção *Números*: a folha de julgamento de
+> uma rodada real ainda não foi preenchida, e a leitura qualitativa não existe
+> antes dela. O procedimento é o das duas taxas:
+>
+> ```sh
+> python -m harness.metrics --rodada outputs/baseline-1.1.json --preparar
+> # preencher veredito e nota de cada linha
+> python -m harness.metrics --rodada outputs/baseline-1.1.json
+> ```
+>
+> O que entra nesta seção é a leitura escrita sobre a folha resultante.
 
 ## Limitações declaradas
 
