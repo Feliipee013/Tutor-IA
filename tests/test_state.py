@@ -313,6 +313,76 @@ def test_um_turno_novao_nao_apaga_a_conversa_que_acabou_de_falar(
     assert len(registro.historico(_ALUNA)) == 4
 
 
+# --- Reengajamento: a volta depois do TTL, uma vez só ---
+
+
+def test_sem_expiracao_nao_ha_reengajamento(registro: RegistroDeConversas) -> None:
+    """Conversa viva ou estreia não é volta: o sinal só nasce da expiração.
+
+    Sem esta guarda, todo primeiro turno de todo Aluno novo levaria o "que bom
+    te ver de novo" — inclusive para quem nunca foi visto, que é o oposto do
+    que a frase diz.
+    """
+    _troca(registro, _ALUNA, "oi", "olá")
+
+    assert registro.consumir_reengajamento(_ALUNA) is False
+
+
+def test_a_volta_depois_do_ttl_reengaja_uma_vez_so(
+    registro: RegistroDeConversas, relogio: Relogio
+) -> None:
+    """Quem expirou e voltou reengaja no turno da volta, e nunca no seguinte.
+
+    A varredura é oportunista: é o `conversa()` da volta que expira a conversa
+    velha e registra a volta. Uma vez só porque o consumo esvazia — a volta é
+    um evento, não um estado, e um estado faria todo turno seguinte reengajar
+    de novo.
+    """
+    _troca(registro, _ALUNA, "oi", "olá")
+    relogio.avancar(31)
+
+    registro.conversa(_ALUNA)
+
+    assert registro.consumir_reengajamento(_ALUNA) is True
+    assert registro.consumir_reengajamento(_ALUNA) is False
+
+
+def test_a_expiracao_de_uma_aluna_nao_reengaja_a_outra(
+    registro: RegistroDeConversas, relogio: Relogio
+) -> None:
+    """O sinal é por `chat_id`: a volta de uma não saúda a outra.
+
+    Sem o isolamento, a expiração de uma Aluna da madrugada marcaria a volta de
+    outra que nunca saiu — e o "que bom te ver de novo" chegaria para quem
+    acabou de chegar.
+    """
+    _troca(registro, _ALUNA, "oi", "olá")
+    relogio.avancar(31)
+    _troca(registro, _OUTRA_ALUNA, "oi", "olá")
+
+    registro.conversa(_ALUNA)
+
+    assert registro.consumir_reengajamento(_ALUNA) is True
+    assert registro.consumir_reengajamento(_OUTRA_ALUNA) is False
+
+
+def test_o_reengajamento_caduca_da_memoria(registro: RegistroDeConversas, relogio: Relogio) -> None:
+    """A volta anotada não vive para sempre: passada a janela, vira estreia.
+
+    Sem a poda, o dicionário guardaria todo `chat_id` que expirou e nunca mais
+    voltou — crescimento ilimitado pelo caminho que o TTL existe para fechar.
+    Quem volta depois da janela é tratado como conversa nova, sem a frase.
+    """
+    _troca(registro, _ALUNA, "oi", "olá")
+    relogio.avancar(31)
+    registro.expirar()
+    relogio.avancar(2 * 24 * 60)
+
+    registro.conversa(_ALUNA)
+
+    assert registro.consumir_reengajamento(_ALUNA) is False
+
+
 # --- Ordem: duas mensagens do mesmo Aluno não se embaralham ---
 
 

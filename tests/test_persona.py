@@ -37,9 +37,12 @@ from sau.graph.graph import executar_turno
 from sau.graph.state import Mensagem
 from sau.inference.ollama import ClienteOllama
 from sau.persona import (
+    APRESENTACAO_DA_MENSAGEM,
+    APRESENTACAO_DO_HISTORICO,
     AVISO_CONVERSA,
     ENCAMINHAMENTO,
     FIM_CONVERSA,
+    HISTORICO_VAZIO,
     IDENTIDADE,
     INICIO_CONVERSA,
     MENSAGENS_NO_PROMPT,
@@ -49,6 +52,7 @@ from sau.persona import (
     PRAZO_NAO_E_ATIVIDADE,
     RECUSA_DE_ATIVIDADE,
     REGRAS,
+    RESPOSTA_FIXA_SEM_INFO,
     SEM_CATALOGO,
     TOM,
     USAR_HISTORICO,
@@ -114,12 +118,12 @@ def _prompt_do_turno(fazer_cliente: FabricaCliente) -> str:
 
 
 def test_o_prompt_tem_exatamente_as_regras_da_issue() -> None:
-    """As regras do prompt são estas nove, nesta ordem, e nenhuma a mais.
+    """As regras do prompt são estas dez, nesta ordem, e nenhuma a mais.
 
     A lista é literal porque a fonte dela não é o código: é o critério de
-    aceitação da issue #10 mais as duas do caso à parte. Uma regra nova entra
-    aqui junto, e uma regra derrubada da composição deixa este teste vermelho
-    antes de qualquer outro.
+    aceitação da issue #10 mais as duas do caso à parte e a da frase fixa. Uma
+    regra nova entra aqui junto, e uma regra derrubada da composição deixa este
+    teste vermelho antes de qualquer outro.
     """
     assert tuple(regra.id for regra in REGRAS) == (
         "identidade",
@@ -131,6 +135,7 @@ def test_o_prompt_tem_exatamente_as_regras_da_issue() -> None:
         "encaminhamento",
         "usar_historico",
         "sem_catalogo",
+        "resposta_fixa_sem_info",
     )
 
 
@@ -278,10 +283,26 @@ def test_a_regra_de_sem_catalogo_chega_ao_modelo(
     assert prompt.count(SEM_CATALOGO.instrucao) == 1
 
 
+def test_a_regra_de_resposta_fixa_chega_ao_modelo(
+    fazer_cliente: FabricaCliente,
+) -> None:
+    """A frase fixa de sem-info está no prompt que o modelo recebeu.
+
+    É esta instrução que dá ao S.A.U. a saída literal quando a resposta não
+    está ao alcance ou o pedido viola as regras: sem ela, o não-saber sai em
+    redação livre a cada turno, e a forma varia. A garantia verbatim continua
+    sendo o classificador futuro — aqui o que se prova é que a frase chegou.
+    """
+    prompt = _prompt_do_turno(fazer_cliente)
+
+    assert RESPOSTA_FIXA_SEM_INFO.instrucao in prompt
+    assert prompt.count(RESPOSTA_FIXA_SEM_INFO.instrucao) == 1
+
+
 def test_o_titulo_de_cada_regra_chega_ao_modelo(fazer_cliente: FabricaCliente) -> None:
     """O `titulo` de cada regra vai no prompt junto da instrução.
 
-    Os nove testes acima conferem a `instrucao` e não o `titulo`, então um
+    Os dez testes acima conferem a `instrucao` e não o `titulo`, então um
     `PERSONA` montado só com as instruções passaria por todos eles — que é
     exatamente o estado em que a persona estava, com sete parágrafos sem
     cabeçalho entregues a um modelo de 3B. Este teste é o que fecha a porta: o
@@ -368,8 +389,9 @@ def test_o_historico_da_conversa_vai_dentro_da_cerca() -> None:
     # E as três que não cabem não estão no prompt, nem dentro nem fora da cerca.
     for indice in range(MENSAGENS_NO_PROMPT - 3):
         assert f"pergunta {indice}" not in prompt
-    # A última fala do Aluno é a penúltima linha do prompt, antes do fechamento.
-    assert prompt.splitlines()[-2] == _MENSAGEM
+    # A mensagem do turno é a penúltima linha do prompt, antes do fechamento —
+    # e agora rotulada, como toda fala do histórico.
+    assert prompt.splitlines()[-2] == f"Aluno: {_MENSAGEM}"
     assert prompt.splitlines()[-1] == FIM_CONVERSA
 
 
@@ -389,6 +411,45 @@ def test_o_historico_vai_antes_da_mensagem_do_turno() -> None:
 
     assert prompt.index("Atividade 2") < prompt.index(_MENSAGEM)
     assert prompt.index("Atividade 2") > prompt.index(PERSONA)
+
+
+def test_a_mensagem_do_turno_vem_rotulada_e_separada_do_historico() -> None:
+    """A pergunta atual tem cabeçalho próprio e rótulo `Aluno:`, como o histórico.
+
+    Sem o cabeçalho, a mensagem nova colava no histórico com uma linha em
+    branco de separação; sem o rótulo, era a única fala sem dizer quem falou.
+    As duas metades importam: o cabeçalho diz que aquilo é o presente, e o
+    rótulo dá à pergunta atual a mesma forma das antigas.
+    """
+    falas = [
+        Mensagem(papel="aluno", texto="qual o prazo da Atividade 2?", em=1.0),
+        Mensagem(papel="sau", texto="Vamos por partes: o que travou você?", em=2.0),
+    ]
+
+    prompt = montar_prompt(_MENSAGEM, falas)
+
+    assert APRESENTACAO_DO_HISTORICO in prompt
+    assert APRESENTACAO_DA_MENSAGEM in prompt
+    assert prompt.index(APRESENTACAO_DO_HISTORICO) < prompt.index("Atividade 2")
+    assert prompt.index(APRESENTACAO_DA_MENSAGEM) > prompt.index("travou você?")
+    assert prompt.index(APRESENTACAO_DA_MENSAGEM) < prompt.index(f"Aluno: {_MENSAGEM}")
+    assert prompt.count(APRESENTACAO_DO_HISTORICO) == 1
+    assert prompt.count(APRESENTACAO_DA_MENSAGEM) == 1
+
+
+def test_o_historico_vazio_ganha_marcador_de_primeira_mensagem() -> None:
+    """Na estreia, o lugar do histórico tem marcador fixo, e não seção ausente.
+
+    Seção ausente o modelo lê como bloco faltando; marcador fixo ele lê como
+    primeira mensagem, que é o que ela é. E a mensagem do turno continua
+    rotulada mesmo sem nada antes dela.
+    """
+    prompt = montar_prompt(_MENSAGEM)
+
+    assert HISTORICO_VAZIO in prompt
+    assert prompt.index(HISTORICO_VAZIO) > prompt.index(INICIO_CONVERSA)
+    assert prompt.index(HISTORICO_VAZIO) < prompt.index(APRESENTACAO_DA_MENSAGEM)
+    assert prompt.splitlines()[-2] == f"Aluno: {_MENSAGEM}"
 
 
 def test_o_prefixo_da_persona_e_travado_por_cache_de_prefixo() -> None:
@@ -433,7 +494,7 @@ def test_o_prefixo_da_persona_e_travado_por_cache_de_prefixo() -> None:
 
     assert prefixo_a == prefixo_b, (
         "O prefixo do prompt até `INICIO_CONVERSA` mudou entre dois turnos. "
-        "Isso quebra o **cache de prefixo** do Ollama: os 870 tokens da persona "
+        "Isso quebra o **cache de prefixo** do Ollama: os 949 tokens da persona "
         "deixam de ser reaproveitados e todo turno volta a custar a leitura "
         "inteira do prompt (0,02 s → 3,8 s), do primeiro ao último Aluno. "
         "Não mude este prefixo — nem espaço, nem parágrafo, nem ordem — sem "

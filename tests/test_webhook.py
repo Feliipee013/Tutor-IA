@@ -33,8 +33,10 @@ from sau.telegram import webhook
 from sau.telegram.webhook import (
     CABECALHO_SECRET_TOKEN,
     TEXTO_ACK,
+    TEXTO_BOAS_VINDAS,
     TEXTO_FALHA,
     TEXTO_FILA_CHEIA,
+    TEXTO_REENGAJAMENTO,
     CredencialTelegramAusenteError,
     ExecutorTurno,
     criar_app,
@@ -1491,6 +1493,121 @@ def test_a_conversa_registra_a_falha_como_parte_do_que_o_aluno_viu(
     assert TEXTO_FALHA in ModeloQueEspelha.prompts[0], (
         f"o turno seguinte não viu a falha anterior: {ModeloQueEspelha.prompts[0]!r}"
     )
+
+
+# --- Boas-vindas e reengajamento: os dois caminhos sem inferência total ---
+
+
+def test_start_devolve_boas_vindas_sem_chamar_o_modelo(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """O `/start` é comando, não pergunta: volta fixa, sem geração.
+
+    Mandar para o modelo rendeu o "Olá novamente!" da conversa real — além de
+    errado, um turno de inferência gasto à toa. A conversa gravada é a que o
+    Aluno teve: o comando como `aluno` e as boas-vindas como `sau`.
+    """
+    telegram = TelegramFalso()
+    registro = RegistroDeConversas(str(tmp_path / "conversas.db"))
+    ModeloQueEspelha.prompts = []
+    try:
+        monkeypatch.setattr(webhook, "ClienteOllama", ModeloQueEspelha)
+        app = _app(telegram, registro=registro, executor=None)
+        _postar(app, _update_de(44, "/start"))
+        historico = registro.historico(44)
+    finally:
+        registro.fechar()
+        telegram.fechar()
+
+    assert telegram.textos == [TEXTO_ACK, TEXTO_BOAS_VINDAS]
+    assert ModeloQueEspelha.prompts == []
+    assert [(m.papel, m.texto) for m in historico] == [
+        ("aluno", "/start"),
+        ("sau", TEXTO_BOAS_VINDAS),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("texto", "esperado"),
+    [
+        ("/start", True),
+        ("/START", True),
+        ("/start carga-do-botao", True),
+        ("/start@saubot", True),
+        ("qual o prazo?", False),
+        ("começar", False),
+        ("/status", False),
+    ],
+)
+def test_eh_comando_start(texto: str, esperado: bool) -> None:
+    """Só o comando com fronteira é `/start`: carga e menção passam, resto não."""
+    assert webhook._eh_comando_start(texto) is esperado
+
+
+def test_volta_depois_do_ttl_gruda_reengajamento_na_resposta(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Quem voltou depois da expiração lê o "que bom te ver de novo" na frente.
+
+    A frase vai grudada na resposta do turno, e não como mensagem separada: o
+    Aluno já levou o acuse, e terceira mensagem viraria espera. O primeiro turno
+    sai puro — o sinal só nasce da expiração.
+    """
+    agora = [1_700_000_000.0]
+    telegram = TelegramFalso()
+    registro = RegistroDeConversas(
+        str(tmp_path / "conversas.db"), ttl_minutos=30, agora=lambda: agora[0]
+    )
+    try:
+        monkeypatch.setattr(webhook, "ClienteOllama", ModeloFalso)
+        app = _app(telegram, registro=registro, executor=None)
+        _postar(app, _update_de(45, "qual o prazo?"))
+        agora[0] += 31 * 60
+        _postar(app, _update_de(45, "e o formato?"))
+    finally:
+        registro.fechar()
+        telegram.fechar()
+
+    assert telegram.textos == [
+        TEXTO_ACK,
+        ModeloFalso.texto,
+        TEXTO_ACK,
+        f"{TEXTO_REENGAJAMENTO}\n\n{ModeloFalso.texto}",
+    ]
+
+
+def test_start_vence_o_reengajamento_e_consome_o_sinal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A volta que começou pelo comando já foi saudada: sem frase grudada.
+
+    O sinal é consumido de qualquer jeito — se vazasse, o turno seguinte
+    reengajaria uma conversa que acabou de receber as boas-vindas.
+    """
+    agora = [1_700_000_000.0]
+    telegram = TelegramFalso()
+    registro = RegistroDeConversas(
+        str(tmp_path / "conversas.db"), ttl_minutos=30, agora=lambda: agora[0]
+    )
+    try:
+        monkeypatch.setattr(webhook, "ClienteOllama", ModeloFalso)
+        app = _app(telegram, registro=registro, executor=None)
+        _postar(app, _update_de(46, "qual o prazo?"))
+        agora[0] += 31 * 60
+        _postar(app, _update_de(46, "/start"))
+        _postar(app, _update_de(46, "e o formato?"))
+    finally:
+        registro.fechar()
+        telegram.fechar()
+
+    assert telegram.textos == [
+        TEXTO_ACK,
+        ModeloFalso.texto,
+        TEXTO_ACK,
+        TEXTO_BOAS_VINDAS,
+        TEXTO_ACK,
+        ModeloFalso.texto,
+    ]
 
 
 # --- Payload inválido ---

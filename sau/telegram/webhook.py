@@ -89,6 +89,36 @@ O efeito colateral conhecido: o Aluno já leu o `TEXTO_ACK` ("vou te responder e
 instantes") antes da recusa, e a recusa chega logo em seguida. É o que a issue pede
 — recusar educado, e não espera silenciosa."""
 
+TEXTO_BOAS_VINDAS = (
+    "Olá! Eu sou o S.A.U., o assistente virtual de apoio aos Alunos da Unopar. "
+    "Pergunte sobre prazos, formato de trabalhos, materiais ou o ambiente virtual. "
+    "Se eu não souber a resposta, te encaminho a um Tutor humano."
+)
+"""As boas-vindas do `/start`: fixas e sem o modelo.
+
+O `/start` não é pergunta — mandar para o modelo rendeu o "Olá novamente!" da
+conversa real, que além de errado gasta um turno de inferência. O texto fixo
+também cumpre a `identidade` da persona de graça: dizer "assistente virtual"
+aqui é a apresentação única da conversa, e os turnos seguintes não se apresentam
+mais. Entra no histórico como qualquer resposta do S.A.U., pela mesma
+invariante da `TEXTO_FALHA`: o que o Aluno leu é parte da conversa dele.
+
+Mora aqui, e não em `sau/persona.py`, pelo mesmo motivo invertido da sentinela
+`test_as_regras_moram_so_em_sau_persona`: texto de canal é deste módulo, e
+instrução ao modelo é da persona.
+"""
+
+TEXTO_REENGAJAMENTO = (
+    "Que bom te ver de novo! Faz um tempo desde a nossa última conversa."
+)
+"""A frase que abre a resposta de quem voltou depois de o TTL apagar a conversa.
+
+Vai grudada na frente da resposta do turno, e não como mensagem separada: o
+Aluno já leva o acuse, e terceira mensagem viraria espera. Também entra no
+histórico grudada, porque é o que o Aluno leu — separar na gravação e juntar no
+envio divergiria o arquivo da conversa duas linhas depois.
+"""
+
 CABECALHO_SECRET_TOKEN = "X-Telegram-Bot-Api-Secret-Token"
 """Header que o Telegram anexa a toda entrega quando o `setWebhook` foi feito com
 `secret_token`. A porta do webhook é pública pelo túnel de desenvolvimento, e sem
@@ -370,6 +400,19 @@ def _extrair_texto(update: dict[str, Any]) -> str | None:
     return texto.strip() or None
 
 
+def _eh_comando_start(texto: str) -> bool:
+    """Diz se o texto do Aluno é o `/start` do Telegram, com ou sem carga.
+
+    O BotFather manda `/start` puro no primeiro contato, e botões e links
+    profundos mandam `/start <carga>`. Em grupo o comando pode vir com o nome
+    do S.A.U. grudado (`/start@meubot`). Nenhum dos três é pergunta: os três
+    pedem as boas-vindas, e é por isso que a comparação é no comando, e não no
+    texto inteiro.
+    """
+    comando = texto.split(None, 1)[0].lower()
+    return comando == "/start" or comando.startswith("/start@")
+
+
 def enviar_mensagem(
     config: Configuracao,
     chat_id: int,
@@ -539,6 +582,16 @@ def _processar_turno(
     evita que o modelo seja chamado para um turno que já foi recusado. Ela entra no
     histórico pelo mesmo `registrar_do_sau` da falha, e é a mesma invariante.
 
+    Dois caminhos não chamam o modelo, e os dois entram no histórico do mesmo
+    jeito. O `/start` devolve a `TEXTO_BOAS_VINDAS` sem inferência e sem semáforo
+    — comando não é pergunta, e gastar um turno de modelo nele foi o "Olá
+    novamente!" da conversa real. A volta depois do TTL gruda a
+    `TEXTO_REENGAJAMENTO` na frente da resposta do turno, seja ela a do modelo,
+    a falha ou a recusa: quem voltou lê o "que bom te ver de novo" antes de
+    qualquer outra coisa. O `/start` vence o reengajamento quando os dois
+    coincidem — a volta que começou pelo comando já foi saudada —, e o sinal é
+    consumido de qualquer jeito para não vazar ao turno seguinte.
+
     O `ClienteOllama` é montado aqui, com o `OLLAMA_TIMEOUT` da configuração: o
     `webhook` não roda a checagem de pré-requisito do `bot` (ADR-0002), e essa é
     a diferença de propósito entre os dois serviços. Lá, Ollama fora é falha alta
@@ -601,42 +654,49 @@ def _processar_turno(
     try:
         conversa = registro.conversa(chat_id)
         with conversa.em_ordem():
+            reengajou = registro.consumir_reengajamento(chat_id)
             historico = conversa.historico()
             conversa.registrar_do_aluno(texto, time.time())
-            try:
-                with semaforo.na_fila(aviso=avisar_posicao):
-                    entrega = executar_turno(cliente, texto, historico)
-            except FilaCheiaError as err:
-                # A recusa é do Aluno, não do operador: `warning` e não `error`,
-                # porque nada quebrou — a fila encheu, que é o que o teto existe para
-                # transformar em resposta. O motivo técnico inteiro fica na exceção e
-                # o Aluno leva a frase que não tem número nem prazo.
-                logger.warning("Turno do Aluno %s recusado: %s", chat_id, err)
-                entrega, desfecho = TEXTO_FILA_CHEIA, "fila cheia"
-            except ErroDeInferencia as err:
-                # `TempoEsgotadoError` é subclasse: o timeout cai aqui com o motivo
-                # certo no log e a mesma frase para o Aluno.
-                logger.error("O turno do Aluno %s falhou: %s", chat_id, err)
-                entrega, desfecho = TEXTO_FALHA, "falha do modelo"
-            except Exception:
-                logger.exception(
-                    "O turno do Aluno %s falhou por um erro que não é do modelo.", chat_id
-                )
-                entrega, desfecho = TEXTO_FALHA, "erro inesperado"
+            if _eh_comando_start(texto):
+                entrega, desfecho = TEXTO_BOAS_VINDAS, "boas-vindas"
             else:
-                if entrega.strip():
-                    desfecho = "resposta do modelo"
-                else:
-                    # Resposta vazia não é erro do `ClienteOllama`: ele entrega o que
-                    # veio, e o Ollama devolve `response: ""` com `done: true` quando o
-                    # modelo para sem escrever nada. Mandar esse vazio ao Telegram é pior
-                    # do que falhar — o `sendMessage` é recusado com 400 e o Aluno fica
-                    # com o acuse e nenhum sinal do motivo. A mesma frase cobre os três
-                    # jeitos de não responder.
-                    logger.error(
-                        "O turno do Aluno %s voltou do modelo sem texto nenhum.", chat_id
+                try:
+                    with semaforo.na_fila(aviso=avisar_posicao):
+                        entrega = executar_turno(cliente, texto, historico)
+                except FilaCheiaError as err:
+                    # A recusa é do Aluno, não do operador: `warning` e não `error`,
+                    # porque nada quebrou — a fila encheu, que é o que o teto existe para
+                    # transformar em resposta. O motivo técnico inteiro fica na exceção e
+                    # o Aluno leva a frase que não tem número nem prazo.
+                    logger.warning("Turno do Aluno %s recusado: %s", chat_id, err)
+                    entrega, desfecho = TEXTO_FILA_CHEIA, "fila cheia"
+                except ErroDeInferencia as err:
+                    # `TempoEsgotadoError` é subclasse: o timeout cai aqui com o motivo
+                    # certo no log e a mesma frase para o Aluno.
+                    logger.error("O turno do Aluno %s falhou: %s", chat_id, err)
+                    entrega, desfecho = TEXTO_FALHA, "falha do modelo"
+                except Exception:
+                    logger.exception(
+                        "O turno do Aluno %s falhou por um erro que não é do modelo.", chat_id
                     )
-                    entrega, desfecho = TEXTO_FALHA, "resposta vazia"
+                    entrega, desfecho = TEXTO_FALHA, "erro inesperado"
+                else:
+                    if entrega.strip():
+                        desfecho = "resposta do modelo"
+                    else:
+                        # Resposta vazia não é erro do `ClienteOllama`: ele entrega o que
+                        # veio, e o Ollama devolve `response: ""` com `done: true` quando o
+                        # modelo para sem escrever nada. Mandar esse vazio ao Telegram é pior
+                        # do que falhar — o `sendMessage` é recusado com 400 e o Aluno fica
+                        # com o acuse e nenhum sinal do motivo. A mesma frase cobre os três
+                        # jeitos de não responder.
+                        logger.error(
+                            "O turno do Aluno %s voltou do modelo sem texto nenhum.", chat_id
+                        )
+                        entrega, desfecho = TEXTO_FALHA, "resposta vazia"
+
+                if reengajou:
+                    entrega = f"{TEXTO_REENGAJAMENTO}\n\n{entrega}"
 
             # A resposta entregue vai para o histórico **dentro** da fila e antes do
             # envio. A ordem é o que importa: se o registro falhasse depois do envio, o

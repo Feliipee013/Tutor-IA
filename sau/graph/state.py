@@ -77,6 +77,16 @@ faz o arquivo não crescer sem limite — sem ele, `docker compose down` sem `-v
 seria a única limpeza do sistema.
 """
 
+JANELA_REENGAJAMENTO_SEGUNDOS = 86_400
+"""Por quanto tempo um `chat_id` expirado ainda conta como "volta", e não estreia.
+
+Vinte e quatro horas: quem volta no dia seguinte ainda merece o "que bom te ver
+de novo", e quem volta uma semana depois é tratado como conversa nova sem a
+frase. O teto existe pelo mesmo motivo do TTL — sem ele o dicionário de
+expiradas cresceria um `chat_id` por Aluna que nunca mais volta, e o critério
+"sem crescimento ilimitado" do ADR-0001 valeria para tudo menos para ele.
+"""
+
 _ESQUEMA = """
 CREATE TABLE IF NOT EXISTS conversa (
     chat_id INTEGER PRIMARY KEY,
@@ -278,6 +288,7 @@ class RegistroDeConversas:
         self.ttl_minutos = ttl_minutos
         self._agora = agora or time.time
         self._conversas: dict[int, Conversa] = {}
+        self._expiradas: dict[int, float] = {}
         self._tranca = threading.Lock()
         self._conexao = sqlite3.connect(caminho, check_same_thread=False)
         self._conexao.row_factory = sqlite3.Row
@@ -384,6 +395,22 @@ class RegistroDeConversas:
             vencidas = self._expirar()
         return vencidas
 
+    def consumir_reengajamento(self, chat_id: int) -> bool:
+        """Diz se esta conversa voltou depois de expirar, uma vez só.
+
+        É o sinal que o `webhook` usa para a mensagem de reengajamento: `True`
+        na primeira vez que um `chat_id` expirado volta a falar, `False` em
+        todo o resto — estreia de verdade, conversa ainda viva, segundo turno
+        depois da volta. Uma vez só porque o pop esvazia: a volta é um evento,
+        não um estado, e um estado faria todo turno seguinte reengajar de novo.
+
+        Quem chama dentro da fila `em_ordem` da conversa recebe o sinal na ordem
+        dos turnos: dois turnos colados depois da expiração entregam o
+        reengajamento no primeiro, e nunca no segundo.
+        """
+        with self._tranca:
+            return self._expiradas.pop(chat_id, None) is not None
+
     def fechar(self) -> None:
         """Fecha a conexão, depois de acordar quem estiver esperando.
 
@@ -405,6 +432,19 @@ class RegistroDeConversas:
                 "SELECT chat_id FROM conversa WHERE ultimo_turno < ?", (corte,)
             )
         ]
+
+        agora = self._agora()
+        # A poda roda mesmo quando nada venceu: sem ela, uma volta anotada
+        # viveria para sempre se nenhuma outra conversa expirasse depois para
+        # varrê-la junto. Quem volta depois da janela é tratado como estreia —
+        # sem a frase de reengajamento —, que é degradação aceitável contra
+        # crescimento ilimitado.
+        corte_reengajamento = agora - JANELA_REENGAJAMENTO_SEGUNDOS
+        self._expiradas = {
+            chat_id: momento
+            for chat_id, momento in self._expiradas.items()
+            if momento >= corte_reengajamento
+        }
         if not vencidas:
             return []
 
@@ -414,6 +454,9 @@ class RegistroDeConversas:
         self._conexao.execute(f"DELETE FROM mensagem WHERE chat_id IN ({marcadores})", vencidas)
         self._conexao.execute(f"DELETE FROM conversa WHERE chat_id IN ({marcadores})", vencidas)
         self._conexao.commit()
+
+        for vencida in vencidas:
+            self._expiradas[vencida] = agora
 
         mortas = [
             self._conversas.pop(chat_id) for chat_id in vencidas if chat_id in self._conversas
