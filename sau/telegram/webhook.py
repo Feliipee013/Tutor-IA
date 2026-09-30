@@ -523,6 +523,17 @@ def _processar_turno(
     A espera tem teto de `TIMEOUT_ENVIO_SEGUNDOS`, então um Telegram lento atrasa a
     fila em até 5 s e não a trava.
 
+    E o `aviso` pode falhar, e a falha não é da fila. O `enviar_mensagem` só captura
+    `httpx.HTTPError`: um `TELEGRAM_API_BASE` malformado levanta `httpx.InvalidURL`,
+    que não é subclasse de `HTTPError`, e a exceção sai direto — como sai qualquer
+    outra falha de I/O. Ela cai no `except Exception` largo abaixo e vira
+    `TEXTO_FALHA` para o Aluno com o motivo no log, que é o mesmo tratamento de
+    qualquer outro turno que falhou. O que o semáforo garante é o resto: o turno que
+    morreu no `aviso` devolve a senha antes de sair, senão ninguém viria servi-la e
+    todo turno posterior esperaria para sempre, em silêncio. Ninguém fica preso por
+    causa de I/O de terceiro — e é por isso que o `aviso` roda dentro do `try` do
+    semáforo: fora da trava de propósito, dentro do `try` por necessidade.
+
     A `FilaCheiaError` vira `TEXTO_FILA_CHEIA` para o Aluno, `warning` no log e
     **nenhuma chamada ao modelo**: recusar por fila cheia antes de inferir é o que
     evita que o modelo seja chamado para um turno que já foi recusado. Ela entra no

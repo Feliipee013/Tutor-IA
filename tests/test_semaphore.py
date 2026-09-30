@@ -83,6 +83,14 @@ class VooDeTurno:
 
     O `solta` é o que impede o teste de vazar thread: sem ele, um turno preso
     seguraria a vaga e o teste seguinte herdaria um semáforo ocupado.
+
+    Os dois jeitos de o turno morrer de surpresa ficam em parâmetro, e a diferença
+    entre eles é o que os testes de fila precisam distingui: `estoura` mata o turno
+    **depois** de ocupar a vaga, e `aviso_levanta` mata o turno **antes**, enquanto
+    ele só tem a senha. O primeiro devolve vaga; o segundo tem de devolver a senha.
+    Um turno que morre no meio da fila e engole o número seria o pior defeito possível
+    aqui — todo turno posterior travaria para sempre, sem log —, e nenhum teste que
+    só olhasse para a vaga o pegaria.
     """
 
     def __init__(
@@ -90,6 +98,7 @@ class VooDeTurno:
         semaforo: SemaforoDeInferencia,
         avisados: list[PosicaoNaFila],
         estoura: bool = False,
+        aviso_levanta: bool = False,
     ) -> None:
         self.avisou = threading.Event()
         self.dentro = threading.Event()
@@ -100,6 +109,17 @@ class VooDeTurno:
         def avisar(posicao: PosicaoNaFila) -> None:
             avisados.append(posicao)
             self.avisou.set()
+            if aviso_levanta:
+                # O `aviso` quebrando **depois** de o teste ser avisado: o `avisou`
+                # primeiro, porque ele marca que o turno chegou à fila, e a exceção
+                # depois. Na ordem inversa o teste não saberia dizer "entrou na fila e
+                # morreu ao avisar" de "nunca chegou à fila", que são defeitos
+                # diferentes com consertos diferentes.
+                #
+                # `RuntimeError` e não `httpx.InvalidURL` porque o semáforo não conhece
+                # o Telegram: o que ele exige é que **alguma** exceção escape do
+                # `aviso`, e o tipo não importa para o caminho que se quer exercitar.
+                raise RuntimeError("o aviso de posição falhou")
 
         def rodar() -> None:
             try:
@@ -599,6 +619,247 @@ def test_a_senha_avanca_para_o_turno_que_estoura() -> None:
 
     assert isinstance(estourando.recusado, RuntimeError)
     assert semaforo.vagas_livres == 1
+
+
+# --- Ninguém consome uma senha sem servi-la ---
+
+
+class CondicaoQueInterrompe(threading.Condition):
+    """A condição do semáforo, em que o `wait` morre em vez de esperar.
+
+    Existe para exercitar o caminho que nenhum evento do teste alcança: o turno que
+    **já pegou a senha** e ainda não conseguiu vaga, e que morre enquanto dorme. É o
+    `KeyboardInterrupt` que o docstring de `na_fila` cita — em produção ele é raríssimo,
+    porque o sinal vai para a thread principal —, e aqui ele é determinístico, que é o
+    que um teste de concorrência precisa ser.
+
+    Subclassar a condição de verdade, e não trocá-la por um objeto falso, mantém o
+    `with`, o `notify_all` e a trava funcionando: só o `wait`, que é o ponto, morre.
+    """
+
+    def wait(self, timeout: float | None = None) -> bool:
+        raise KeyboardInterrupt("o turno foi interrompido enquanto esperava")
+
+
+def test_o_aviso_que_levanta_nao_prende_o_turno_que_esta_atras() -> None:
+    """Um `aviso` que levanta não pode prender ninguém, e este é o teste da regressão.
+
+    O defeito que este teste fecha estava no caminho do `aviso`: ele rodava fora do
+    `try`, então a exceção saía do gerador sem passar pelo `finally`. A senha já tinha
+    sido consumida e ninguém viria servi-la — `_senha_servindo` ficaria apontando para
+    uma senha de um turno morto —, e **todo turno posterior esperaria para sempre**,
+    sem log e sem recusa. Na tela: o Aluno manda a mensagem, o acuse sai, e nada mais
+    acontece, para sempre. O "backpressure comunicado, não escondido" do ADR-0001
+    virando o oposto.
+
+    O `aviso` quebrado é alcançável de verdade: no `webhook` ele é um `sendMessage`, e
+    o `enviar_mensagem` só captura `httpx.HTTPError`. Um `TELEGRAM_API_BASE`
+    malformado levanta `httpx.InvalidURL`, que **não** é subclasse de `HTTPError`, e
+    qualquer outra falha de I/O também sai.
+
+    A prova é o turno honesto que chega atrás, e não a exceção ter saído: o terceiro
+    turno é um Aluno de verdade esperando a vez dele. Com o defeito, ele trava, e o
+    `esperar_para_ocupar_vaga` falha em `LIMITE_DE_ESPERA` — o teste fica vermelho em
+    segundos em vez de travar junto com o serviço.
+    """
+    semaforo = SemaforoDeInferencia(k=1)
+    avisados: list[PosicaoNaFila] = []
+
+    # O primeiro turno ocupa a única vaga e segura, que é o que faz existir uma fila.
+    primeiro = VooDeTurno(semaforo, avisados)
+    primeiro.esperar_para_ocupar_vaga()
+
+    # O segundo entra na fila e morre no aviso, antes de ocupar vaga.
+    quebrado = VooDeTurno(semaforo, avisados, aviso_levanta=True)
+    quebrado.esperar_para_entrar_na_fila()
+    quebrado.esperar_para_terminar()
+    assert isinstance(quebrado.recusado, RuntimeError), (
+        f"o aviso deveria ter levantado, e veio {quebrado.recusado!r}"
+    )
+
+    # O terceiro é o Aluno honesto que chegou depois. Com o defeito, ele espera para
+    # sempre: a senha dele nunca é a vez de ninguém.
+    atrasado = VooDeTurno(semaforo, avisados)
+    atrasado.esperar_para_entrar_na_fila()
+
+    primeiro.terminar()
+    atrasado.esperar_para_ocupar_vaga()
+    atrasado.terminar()
+
+    assert semaforo.turnos_esperando == 0
+    assert semaforo.vagas_livres == 1
+
+
+def test_o_aviso_que_levanta_nao_pula_o_turno_que_esta_antes() -> None:
+    """Morrer na fila não pode pular quem está **antes** e ainda vivo.
+
+    Este é o defeito mais difícil de ver, e ele só aparece quando o turno que morre
+    **não** é o da vez. A ordem dos turnos na fila é a ordem das senhas, mas a ordem em
+    que cada um *termina o seu aviso* é outra: o turno da senha 2 pode acabar o `aviso`
+    antes do turno da senha 1, que é mais lento. É essa assimetria que desarma a
+    correção ingênua.
+
+    A correção ingênua é somar um: "a senha da vez era a minha, então a seguinte já é
+    a próxima". Com a senha 2 morta e a 1 viva e esperando, a seguinte seria a 3 — e o
+    turno da senha 1 esperaria para sempre um número que ninguém virá servir. O serviço
+    inteiro trava com a fila cheia de gente viva, sem log, sem recusa e sem resposta,
+    que é o pior defeito possível num serviço cuja promessa é a de responder.
+
+    O arranjo do teste produz a assimetria de propósito: `atrasado` entra na fila e o
+    aviso dele **passa**; só depois `quebrado` chega e morre no aviso dele. Com o
+    defeito, `atrasado.esperar_para_ocupar_vaga()` falha em `LIMITE_DE_ESPERA` — o
+    teste fica vermelho em segundos em vez de travar junto com o serviço.
+    """
+    semaforo = SemaforoDeInferencia(k=1)
+    avisados: list[PosicaoNaFila] = []
+
+    primeiro = VooDeTurno(semaforo, avisados)
+    primeiro.esperar_para_ocupar_vaga()
+
+    # Senha 1: fica na fila e sobrevive. É o turno que o defeito prende.
+    atrasado = VooDeTurno(semaforo, avisados)
+    atrasado.esperar_para_entrar_na_fila()
+
+    # Senha 2: entra na fila depois e morre no aviso. A fila era [1] e continua [1]:
+    # a senha 2 não pode virar a senha da vez.
+    quebrado = VooDeTurno(semaforo, avisados, aviso_levanta=True)
+    quebrado.esperar_para_entrar_na_fila()
+    quebrado.esperar_para_terminar()
+    assert isinstance(quebrado.recusado, RuntimeError)
+
+    assert semaforo.turnos_esperando == 1, (
+        f"a fila deveria ter só o turno que continua vivo: "
+        f"{semaforo.turnos_esperando}"
+    )
+
+    primeiro.terminar()
+    atrasado.esperar_para_ocupar_vaga()
+    atrasado.terminar()
+
+    assert semaforo.turnos_esperando == 0
+    assert semaforo.vagas_livres == 1
+
+
+def test_o_turno_que_morre_no_aviso_sai_da_conta_de_quem_espera() -> None:
+    """`_esperando` volta ao valor certo, e o teto volta a valer para quem chegou.
+
+    A segunda metade do mesmo defeito, e ela é a que o Aluno sente. Com o vazamento, o
+    `_esperando` do turno morto continuava contando: o teto passava a recusar turnos
+    que não estavam esperando por nada, com a mensagem de "a fila está cheia" para um
+    Aluno que era o único na fila. O sintoma é pior que o do travamento, porque
+    **responde**: o Aluno recebe uma recusa que não é verdade, e o operador recebe um
+    `warning` de fila cheia com a fila vazia.
+
+    O `teto=1` é o que torna isso observável. Com o `_esperando` vazado em 1, o turno
+    que chega atrás bate no teto e é recusado; sem o vazamento ele entra na fila como
+    qualquer outro, e é o que este teste afirma.
+    """
+    semaforo = SemaforoDeInferencia(k=1, teto=1)
+    avisados: list[PosicaoNaFila] = []
+
+    primeiro = VooDeTurno(semaforo, avisados)
+    primeiro.esperar_para_ocupar_vaga()
+    quebrado = VooDeTurno(semaforo, avisados, aviso_levanta=True)
+    quebrado.esperar_para_entrar_na_fila()
+    quebrado.esperar_para_terminar()
+
+    assert semaforo.turnos_esperando == 0, (
+        f"o turno que morreu no aviso continua na contagem de quem espera: "
+        f"{semaforo.turnos_esperando}. O teto vai recusar Aluno com a fila vazia"
+    )
+
+    # Com o vazamento, este turno é recusado na porta pelo teto, e o `avisou` nunca
+    # liga: a espera abaixo é, ao mesmo tempo, a prova de que ele não foi recusado.
+    atrasado = VooDeTurno(semaforo, avisados)
+    atrasado.esperar_para_entrar_na_fila()
+
+    primeiro.terminar()
+    atrasado.esperar_para_ocupar_vaga()
+    atrasado.terminar()
+
+    assert semaforo.turnos_esperando == 0
+
+
+def test_o_aviso_que_levanta_nao_devolve_vaga_que_nunca_foi_tomada() -> None:
+    """Quem não tomou vaga não devolve vaga — senão o semáforo cresce acima do `k`.
+
+    O caminho do `finally` é o mesmo para todo mundo, e é por isso que ele precisa da
+    `segurando_vaga`: uma devolução incondicional devolveria uma vaga que ninguém
+    tomou. Com `k=1` isso significa dois turnos no modelo ao mesmo tempo, que é
+    exatamente o defeito que este módulo existe para impedir — e o sintomo seria o
+    modelo cair para CPU sem que nada tivesse mudado no serviço.
+
+    Com `vagas_livres` inflado, o `k` deixa de valer para todos os turnos seguintes,
+    então o teste afirma o número logo depois da morte do turno quebrado, com o
+    primeiro turno ainda segurando a vaga.
+    """
+    semaforo = SemaforoDeInferencia(k=1)
+    avisados: list[PosicaoNaFila] = []
+
+    primeiro = VooDeTurno(semaforo, avisados)
+    primeiro.esperar_para_ocupar_vaga()
+    quebrado = VooDeTurno(semaforo, avisados, aviso_levanta=True)
+    quebrado.esperar_para_entrar_na_fila()
+    quebrado.esperar_para_terminar()
+
+    assert semaforo.vagas_livres == 0, (
+        f"o turno que morreu antes de entrar devolveu uma vaga que nunca tomou: "
+        f"vagas_livres={semaforo.vagas_livres} com k=1 e um turno dentro"
+    )
+
+    primeiro.terminar()
+    assert semaforo.vagas_livres == 1
+
+
+def test_o_turno_interrompido_na_espera_devolve_a_senha(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Morrer **dentro** do `wait` libera a fila do mesmo jeito.
+
+    O caminho do `aviso` é o alcançável; este é o que o docstring de `na_fila` cita e
+    que ninguém exercita. A diferença é que aqui o turno já está dormindo com a
+    senha na mão, e a interrupção vem de dentro do `wait` — por isso a condição
+    trocada: um `Event` do teste não consegue matar uma thread que está dentro de um
+    `Condition.wait` de verdade.
+
+    As duas contas importam aqui. A senha volta, senão o próximo turno espera para
+    sempre; e a vaga **não** volta, porque ele nunca tomou nenhuma.
+    """
+    semaforo = SemaforoDeInferencia(k=1)
+    avisados: list[PosicaoNaFila] = []
+
+    primeiro = VooDeTurno(semaforo, avisados)
+    primeiro.esperar_para_ocupar_vaga()
+
+    # A condição de verdade fica guardada para o turno honesto voltar a usar: só o
+    # turno interrompido deve morrer no `wait`.
+    condicao_de_verdade = semaforo._condicao
+    monkeypatch.setattr(semaforo, "_condicao", CondicaoQueInterrompe())
+
+    interrompido = VooDeTurno(semaforo, avisados)
+    interrompido.esperar_para_entrar_na_fila()
+    interrompido.esperar_para_terminar()
+
+    assert isinstance(interrompido.recusado, KeyboardInterrupt), (
+        f"o turno deveria ter sido interrompido no wait, e veio "
+        f"{interrompido.recusado!r}"
+    )
+    assert semaforo.turnos_esperando == 0, "o turno interrompido ficou esperando para sempre"
+    assert semaforo.vagas_livres == 0, (
+        f"o turno interrompido devolveu vaga que nunca tomou: "
+        f"vagas_livres={semaforo.vagas_livres} com k=1 e um turno dentro"
+    )
+
+    monkeypatch.setattr(semaforo, "_condicao", condicao_de_verdade)
+
+    atrasado = VooDeTurno(semaforo, avisados)
+    atrasado.esperar_para_entrar_na_fila()
+    primeiro.terminar()
+    atrasado.esperar_para_ocupar_vaga()
+    atrasado.terminar()
+
+    assert semaforo.vagas_livres == 1
+    assert semaforo.turnos_esperando == 0
 
 
 # --- Construção ---

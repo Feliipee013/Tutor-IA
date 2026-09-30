@@ -17,7 +17,10 @@ comunicada ser verdade em vez de enfeite:
   isso, o Aluno que lê "sua vez é a 3ª" pode ser atendido antes de quem leu "sua
   vez é a 2ª", e a mensagem deixa de descrever a fila que existe. É o mesmo
   argumento que a #9 usou para `Conversa.em_ordem()` e pelo mesmo motivo: uma
-  fila de senha dá a ordem, e um `Condition` dá o despertar sem polling.
+  fila de senha dá a ordem, e um `Condition` dá o despertar sem polling. E a fila
+  é uma **coleção** de senhas, e não um contador: um turno pode morrer antes de
+  entrar, e "passar a vez" tem de ser o próximo turno **vivo**, não o próximo
+  número.
 - **A posição contada é entre Alunos, e não entre turnos.** O semáforo é adquirido
   **dentro** de `conversa.em_ordem()`, e não fora. Adquirir fora seguraria uma
   vaga enquanto o turno espera a vez da *própria* conversa, e dois turnos do mesmo
@@ -38,9 +41,13 @@ comunicada ser verdade em vez de enfeite:
   e não recusa nada; este é a válvula, e os dois coexistem de propósito — um é
   sensor, o outro é escape.
 
-Sem deadlock, por construção: a ordem dos dois travamentos é sempre
-conversa → semáforo, e a vaga volta no `finally` do contexto, mesmo quando o corpo
-levanta exceção.
+Sem deadlock, por construção, e por duas contas. A ordem dos dois travamentos é
+sempre conversa → semáforo, e nenhum caminho a inverte. E **ninguém consome uma senha
+sem servi-la**: quem entra tira a própria senha da fila, e quem sai pelo caminho
+anormal — o `aviso` levantou, o `wait` foi interrompido — tira a dele no `finally` em
+vez de sumir com ela. Sem essa segunda conta, um turno que morresse depois de tirar a
+senha travaria para sempre todos os que estão atrás, sem log e sem mensagem: o
+"backpressure comunicado, não escondido" que o ADR-0001 exige viraria o oposto.
 """
 
 from __future__ import annotations
@@ -48,6 +55,7 @@ from __future__ import annotations
 import math
 import threading
 import time
+from collections import deque
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -155,10 +163,15 @@ class SemaforoDeInferencia:
 
     `na_fila` entrega `None` quando o turno entrou sem esperar e uma
     `PosicaoNaFila` quando ficou atrás de alguém. No segundo caso o `aviso` já foi
-    chamado com ela, uma vez só, antes de esperar. A vaga volta no `finally` mesmo
-    quando o corpo levanta — sem isso, um turno que estourou no grafo queimaria uma
-    vaga pelo resto da madrugada, e o Aluno seguinte esperaria por um turno que já
-    morreu.
+    chamado com ela, uma vez só, antes de esperar.
+
+    Nenhuma saída deixa a fila suja, e são duas as contas. Quem chegou a ocupar vaga
+    devolve a vaga no `finally`, mesmo com o corpo estourando — sem isso, um turno que
+    estourou no grafo queimaria uma vaga pelo resto da madrugada, e o Aluno seguinte
+    esperaria por um turno que já morreu. E quem saiu **antes** de ocupar vaga tira a
+    própria senha da fila no mesmo `finally` — sem isso, um `sendMessage` que falha ao
+    anunciar a posição trava a fila inteira, em silêncio, que é o defeito que o
+    ADR-0001 diz que não pode existir.
 
     O semáforo é adquirido **dentro** de `conversa.em_ordem()`, e é o módulo do
     `webhook` que garante isso. A ordem dos travamentos é sempre
@@ -196,13 +209,24 @@ class SemaforoDeInferencia:
         self._vagas_livres = k
         self._esperando = 0
         self._proxima_senha = 0
-        self._senha_servindo = 0
-        """A menor senha que ainda não entrou no modelo.
+        self._fila: deque[int] = deque()
+        """As senhas dos turnos que tiraram a sua e ainda não entraram no modelo.
 
-        Avança na **entrada** de quem a tinha, e não na devolução da vaga: é essa a
-        diferença entre respeitar `k` e atender um Aluno por vez. Todo mundo com
-        senha acima desta está na fila, e todo mundo com senha abaixo já entrou,
-        ocupando uma vaga ou não.
+        A fila é a ordem, e é uma **coleção** e não um contador porque a ordem não é
+        um número: um turno pode morrer antes de entrar — o `aviso` dele levantou —,
+        e a fila precisa que o turno da vez passe a ser o próximo **vivo**. Com um
+        contador, "passar a vez" seria somar um, e a soma pularia as senhas que
+        continuam esperando: quem está atrás da que morreu ficaria preso para sempre,
+        esperando um número que ninguém viria servir.
+
+        É por isso que `_fila[0]` é a senha da vez, e é a fila que é consultada — nada
+        de `_senha_servindo` —, porque dois contadores que discordam é como um
+        deadlock entra em silêncio.
+
+        O `remove` da saída anormal é uma varredura, e ela é barata por causa do teto:
+        a fila tem no máximo `teto + k` senhas, que é um número de um dígito. Uma
+        lista duplamente ligada daria o mesmo resultado com mais código e mais um
+        lugar para errar.
         """
         self._media_da_vaga: float | None = None
         """A média móvel da duração da vaga, e `None` enquanto nada foi medido.
@@ -253,7 +277,7 @@ class SemaforoDeInferencia:
 
         A espera tem duas condições, e as duas são a mesma fila:
 
-        - **a senha** diz a ordem. Um turno que ainda não é o da vez não toma vaga
+        - **a senha** diz a ordem. Um turno que não é o primeiro da fila não toma vaga
           mesmo havendo vaga livre, e é isso que sustenta a ordem que o `aviso`
           acabou de anunciar;
         - **a vaga** diz se cabe. Tendo a vez, o turno espera até que uma vaga
@@ -262,22 +286,37 @@ class SemaforoDeInferencia:
         Nenhuma delas sozinha serve: sem a senha, a posição comunicada seria
         mentira; sem a vaga, o `k` não valeria nada.
 
-        A senha avança **ao entrar**, e não ao sair, e essa é a diferença entre um
-        semáforo com `k` vagas e um semáforo com uma vaga só. Se a senha só
-        avançasse na devolução, o turno de senha 1 esperaria o turno de senha 0
-        **terminar** antes de entrar — e com `k=2` o serviço atenderia um Aluno por
-        vez, que é o oposto do que o `k` promete. Avançando na entrada, o turno de
-        senha 1 entra assim que aparece vaga, e o `k` vale.
+        A senha sai da fila **ao entrar**, e não ao sair, e essa é a diferença entre um
+        semáforo com `k` vagas e um semáforo com uma vaga só. Se saísse da fila na
+        devolução, o turno de senha 1 esperaria o turno de senha 0 **terminar** antes
+        de entrar — e com `k=2` o serviço atenderia um Aluno por vez, que é o oposto
+        do que o `k` promete. Saindo na entrada, o turno de senha 1 entra assim que
+        aparece vaga, e o `k` vale.
 
         A recusa vem **antes** da senha, e essa ordem é o que impede deadlock. Um
-        turno recusado não consome número de senha — se consumisse, ninguém viria
-        servir aquele número e todos os que estão atrás esperariam para sempre.
+        turno recusado não entra na fila — se entrasse, ninguém viria servir aquele
+        número e todos os que estão atrás esperariam para sempre.
 
-        Entre takers de vaga não há deadlock: a senha avança sozinha, na entrada de
-        quem a tinha, e toda devolução notifica todo mundo. A trava do `webhook` vem
-        antes desta e é sempre a mesma — `conversa.em_ordem()` —, então a ordem dos
-        dois travamentos é sempre conversa e depois semáforo, e nenhum caminho a
-        inverte.
+        Entre quem espera vaga não há deadlock, e o motivo é uma regra só: **ninguém
+        consome uma senha sem servi-la.** A senha sai da fila em dois lugares, e nos
+        dois é o dono dela que tira a sua: na **entrada**, quando o turno passa a
+        ocupar a vaga; e na **saída anormal**, quando o turno nem chegou a entrar — o
+        `aviso` levantou, o `wait` foi interrompido. Toda saída notifica todo mundo.
+
+        A saída anormal é a conta que fecha o caso, e ela tem um jeito só de ser feita:
+        tirar **a própria senha** da fila, e deixar a fila dizer quem é o da vez. Um
+        turno que pegasse a senha 7 e morresse antes de entrar deixaria a 7 na fila
+        para sempre, e ninguém viria servi-la — todo mundo atrás espera a **sua**
+        senha, e a 7 não é a de ninguém —: o serviço inteiro travaria sem log, sem
+        recusa e sem resposta para o Aluno. O sintoma na tela é o pior possível: o
+        `TETO_DE_TURNOS_ESPERANDO` da #9 passa a acusar fila cheia para turnos que não
+        estão esperando por nada, porque `_esperando` vaza junto.
+
+        E o erro de fazer isso "somando um" é o que a fila viva impede: o turno da
+        senha 8 pode morrer antes do turno da senha 7 entrar — o `aviso` de um é
+        rápido e o do outro não —, e `_senha_servindo = 8 + 1` pularia a 7. O turno
+        da 7 esperaria para sempre, com a fila cheia de gente viva e nenhuma reclamação
+        no log. Por isso a ordem é uma coleção, e não um contador.
         """
         with self._condicao:
             tem_vaga = self._vagas_livres > 0
@@ -311,31 +350,50 @@ class SemaforoDeInferencia:
                 self._esperando += 1
             minha_senha = self._proxima_senha
             self._proxima_senha += 1
-
-        if posicao is not None and aviso is not None:
-            # Fora da tranca, e por dois motivos. O aviso é I/O — no `webhook` é um
-            # `sendMessage` ao Telegram, com teto de 5 s — e segurar a condição
-            # durante ele pararia a fila inteira. E nada no aviso reentra no
-            # semáforo, então a trava cruzada que seria o problema de verdade não
-            # existe; o teste da posição usa este mesmo ponto para acordar o teste.
-            aviso(posicao)
+            self._fila.append(minha_senha)
 
         # Antes do `try`, e `None` de propósito. A exceção dentro do `wait` — um
         # `KeyboardInterrupt`, que morre sem devolução nenhuma — não pode deixar
         # `inicio` sem valor para o `finally` ler. `None` é o que distingue "a vaga
         # foi tomada e a inferência está cronometrada" de "o turno nem chegou a
-        # entrar": no segundo caso não há duração para medir, porque nada rodou.
+        # entrar": no segundo caso não há vaga para devolver e não há duração para
+        # medir, porque nada rodou.
         inicio: float | None = None
+        segurando_vaga = False
+        # São dois campos, e não um, porque a janela entre tomar a vaga e ler o
+        # relógio existe: se o `relogio` levantasse ali, `inicio` continuaria `None`
+        # com a vaga já descontada, e o `finally` não devolveria nada. A flag é
+        # escrita **na mesma trava** do desconto, o que fecha a janela.
         try:
+            if posicao is not None and aviso is not None:
+                # Fora da trava, e por dois motivos. O aviso é I/O — no `webhook` é um
+                # `sendMessage` ao Telegram, com teto de 5 s — e segurar a condição
+                # durante ele pararia a fila inteira. E nada no aviso reentra no
+                # semáforo, então a trava cruzada que seria o problema de verdade não
+                # existe; o teste da posição usa este mesmo ponto para acordar o teste.
+                #
+                # Dentro do `try`, e não fora: este `sendMessage` pode falhar de um
+                # jeito que não é `httpx.HTTPError` — um `TELEGRAM_API_BASE`
+                # malformado levanta `httpx.InvalidURL`, que não é subclasse —, e essa
+                # exceção, fora do `try`, saía do gerador sem passar pelo `finally`.
+                # A senha já estava consumida e ninguém viria servi-la: a fila inteira
+                # travava em silêncio. É a razão de o `aviso` estar aqui e não ali.
+                aviso(posicao)
+
             with self._condicao:
-                while self._senha_servindo != minha_senha or self._vagas_livres == 0:
+                while self._fila[0] != minha_senha or self._vagas_livres == 0:
                     self._condicao.wait()
                 self._vagas_livres -= 1
-                # A senha avança na **entrada**, e é isso que faz o `k` valer: o
-                # próximo da fila deixa de estar atrás deste e passa a disputar a
-                # vaga que aparecer. Se ela só avançasse na devolução, o `k` viraria
-                # 1 sem ninguém perceber.
-                self._senha_servindo = minha_senha + 1
+                segurando_vaga = True
+                # Sai da fila ao entrar no modelo: é a **entrada** que tira a senha da
+                # fila, e não a devolução da vaga. Essa é a diferença entre respeitar
+                # `k` e atender um Aluno por vez — se a senha só saísse da fila na
+                # devolução, o turno de senha 1 esperaria o de senha 0 **terminar**
+                # antes de entrar, e com `k=2` o serviço atenderia um Aluno por vez.
+                #
+                # O `popleft` só tira a senha da vez, que é a deste turno: a espera
+                # acima garante que `minha_senha` é a da frente da fila.
+                self._fila.popleft()
                 if posicao is not None:
                     # Saiu da fila ao entrar no modelo: a partir de agora ele não
                     # está mais esperando por ninguém, e é isso que faz o teto valer
@@ -352,9 +410,33 @@ class SemaforoDeInferencia:
             yield posicao
         finally:
             with self._condicao:
-                self._vagas_livres += 1
-                if inicio is not None:
-                    self._medir_vaga(self._relogio() - inicio)
+                if segurando_vaga:
+                    # Saiu pelo caminho normal ou pelo corpo do `with`: a vaga foi
+                    # tomada, e ela volta. Devolver uma vaga que não foi tomada
+                    # inflaria o semáforo acima do `k` — com `k=1`, dois turnos no
+                    # modelo ao mesmo tempo, que é o defeito que este módulo existe
+                    # para impedir.
+                    self._vagas_livres += 1
+                    if inicio is not None:
+                        self._medir_vaga(self._relogio() - inicio)
+                else:
+                    # Saiu **antes** de entrar, e a fila não pode ficar com uma senha
+                    # servível-e-não-servida. O `remove` é o ponto: tira **a senha
+                    # dele** da fila, e é a fila que passa a dizer quem é o da vez.
+                    # Somar um ao contador da vez, que é o que parece natural, pularia
+                    # toda senha viva que ainda está atrás — e quem é pulado fica
+                    # esperando para sempre, sem log e sem recusa.
+                    #
+                    # Sem guarda, e não por descuido: o `popleft` só roda **depois** de
+                    # `segurando_vaga` virar `True`, então vir aqui já garante que a
+                    # senha deste turno continua na fila. E só o dono tira a sua, uma
+                    # vez só, então o `remove` não tem como errar o alvo.
+                    self._fila.remove(minha_senha)
+                    if posicao is not None:
+                        self._esperando -= 1
+                # Notifica sempre, e inclusive quando nenhuma das contas acima valeu.
+                # Perder um `notify_all` aqui custa um turno inteiro de espera, porque
+                # quem está dormindo no `wait` só acorda por aqui.
                 self._condicao.notify_all()
 
     def _estimar_espera(self, posicao: int) -> float:
