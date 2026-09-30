@@ -530,6 +530,25 @@ extra_hosts:
 quantização 4 bits não cabe, então a 1.1 trabalha com a família 3B. A issue #3
 registra esse teto junto da medição.
 
+### Harness das Perguntas-teste (issue #12)
+
+O harness envia as 10 Perguntas-teste ao S.A.U. pelo caminho real do turno
+(o mesmo grafo do `webhook`, com histórico vazio, sem Telegram e sem banco
+de respostas gravado) e grava o output bruto de cada uma, com o comportamento
+esperado lado a lado. O julgamento de conforme/não-conforme é humano: o
+script grava, não avalia. A saída vai para `outputs/` (ignorado pelo git),
+um JSON por rodada.
+
+```sh
+python -m harness.run --help
+python -m harness.run
+python -m harness.run --modelo qwen2.5:3b --saida outputs/rodada.json
+```
+
+As flags `--modelo`, `--url` e `--timeout` sobrescrevem o `.env`; `--saida`
+escolhe o arquivo da rodada (o padrão é `outputs/harness-<data-hora>.json`).
+A falha ou o timeout de um turno grava `erro` no caso e a bateria segue.
+
 Enquanto isso, o agente de validação é o trio abaixo, e vale rodá-lo a cada
 commit:
 

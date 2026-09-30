@@ -98,7 +98,7 @@ grafo, não como serviço à parte.
 | --- | --- | --- | --- |
 | `perguntas-teste/` | as 10 Perguntas-teste, com o comportamento esperado de cada uma | #6 | sim |
 | `corpus/` | os quatro documentos autorados, um por categoria, com as contradições plantadas | P1 | não |
-| `outputs/` | saída bruta do harness, ignorada pelo git | #12 | não |
+| `outputs/` | saída bruta do harness, ignorada pelo git | #12 | sim |
 | `tests/` | suíte `pytest`, com `test_config.py` e `test_prereqs.py` da #4, `test_webhook.py` da #5 (o caminho do turno da #8, o isolamento por Aluno da #9 e a sentinela que afasta a persona da conversa, que ele precisa desde que a persona entra em todo prompt na #10), `test_graph.py` da #8, `test_state.py` da #9, `test_ollama.py` e `test_fumaca.py` da #7 e `test_persona.py` da #10 | #4, #5, #7, #8, #9, #10 | sim |
 
 O `corpus/` é quebrado em unidades de recuperação pela própria equipe: cada
@@ -109,7 +109,7 @@ a seção** e o chunking vira uma escolha da equipe, não uma heurística.
 
 | Caminho | O que faz | Ticket | Existe |
 | --- | --- | --- | --- |
-| `harness/run.py` | roda as 10 Perguntas-teste e grava os outputs brutos | #12 | não |
+| `harness/run.py` | roda as 10 Perguntas-teste e grava os outputs brutos | #12 | sim |
 | `harness/metrics.py` | taxa de não-saber e taxa de recusa de Atividade | #13 | não |
 | `harness/casos.py` | os cinco casos de alucinação, com o motivo do erro de cada um | P2 | não |
 
