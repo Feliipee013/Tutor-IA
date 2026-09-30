@@ -242,6 +242,10 @@ class Execucao:
     resposta_bruta: str | None
     erro: str | None
     motivo_de_parada: str | None
+
+    @property
+    def chave(self) -> ChaveExecucao:
+        return ChaveExecucao(self.id, self.repeticao)
     timestamp: str
 
     @property
@@ -271,6 +275,50 @@ class Rodada:
 
 
 @dataclass(frozen=True)
+class ChaveExecucao:
+    """A identidade de uma execução: a pergunta e a repetição.
+
+    Viajou como `tuple[str, int]` cru por todo o módulo — no índice do cálculo, no
+    seen set da leitura da folha, na conferência de cobertura e na conferência das
+    cópias. Um par solto desses é legível nas cinco linhas em que aparece e ilegível
+    na sexta, onde trocar a ordem dos campos troca o significado em silêncio.
+
+    O tipo também segura a frase que o erro precisa: `a1` repetição 3 aparece em
+    quatro mensagens de falha diferentes, e escrevê-la à mão em cada uma é como o
+    texto sai inconsistente entre elas.
+    """
+
+    id: str
+    repeticao: int
+
+    def como_texto(self) -> str:
+        """Como o erro nomeia a execução: `a1` repetição 3."""
+        return f"{self.id} repetição {self.repeticao}"
+
+
+@dataclass(frozen=True)
+class LinhaDaFolha:
+    """Uma linha da folha de julgamento, lida e tipada.
+
+    A folha é um JSON escrito para uma pessoa preencher, então a leitura dela chega
+    como `dict` cru. Tipar a linha no ponto de entrada é o que deixa a validação
+    inteira rodar sobre um objeto, com o mypy `strict` conferindo, em vez de seis
+    chamadas a `_texto(item, ...)` espalhadas pelo meio da lógica.
+    """
+
+    id: str
+    repeticao: int
+    metrica: str
+    resposta_bruta: str | None
+    veredito: str
+    nota: str | None
+
+    @property
+    def chave(self) -> ChaveExecucao:
+        return ChaveExecucao(self.id, self.repeticao)
+
+
+@dataclass(frozen=True)
 class VereditoDeExecucao:
     """O veredito de uma pessoa sobre uma execução, para uma taxa."""
 
@@ -279,6 +327,10 @@ class VereditoDeExecucao:
     metrica: Metrica
     veredito: Veredito
     nota: str
+
+    @property
+    def chave(self) -> ChaveExecucao:
+        return ChaveExecucao(self.id, self.repeticao)
 
 
 @dataclass(frozen=True)
@@ -310,6 +362,10 @@ class Evidencia:
     timestamp: str
     motivo_de_parada: str | None
 
+    @property
+    def chave(self) -> ChaveExecucao:
+        return ChaveExecucao(self.id, self.repeticao)
+
 
 @dataclass(frozen=True)
 class LeituraDaPergunta:
@@ -330,6 +386,10 @@ class ForaDaConta:
     repeticao: int
     motivo: Motivo
     detalhe: str
+
+    @property
+    def chave(self) -> ChaveExecucao:
+        return ChaveExecucao(self.id, self.repeticao)
 
 
 @dataclass(frozen=True)
@@ -740,7 +800,7 @@ def calcular(rodada: Rodada, julgamento: Julgamento) -> RelatorioDasTaxas:
     resolvido por `id` e `repeticao` — nunca por índice, que trocaria de output no
     dia em que alguém reordenar a bateria.
     """
-    indice = {(v.id, v.repeticao): v for v in julgamento.vereditos}
+    indice = {veredito.chave: veredito for veredito in julgamento.vereditos}
     taxas = {metrica: _calcular_uma(rodada, indice, metrica) for metrica in METRICAS}
     return RelatorioDasTaxas(rodada=rodada, julgamento=julgamento, taxas=taxas)
 
@@ -966,7 +1026,7 @@ def _com_sufixo(caminho: Path, sufixo: str) -> Path:
 
 def _calcular_uma(
     rodada: Rodada,
-    indice: dict[tuple[str, int], VereditoDeExecucao],
+    indice: dict[ChaveExecucao, VereditoDeExecucao],
     metrica: Metrica,
 ) -> Taxa:
     """A taxa de uma métrica, com a execução como denominador."""
@@ -989,11 +1049,10 @@ def _calcular_uma(
         if not execucao.julgavel:
             fora.append(_fora_da_conta(execucao))
             continue
-        veredito = indice.get((execucao.id, execucao.repeticao))
+        veredito = indice.get(execucao.chave)
         if veredito is None:
             raise JulgamentoInvalidoError(
-                f"a execução {execucao.id} repetição {execucao.repeticao} não tem "
-                f"veredito no julgamento"
+                f"a execução {execucao.chave.como_texto()} não tem veredito no julgamento"
             )
         if veredito.veredito == "nao_avaliavel":
             fora.append(
@@ -1155,64 +1214,81 @@ def _ler_execucao(bruto: Any, onde: str) -> Execucao:
     )
 
 
+def _ler_linha(bruto: Any, local: str) -> LinhaDaFolha:
+    """Uma linha da folha, lida do `dict` em que o JSON a traz.
+
+    Só a leitura é aqui; se o campo não está preenchido ou não é do tipo, a linha não
+    vira `LinhaDaFolha` e o erro sai com o campo e o lugar, que é o que `_texto` e
+    `_numero` já faziam. A diferença é o que vem depois: daqui para frente a linha é
+    um objeto com tipo, e a conferência do contrato roda em cima dele.
+    """
+    if not isinstance(bruto, dict):
+        raise ErroDasTaxas(f"{local} não é um objeto JSON")
+    return LinhaDaFolha(
+        id=_texto(bruto, "id", local),
+        repeticao=_numero(bruto, "repeticao", local),
+        metrica=_texto(bruto, "metrica", local),
+        resposta_bruta=_texto_ou_nulo(bruto, "resposta_bruta", local),
+        veredito=_texto(bruto, "veredito", local),
+        nota=_texto_ou_nulo(bruto, "nota", local),
+    )
+
+
 def _ler_vereditos(bruto: Any, rodada: Rodada, onde: str) -> tuple[VereditoDeExecucao, ...]:
     """Os vereditos da folha, um a um, contra o vocabulário e o contrato das taxas."""
     if not isinstance(bruto, list):
         raise ErroDasTaxas("o campo `vereditos` não é uma lista")
 
-    da_rodada = {(execucao.id, execucao.repeticao): execucao for execucao in rodada.execucoes}
+    da_rodada = {execucao.chave: execucao for execucao in rodada.execucoes}
     lidos: list[VereditoDeExecucao] = []
-    vistos: set[tuple[str, int]] = set()
+    vistos: set[ChaveExecucao] = set()
 
     for indice, item in enumerate(bruto):
         local = f"o veredito {indice + 1} de {onde}"
-        id_pergunta = _texto(item, "id", local)
-        repeticao = _numero(item, "repeticao", local)
-        chave = (id_pergunta, repeticao)
+        linha = _ler_linha(item, local)
+        chave = linha.chave
         if chave in vistos:
             raise JulgamentoInvalidoError(
-                f"{local}: {id_pergunta} repetição {repeticao} tem dois vereditos"
+                f"{local}: {chave.como_texto()} tem dois vereditos"
             )
         vistos.add(chave)
         if chave not in da_rodada:
             raise JulgamentoInvalidoError(
-                f"{local}: a rodada {rodada.caminho} não tem a execução {id_pergunta} "
-                f"repetição {repeticao}"
+                f"{local}: a rodada {rodada.caminho} não tem a execução "
+                f"{chave.como_texto()}"
             )
 
-        metrica = _texto(item, "metrica", local)
+        metrica = linha.metrica
         if metrica not in METRICAS:
             raise JulgamentoInvalidoError(
                 f"{local}: `metrica` é {metrica!r} e as duas taxas são "
                 f"{list(METRICAS)}"
             )
-        esperada = MEMBROS.get(id_pergunta)
+        esperada = MEMBROS.get(linha.id)
         if esperada is None:
             raise JulgamentoInvalidoError(
-                f"{local}: {id_pergunta} não entra em taxa nenhuma. `p2`, `p3` e "
+                f"{local}: {linha.id} não entra em taxa nenhuma. `p2`, `p3` e "
                 f"`p4` pedem pergunta orientadora, que não é recusa nem "
                 f"Encaminhamento, e contá-las quebraria a conta"
             )
         if metrica != esperada:
             raise JulgamentoInvalidoError(
-                f"{local}: {id_pergunta} pertence a {TITULOS[esperada]} e o veredito "
+                f"{local}: {linha.id} pertence a {TITULOS[esperada]} e o veredito "
                 f"diz {TITULOS[metrica]}"
             )
 
-        bruto_veredito = _texto(item, "veredito", local)
-        if bruto_veredito == A_PREENCHER:
+        if linha.veredito == A_PREENCHER:
             raise JulgamentoInvalidoError(
-                f"{local}: o veredito de {id_pergunta} repetição {repeticao} está "
-                f"`{A_PREENCHER}`"
+                f"{local}: o veredito de {chave.como_texto()} está `{A_PREENCHER}`"
             )
-        if bruto_veredito not in VEREDITOS:
+        if linha.veredito not in VEREDITOS:
             raise JulgamentoInvalidoError(
-                f"{local}: `veredito` é {bruto_veredito!r} e o vocabulário é "
+                f"{local}: `veredito` é {linha.veredito!r} e o vocabulário é "
                 f"{list(VEREDITOS)}"
             )
-        veredito: Veredito = bruto_veredito
+        veredito: Veredito = linha.veredito
 
-        nota = _texto_ou_nulo(item, "nota", local) or ""
+        nota = linha.nota or ""
         if veredito == "nao_avaliavel" and not nota.strip():
             raise JulgamentoInvalidoError(
                 f"{local}: marcar `nao_avaliavel` exige a razão em `nota`. Uma "
@@ -1220,12 +1296,12 @@ def _ler_vereditos(bruto: Any, rodada: Rodada, onde: str) -> tuple[VereditoDeExe
                 f"escondida"
             )
 
-        _conferir_output_da_folha(item, da_rodada[chave], local)
+        _conferir_output_da_folha(linha, da_rodada[chave], local)
 
         lidos.append(
             VereditoDeExecucao(
-                id=id_pergunta,
-                repeticao=repeticao,
+                id=linha.id,
+                repeticao=linha.repeticao,
                 metrica=metrica,
                 veredito=veredito,
                 nota=nota,
@@ -1234,7 +1310,7 @@ def _ler_vereditos(bruto: Any, rodada: Rodada, onde: str) -> tuple[VereditoDeExe
     return tuple(lidos)
 
 
-def _conferir_output_da_folha(item: Any, execucao: Execucao, local: str) -> None:
+def _conferir_output_da_folha(linha: LinhaDaFolha, execucao: Execucao, local: str) -> None:
     """O output que a pessoa julgou é o output que a rodada gravou.
 
     A folha carrega cópia do `resposta_bruta` para quem julga ler tudo no mesmo
@@ -1248,12 +1324,11 @@ def _conferir_output_da_folha(item: Any, execucao: Execucao, local: str) -> None
     mesmo motivo: a folha é o documento que o humano leu, e ele precisa ser o
     documento que a rodada produziu.
     """
-    da_folha = item.get("resposta_bruta")
-    if da_folha == execucao.resposta_bruta:
+    if linha.resposta_bruta == execucao.resposta_bruta:
         return
     raise JulgamentoInvalidoError(
         f"{local}: o `resposta_bruta` da folha não é o da rodada "
-        f"{'— ele não está preenchido' if da_folha is None else '— o texto é outro'}. "
+        f"{'— ele não está preenchido' if linha.resposta_bruta is None else '— o texto é outro'}. "
         f"Quem julgou leu um output que a rodada não gravou"
     )
 
@@ -1268,13 +1343,13 @@ def _conferir_cobertura(
     denuncia isso. O erro lista as faltantes, porque a correção é preencher a
     folha e reler o erro.
     """
-    julgadas = {(veredito.id, veredito.repeticao) for veredito in vereditos}
+    julgadas = {veredito.chave for veredito in vereditos}
     faltando = [
         f"{execucao.id} repetição {execucao.repeticao}"
         for execucao in rodada.execucoes
         if MEMBROS.get(execucao.id) is not None
         and execucao.julgavel
-        and (execucao.id, execucao.repeticao) not in julgadas
+        and execucao.chave not in julgadas
     ]
     if not faltando:
         return

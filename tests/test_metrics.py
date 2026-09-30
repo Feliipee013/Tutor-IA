@@ -32,6 +32,7 @@ from harness.metrics import (
     ORDEM_DA_CADEIA,
     RECUSA_DE_ATIVIDADE,
     ArquivoInacessivelError,
+    ChaveExecucao,
     JulgamentoInvalidoError,
     MembrosDivergentesError,
     RodadaInvalidaError,
@@ -92,7 +93,7 @@ CORTADA: dict[str, Any] = {"motivo_de_parada": "length"}
 def _rodada(
     *,
     repeticoes: int = REPETICOES,
-    sobrescritas: Mapping[tuple[str, int], dict[str, Any]] | None = None,
+    sobrescritas: Mapping[ChaveExecucao, dict[str, Any]] | None = None,
     ordem: str = "bateria",
 ) -> dict[str, Any]:
     """Uma rodada inteira: as 10 Perguntas-teste com as repetições.
@@ -118,7 +119,7 @@ def _rodada(
     execucoes: list[dict[str, Any]] = []
     for id_pergunta, repeticao in pares:
         execucao = _execucao(id_pergunta, repeticao)
-        execucao.update((sobrescritas or {}).get((id_pergunta, repeticao), {}))
+        execucao.update((sobrescritas or {}).get(ChaveExecucao(id_pergunta, repeticao), {}))
         execucoes.append(execucao)
 
     return {
@@ -148,7 +149,7 @@ def _gravar_rodada(caminho: Path, documento: dict[str, Any]) -> Path:
 def _julgar(
     rodada: Any,
     destino: Path,
-    vereditos: Mapping[tuple[str, int], str] | None = None,
+    vereditos: Mapping[ChaveExecucao, str] | None = None,
     **ajustes: Any,
 ) -> Path:
     """Preenche a folha como uma pessoa preenche: o que `preparar_julgamento` escreveu.
@@ -161,7 +162,7 @@ def _julgar(
     folha["julgado_em"] = ajustes.pop("julgado_em", "2026-09-30")
     for linha in folha["vereditos"]:
         linha["veredito"] = "conforme"
-        chave = (linha["id"], linha["repeticao"])
+        chave = ChaveExecucao(linha["id"], linha["repeticao"])
         if vereditos is not None and chave in vereditos:
             linha["veredito"] = vereditos[chave]
     folha.update(ajustes)
@@ -211,12 +212,12 @@ def test_a_taxa_de_recusa_conta_as_tres_perguntas_de_atividade(tmp_path: Path) -
 def test_a_fracao_conta_os_acertos_sobre_as_execucoes_avaliadas(tmp_path: Path) -> None:
     """Um terço conforme em `f2` derruba a taxa, e o número sai escrito com vírgula."""
     vereditos = {
-        ("f1", 1): "conforme",
-        ("f1", 2): "conforme",
-        ("f1", 3): "conforme",
-        ("f2", 1): "conforme",
-        ("f2", 2): "nao_conforme",
-        ("f2", 3): "conforme",
+        ChaveExecucao("f1", 1): "conforme",
+        ChaveExecucao("f1", 2): "conforme",
+        ChaveExecucao("f1", 3): "conforme",
+        ChaveExecucao("f2", 1): "conforme",
+        ChaveExecucao("f2", 2): "nao_conforme",
+        ChaveExecucao("f2", 3): "conforme",
     }
     rodada = _gravar_rodada(tmp_path / "rodada.json", _rodada())
     folha = _julgar(
@@ -233,10 +234,10 @@ def test_a_fracao_conta_os_acertos_sobre_as_execucoes_avaliadas(tmp_path: Path) 
     assert taxa.fracao_formatada == "11/12 = 0,92"
 
 
-def _pares_das_taxas() -> list[tuple[str, int]]:
-    """Todos os pares `(pergunta, repetição)` que recebem veredito."""
+def _pares_das_taxas() -> list[ChaveExecucao]:
+    """Todas as execuções que recebem veredito."""
     return [
-        (id_pergunta, repeticao)
+        ChaveExecucao(id_pergunta, repeticao)
         for id_pergunta in PERGUNTAS_DAS_TAXAS
         for repeticao in range(1, REPETICOES + 1)
     ]
@@ -387,25 +388,25 @@ def test_cada_contagem_aponta_o_output_que_a_originou(tmp_path: Path) -> None:
     folha = _julgar(
         carregar_rodada(rodada),
         tmp_path / "folha.json",
-        {("f1", 1): "conforme", ("f1", 2): "nao_conforme"},
+        {ChaveExecucao("f1", 1): "conforme", ChaveExecucao("f1", 2): "nao_conforme"},
     )
 
     relatorio = _taxas_de(rodada, folha)
     taxa = relatorio.taxas[NAO_SABER]
-    da_rodada = {(e.id, e.repeticao): e for e in relatorio.rodada.execucoes}
+    da_rodada = {e.chave: e for e in relatorio.rodada.execucoes}
 
     assert taxa.numerador == 11
     assert len(taxa.acertos) == 11
     assert len(taxa.erros) == 1
 
     unico_erro = taxa.erros[0]
-    assert (unico_erro.id, unico_erro.repeticao) == ("f1", 2)
+    assert unico_erro.chave == ChaveExecucao("f1", 2)
     assert unico_erro.veredito == "nao_conforme"
-    assert unico_erro.resposta_bruta == da_rodada[("f1", 2)].resposta_bruta
-    assert unico_erro.timestamp == da_rodada[("f1", 2)].timestamp
+    assert unico_erro.resposta_bruta == da_rodada[unico_erro.chave].resposta_bruta
+    assert unico_erro.timestamp == da_rodada[unico_erro.chave].timestamp
 
     for evidencia in taxa.acertos:
-        origem = da_rodada[(evidencia.id, evidencia.repeticao)]
+        origem = da_rodada[evidencia.chave]
         assert evidencia.resposta_bruta == origem.resposta_bruta
 
 
@@ -417,8 +418,8 @@ def test_a_rodada_medida_na_ordem_da_bateria_nao_troca_a_evidencia(tmp_path: Pat
     taxa = _taxas_de(rodada, folha).taxas[NAO_SABER]
 
     assert len(taxa.acertos) == 12
-    assert {(evidencia.id, evidencia.repeticao) for evidencia in taxa.acertos} == {
-        (id_pergunta, repeticao)
+    assert {evidencia.chave for evidencia in taxa.acertos} == {
+        ChaveExecucao(id_pergunta, repeticao)
         for id_pergunta in ("f1", "f2", "f3", "p1")
         for repeticao in range(1, REPETICOES + 1)
     }
@@ -443,10 +444,10 @@ def test_o_relatorio_imprime_a_regua_e_os_numeros_das_duas_taxas(tmp_path: Path)
     assert "Fulana de Tal, 2026-09-30" in pagina
 
 
-def _longa_em(pergunta: str) -> dict[tuple[str, int], dict[str, Any]]:
+def _longa_em(pergunta: str) -> dict[ChaveExecucao, dict[str, Any]]:
     """Sobrescrita que deixa a resposta de uma pergunta longa demais para o resumo."""
     return {
-        (id_pergunta, repeticao): {"resposta_bruta": "palavra " * 200}
+        ChaveExecucao(id_pergunta, repeticao): {"resposta_bruta": "palavra " * 200}
         for id_pergunta in ORDEM
         if id_pergunta == pergunta
         for repeticao in range(1, REPETICOES + 1)
@@ -518,7 +519,9 @@ def test_a_folha_nasce_com_um_veredito_por_execucao_das_sete_perguntas(tmp_path:
     folha = folha_de_julgamento(carregar_rodada(rodada))
 
     assert len(folha["vereditos"]) == 21
-    assert {(v["id"], v["repeticao"]) for v in folha["vereditos"]} == set(_pares_das_taxas())
+    assert {ChaveExecucao(v["id"], v["repeticao"]) for v in folha["vereditos"]} == set(
+        _pares_das_taxas()
+    )
     assert all(v["veredito"] == "a preencher" for v in folha["vereditos"])
     assert sorted(folha["perguntas"]) == ["a1", "a2", "a3", "f1", "f2", "f3", "p1"]
     assert folha["perguntas"]["p1"]["conforme_quando"] == "conforme quando p1"
@@ -537,7 +540,9 @@ def test_o_resumo_da_a_conta_do_denominador_em_vez_de_chamar_erro_de_denominador
     """
     rodada = _gravar_rodada(tmp_path / "rodada.json", _rodada())
     folha = _julgar(
-        carregar_rodada(rodada), tmp_path / "folha.json", {("f1", 2): "nao_conforme"}
+        carregar_rodada(rodada),
+        tmp_path / "folha.json",
+        {ChaveExecucao("f1", 2): "nao_conforme"},
     )
     relatorio = _taxas_de(rodada, folha)
     taxa = relatorio.taxas[NAO_SABER]
@@ -555,7 +560,7 @@ def test_o_resumo_acorda_o_numero_do_complemento_do_denominador(tmp_path: Path) 
     folha = _julgar(
         carregar_rodada(rodada),
         tmp_path / "folha.json",
-        {("f1", 1): "nao_conforme", ("f1", 2): "nao_conforme"},
+        {ChaveExecucao("f1", 1): "nao_conforme", ChaveExecucao("f1", 2): "nao_conforme"},
     )
 
     pagina = resumo_em_markdown(_taxas_de(rodada, folha))
@@ -575,19 +580,19 @@ def test_a_folha_traz_o_output_que_a_pessoa_vai_julgar(tmp_path: Path) -> None:
 
     folha = folha_de_julgamento(lida)
     saida = {
-        (linha["id"], linha["repeticao"]): linha["resposta_bruta"]
+        ChaveExecucao(linha["id"], linha["repeticao"]): linha["resposta_bruta"]
         for linha in folha["vereditos"]
     }
     da_rodada = {
-        (execucao.id, execucao.repeticao): execucao.resposta_bruta
+        execucao.chave: execucao.resposta_bruta
         for execucao in lida.execucoes
         if MEMBROS.get(execucao.id) is not None and execucao.julgavel
     }
 
     assert saida == da_rodada
-    assert saida[("f1", 1)] == "resposta f1 1"
-    assert saida[("f3", 3)] == "resposta f3 3"
-    assert saida[("a2", 2)] == "resposta a2 2"
+    assert saida[ChaveExecucao("f1", 1)] == "resposta f1 1"
+    assert saida[ChaveExecucao("f3", 3)] == "resposta f3 3"
+    assert saida[ChaveExecucao("a2", 2)] == "resposta a2 2"
 
 
 def test_folha_com_output_de_outra_resposta_falha_alto(tmp_path: Path) -> None:
@@ -632,21 +637,25 @@ def test_a_folha_traz_a_regua_de_cada_pergunta_que_conta(tmp_path: Path) -> None
 
 def test_a_folha_nao_pede_veredito_de_execucao_sem_resposta_nem_cortada(tmp_path: Path) -> None:
     """Sem resposta e cortada não viram linha: não há o que julgar nelas."""
-    sobrescritas = {("f1", 2): SEM_RESPOSTA, ("f1", 3): CORTADA}
+    sobrescritas = {ChaveExecucao("f1", 2): SEM_RESPOSTA, ChaveExecucao("f1", 3): CORTADA}
     rodada = _gravar_rodada(tmp_path / "rodada.json", _rodada(sobrescritas=sobrescritas))
 
     folha = folha_de_julgamento(carregar_rodada(rodada))
 
-    linhas_de_f1 = [(v["id"], v["repeticao"]) for v in folha["vereditos"] if v["id"] == "f1"]
-    assert linhas_de_f1 == [("f1", 1)]
+    linhas_de_f1 = [
+        ChaveExecucao(v["id"], v["repeticao"])
+        for v in folha["vereditos"]
+        if v["id"] == "f1"
+    ]
+    assert linhas_de_f1 == [ChaveExecucao("f1", 1)]
     assert len(folha["vereditos"]) == 19
 
 
 def test_execucao_com_erro_e_com_parada_por_length_foram_do_denominador(tmp_path: Path) -> None:
     """Resposta cortada tem cara de resposta: julgá-la reprovaria por defeito da medição."""
-    sobrescritas: dict[tuple[str, int], dict[str, Any]] = {
-        ("f1", 2): SEM_RESPOSTA,
-        ("f1", 3): CORTADA,
+    sobrescritas: dict[ChaveExecucao, dict[str, Any]] = {
+        ChaveExecucao("f1", 2): SEM_RESPOSTA,
+        ChaveExecucao("f1", 3): CORTADA,
     }
     rodada = _gravar_rodada(tmp_path / "rodada.json", _rodada(sobrescritas=sobrescritas))
     folha = _julgar(carregar_rodada(rodada), tmp_path / "folha.json")
@@ -670,7 +679,7 @@ def test_veredito_nao_avaliavel_com_nota_sai_da_conta_com_o_motivo_declarado(
     destino = _julgar(
         carregar_rodada(rodada),
         tmp_path / "folha.json",
-        {("f3", 1): "nao_avaliavel"},
+        {ChaveExecucao("f3", 1): "nao_avaliavel"},
     )
     bruta = json.loads(destino.read_text(encoding="utf-8"))
     alvo = next(
@@ -692,7 +701,11 @@ def test_leitura_por_pergunta_marca_variavel_quando_a_repeticao_divergiu(tmp_pat
     folha = _julgar(
         carregar_rodada(rodada),
         tmp_path / "folha.json",
-        {("f1", 1): "conforme", ("f1", 2): "conforme", ("f1", 3): "nao_conforme"},
+        {
+            ChaveExecucao("f1", 1): "conforme",
+            ChaveExecucao("f1", 2): "conforme",
+            ChaveExecucao("f1", 3): "nao_conforme",
+        },
     )
 
     leituras = {
@@ -709,7 +722,9 @@ def test_leitura_marca_sem_avaliacao_quando_a_pergunta_nao_tem_execucao_julgavel
     tmp_path: Path,
 ) -> None:
     """Uma pergunta que falhou inteira aparece como `sem_avaliacao`, não como zero."""
-    sobrescritas = {("f1", repeticao): SEM_RESPOSTA for repeticao in range(1, REPETICOES + 1)}
+    sobrescritas = {
+        ChaveExecucao("f1", repeticao): SEM_RESPOSTA for repeticao in range(1, REPETICOES + 1)
+    }
     rodada = _gravar_rodada(tmp_path / "rodada.json", _rodada(sobrescritas=sobrescritas))
     folha = _julgar(carregar_rodada(rodada), tmp_path / "folha.json")
 
@@ -762,7 +777,11 @@ def test_julgamento_de_outra_rodada_falha_alto(tmp_path: Path) -> None:
     primeira = _gravar_rodada(tmp_path / "primeira.json", _rodada())
     segunda = _gravar_rodada(
         tmp_path / "segunda.json",
-        _rodada(sobrescritas={("f1", 1): {"resposta_bruta": "outra rodada, outro arquivo"}}),
+        _rodada(
+            sobrescritas={
+                ChaveExecucao("f1", 1): {"resposta_bruta": "outra rodada, outro arquivo"}
+            }
+        ),
     )
     folha = _julgar(carregar_rodada(primeira), tmp_path / "folha.json")
 
@@ -772,7 +791,9 @@ def test_julgamento_de_outra_rodada_falha_alto(tmp_path: Path) -> None:
 
 def test_veredito_fora_do_vocabulario_falha_alto(tmp_path: Path) -> None:
     rodada = _gravar_rodada(tmp_path / "rodada.json", _rodada())
-    folha = _julgar(carregar_rodada(rodada), tmp_path / "folha.json", {("f1", 1): "mais ou menos"})
+    folha = _julgar(
+        carregar_rodada(rodada), tmp_path / "folha.json", {ChaveExecucao("f1", 1): "mais ou menos"}
+    )
 
     with pytest.raises(JulgamentoInvalidoError, match="vocabulário"):
         _taxas_de(rodada, folha)
@@ -780,7 +801,9 @@ def test_veredito_fora_do_vocabulario_falha_alto(tmp_path: Path) -> None:
 
 def test_veredito_nao_avaliavel_sem_nota_falha_alto(tmp_path: Path) -> None:
     rodada = _gravar_rodada(tmp_path / "rodada.json", _rodada())
-    folha = _julgar(carregar_rodada(rodada), tmp_path / "folha.json", {("f1", 1): "nao_avaliavel"})
+    folha = _julgar(
+        carregar_rodada(rodada), tmp_path / "folha.json", {ChaveExecucao("f1", 1): "nao_avaliavel"}
+    )
 
     with pytest.raises(JulgamentoInvalidoError, match="nota"):
         _taxas_de(rodada, folha)
