@@ -131,8 +131,9 @@ esses campos que separam "o RAG mudou" de "a persona ou a máquina mudou".
 O `harness/metrics.py` é a metade do harness que **não** mede o modelo: ele
 transforma o julgamento humano da folha em número com evidência, e por isso não
 fala com o Ollama nem importa nada de `sau/`. O veredito é de uma pessoa
-(decisão da #6) — `metrics.py` escreve a folha com o `conforme quando` de cada
-Pergunta-teste ao lado do output, e quem decide é quem lê.
+(decisão da #6) — `metrics.py` escreve a folha com o output de cada execução na
+linha a julgar e o `conforme quando` de cada Pergunta-teste no bloco
+`perguntas`, e quem decide é quem lê.
 
 O `harness/run.py` também é o único lugar do repositório que **mede**: ele trava
 `temperature 0`, uma `seed` fixa e `num_predict 256`, e registra o que usou.

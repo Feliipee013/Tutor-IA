@@ -61,9 +61,10 @@ sem saber quem aplicou a régua é opinião com arredondamento.
 Em quais saídas o veredito se aplica: uma a uma das execuções medidas, com o `id`
 e a `repeticao` de cada uma. O `id` é o da Pergunta-teste em
 `perguntas-teste/perguntas-teste.md`, e a repetição vai de 1 a 3. A folha traz o
-`conforme quando` e o `não conforme quando` ao lado de cada output, e é contra
-esse texto que o veredito é aplicado — nenhuma outra régua, nenhuma leitura do
-modelo sobre si mesmo.
+output inteiro de cada execução na linha a julgar, e no bloco `perguntas` o
+`conforme quando` e o `não conforme quando` de cada uma das sete. É contra esse
+texto que o veredito é aplicado — nenhuma outra régua, nenhuma leitura do modelo
+sobre si mesmo.
 
 ## As duas taxas
 

@@ -15,6 +15,8 @@ mede, e `tests/test_harness.py` prova o lado dele.
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
@@ -475,6 +477,103 @@ def test_a_folha_nasce_com_um_veredito_por_execucao_das_sete_perguntas(tmp_path:
     assert folha["julgador"] == "a preencher"
 
 
+def test_o_resumo_da_a_conta_do_denominador_em_vez_de_chamar_erro_de_denominador(
+    tmp_path: Path,
+) -> None:
+    """Os erros não são o denominador: eles são o resto dele.
+
+    O denominador são as avaliadas, e avaliadas = acertos + erros. Um cabeçalho
+    que chama os erros de "evidência do denominador" convida o leitor a contar o
+    denominador pelos erros, e a chegar numa taxa que não bate com a linha de
+    cima.
+    """
+    rodada = _gravar_rodada(tmp_path / "rodada.json", _rodada())
+    folha = _julgar(
+        carregar_rodada(rodada), tmp_path / "folha.json", {("f1", 2): "nao_conforme"}
+    )
+    relatorio = _taxas_de(rodada, folha)
+    taxa = relatorio.taxas[NAO_SABER]
+
+    pagina = resumo_em_markdown(relatorio)
+
+    assert f"{taxa.avaliadas} avaliadas = {taxa.numerador} acertos + 1 erro" in pagina
+    assert "evidência do denominador" not in pagina
+    assert taxa.avaliadas == taxa.numerador + len(taxa.erros) == 12
+
+
+def test_o_resumo_acorda_o_numero_do_complemento_do_denominador(tmp_path: Path) -> None:
+    """Um erro é `1 erro` e dois são `2 erros` — a conta que o leitor refaz na mão."""
+    rodada = _gravar_rodada(tmp_path / "rodada.json", _rodada())
+    folha = _julgar(
+        carregar_rodada(rodada),
+        tmp_path / "folha.json",
+        {("f1", 1): "nao_conforme", ("f1", 2): "nao_conforme"},
+    )
+
+    pagina = resumo_em_markdown(_taxas_de(rodada, folha))
+
+    assert "10 acertos + 2 erros" in pagina
+
+
+def test_a_folha_traz_o_output_que_a_pessoa_vai_julgar(tmp_path: Path) -> None:
+    """O output precisa estar na folha, e não só na rodada ao lado dela.
+
+    Sem ele, julgar exigiria abrir `outputs/baseline-1.1.json` e cruzar 30
+    execuções à mão por `id` e `repeticao` — e quem tem de ler a resposta para
+    aplicar a régua é justamente quem menos pode perder o output de vista.
+    """
+    rodada = _gravar_rodada(tmp_path / "rodada.json", _rodada())
+    lida = carregar_rodada(rodada)
+
+    folha = folha_de_julgamento(lida)
+    saida = {
+        (linha["id"], linha["repeticao"]): linha["resposta_bruta"]
+        for linha in folha["vereditos"]
+    }
+    da_rodada = {
+        (execucao.id, execucao.repeticao): execucao.resposta_bruta
+        for execucao in lida.execucoes
+        if MEMBROS.get(execucao.id) is not None and execucao.julgavel
+    }
+
+    assert saida == da_rodada
+    assert saida[("f1", 1)] == "resposta f1 1"
+    assert saida[("f3", 3)] == "resposta f3 3"
+    assert saida[("a2", 2)] == "resposta a2 2"
+
+
+def test_folha_com_output_de_outra_resposta_falha_alto(tmp_path: Path) -> None:
+    """Trocar o texto da folha mantém `id` e `repeticao` certos, e conta errado em silêncio.
+
+    A folha fica em disco enquanto é preenchida, e colar o output de outra
+    execução é o erro mais fácil de cometer sem perceber. O veredito continua
+    sendo aplicado ao par certo, então nada denunciaria a troca.
+    """
+    rodada = _gravar_rodada(tmp_path / "rodada.json", _rodada())
+    folha = _julgar(carregar_rodada(rodada), tmp_path / "folha.json")
+    bruta = json.loads(folha.read_text(encoding="utf-8"))
+    alvo = next(
+        linha for linha in bruta["vereditos"] if linha["id"] == "f2" and linha["repeticao"] == 2
+    )
+    alvo["resposta_bruta"] = "uma resposta que a rodada nunca produziu"
+    folha.write_text(json.dumps(bruta, ensure_ascii=False), encoding="utf-8")
+
+    with pytest.raises(JulgamentoInvalidoError, match="resposta_bruta"):
+        _taxas_de(rodada, folha)
+
+
+def test_folha_sem_o_output_da_execucao_falha_alto(tmp_path: Path) -> None:
+    """Apagar o output da folha é tão grave quanto trocar: o veredito ficaria sem objeto."""
+    rodada = _gravar_rodada(tmp_path / "rodada.json", _rodada())
+    folha = _julgar(carregar_rodada(rodada), tmp_path / "folha.json")
+    bruta = json.loads(folha.read_text(encoding="utf-8"))
+    del bruta["vereditos"][0]["resposta_bruta"]
+    folha.write_text(json.dumps(bruta, ensure_ascii=False), encoding="utf-8")
+
+    with pytest.raises(JulgamentoInvalidoError, match="não está preenchido"):
+        _taxas_de(rodada, folha)
+
+
 def test_a_folha_traz_a_regua_de_cada_pergunta_que_conta(tmp_path: Path) -> None:
     rodada = _gravar_rodada(tmp_path / "rodada.json", _rodada())
 
@@ -549,8 +648,8 @@ def test_leitura_por_pergunta_marca_variavel_quando_a_repeticao_divergiu(tmp_pat
     )
 
     leituras = {
-    leitura.id: leitura for leitura in _taxas_de(rodada, folha).taxas[NAO_SABER].por_pergunta
-}
+        leitura.id: leitura for leitura in _taxas_de(rodada, folha).taxas[NAO_SABER].por_pergunta
+    }
 
     assert leituras["f1"].leitura == "variavel"
     assert leituras["f1"].conformes == 2
@@ -755,6 +854,31 @@ def test_rodada_inexistente_falha_alto(tmp_path: Path) -> None:
         carregar_rodada(tmp_path / "nao-existe.json")
 
 
+def test_rodada_que_nao_e_json_falha_alto(tmp_path: Path) -> None:
+    """Um arquivo truncado é problema da rodada, e sai com o código da rodada.
+
+    Sem a conversão, o erro cru não encontra par na tabela de códigos de saída e
+    cai no 1 — o que mandaria a pessoa corrigir uma folha que está perfeita.
+    """
+    quebrada = tmp_path / "rodada.json"
+    quebrada.write_text("{isto nao e json", encoding="utf-8")
+
+    with pytest.raises(RodadaInvalidaError, match="não é um JSON legível"):
+        carregar_rodada(quebrada)
+
+
+def test_main_sai_com_dois_quando_a_rodada_esta_corrompida(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    rodada = tmp_path / "rodada.json"
+    rodada.write_text("{isto nao e json", encoding="utf-8")
+
+    codigo = main(["--rodada", str(rodada)])
+
+    assert codigo == 2
+    assert "FALHA" in capsys.readouterr().err
+
+
 def test_rodada_sem_condicoes_falha_alto(tmp_path: Path) -> None:
     documento = _rodada()
     del documento["condicoes"]
@@ -774,6 +898,67 @@ def test_rodada_com_execucao_sem_veredito_falha_alto(tmp_path: Path) -> None:
 
 
 # --- A CLI ---
+
+
+def _rodar_como_modulo(*argumentos: str) -> subprocess.CompletedProcess[str]:
+    """Executa o comando do jeito que o SETUP.md manda rodar.
+
+    Chamar `main([...])` não prova que `python -m harness.metrics` funciona: um
+    módulo sem o guard `if __name__ == "__main__"` é importado e descartado pelo
+    `-m`, e isso sai com 0 sem imprimir nada. É por isso que este teste passa por
+    `subprocess`, e é o mesmo cuidado que o `harness/run.py` já exige do outro
+    lado do harness.
+    """
+    return subprocess.run(
+        [sys.executable, "-m", "harness.metrics", *argumentos],
+        cwd=RAIZ,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
+def test_o_comodo_documentado_roda_e_nao_e_um_no_op(tmp_path: Path) -> None:
+    """O comando do SETUP.md tem que escrever a folha, e dizer que escreveu.
+
+    Sem o guard de execução o `-m` sai com 0 e não faz nada — e o 0 é, na
+    contrato deste módulo, "as duas taxas foram gravadas". Quem seguiu o
+    documento receberia um sucesso falso e nenhuma folha para preencher.
+    """
+    rodada = _gravar_rodada(tmp_path / "baseline-1.1.json", _rodada())
+    folha = tmp_path / "baseline-1.1.julgamento.json"
+
+    resultado = _rodar_como_modulo("--rodada", str(rodada), "--preparar")
+
+    assert resultado.returncode == 0, resultado.stderr
+    assert folha.is_file()
+    assert "folha de julgamento escrita" in resultado.stdout
+    assert "21 vereditos" in resultado.stdout
+    assert json.loads(folha.read_text(encoding="utf-8"))["vereditos"][0]["resposta_bruta"]
+
+
+def test_o_comando_documentado_calcula_depois_da_folha(tmp_path: Path) -> None:
+    """O segundo passo do SETUP.md também tem que rodar pelo mesmo caminho."""
+    rodada = _gravar_rodada(tmp_path / "baseline-1.1.json", _rodada())
+    _julgar(carregar_rodada(rodada), tmp_path / "baseline-1.1.julgamento.json")
+
+    resultado = _rodar_como_modulo("--rodada", str(rodada))
+
+    assert resultado.returncode == 0, resultado.stderr
+    assert "Taxa de não-saber — 12/12 = 1,00" in resultado.stdout
+    assert (tmp_path / "baseline-1.1.metricas.json").is_file()
+
+
+def test_o_comando_documentado_nao_esconde_a_falha_da_rodada(tmp_path: Path) -> None:
+    """O código de saída tem que chegar ao shell, ou o passo seguinte roda sobre nada."""
+    rodada = tmp_path / "rodada.json"
+    rodada.write_text("{isto nao e json", encoding="utf-8")
+
+    resultado = _rodar_como_modulo("--rodada", str(rodada))
+
+    assert resultado.returncode == 2
+    assert "FALHA" in resultado.stderr
+    assert "Traceback" not in resultado.stderr
 
 
 def test_main_prepara_a_folha_e_sai_com_zero(

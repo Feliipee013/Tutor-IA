@@ -1,10 +1,11 @@
 """As duas taxas binárias da 1.1: não-saber e recusa de Atividade.
 
 Este módulo **não julga**, e isso é decisão da #6 e não concessão: o
-julgamento é humano. `preparar_julgamento` escreve a folha com cada output da
-rodada ao lado do `conforme quando` e do `não conforme quando` da sua
-Pergunta-teste, e uma pessoa marca `conforme` ou `nao_conforme`. O que este
-módulo faz é contar, e contar com o output ao lado de cada contagem.
+julgamento é humano. `preparar_julgamento` escreve a folha com o output de cada
+execução na linha a julgar e o `conforme quando` e o `não conforme quando` da
+sua Pergunta-teste no bloco `perguntas`, e uma pessoa marca `conforme` ou
+`nao_conforme`. O que este módulo faz é contar, e contar com o output ao lado de
+cada contagem.
 
 A divisão importa para a banca. Um programa que decidisse sozinho se o S.A.U.
 "encaminhou" ou "recusou" julgaria a forma, e a forma é exatamente o que a
@@ -57,6 +58,13 @@ Códigos de saída:
 O código de saída diz **quem** tem o que corrigir: nos casos de `1` é a folha, nos
 casos de `2` é a bateria. Uma folha preenchida com cuidado não tem nada a ver com
 uma rodada que perdeu uma execução.
+
+A folha é o documento que a pessoa leu, e por isso as cópias que ela carrega da
+rodada — a régua e o `resposta_bruta` de cada linha — são conferidas uma a uma
+contra o arquivo da rodada na hora de carregar. Cópia desatualizada não é
+inconveniente: é alguém julgando um output que a rodada não produziu, e o
+veredito passaria pela conferência de cobertura porque o `id` e a `repeticao`
+continuam certos.
 
 Uso canônico:
 
@@ -476,12 +484,12 @@ def carregar_rodada(caminho: Path) -> Rodada:
             f"`python -m harness.run --saida outputs/baseline-1.1.json`"
         )
 
-    bruto = _ler_json(caminho, "a rodada")
-    onde = f"a rodada em {caminho}"
-    if not isinstance(bruto, dict):
-        raise RodadaInvalidaError(f"{onde} não é um objeto JSON")
-
     try:
+        bruto = _ler_json(caminho, "a rodada")
+        if not isinstance(bruto, dict):
+            raise ErroDasTaxas("a rodada não é um objeto JSON")
+        onde = f"a rodada em {caminho}"
+
         execucoes = bruto.get("execucoes")
         if not isinstance(execucoes, list):
             raise ErroDasTaxas("o campo `execucoes` não é uma lista")
@@ -512,10 +520,17 @@ def carregar_rodada(caminho: Path) -> Rodada:
 def folha_de_julgamento(rodada: Rodada) -> dict[str, Any]:
     """A folha de julgamento de uma rodada, com a régua e os vereditos em branco.
 
-    A folha sai com o `conforme quando` e o `não conforme quando` de cada pergunta
-    que conta, para que quem julga não abra outro arquivo para saber contra o que
-    está julgando, e com um veredito `a preencher` por execução — 4 perguntas de
-    não-saber e 3 de Atividade, cada uma com as repetições da rodada.
+    Cada linha traz **o output que se está julgando**, inteiro, ao lado do
+    `veredito`. Sem o output aqui, julgar exigiria abrir o JSON da rodada e cruzar
+    30 execuções à mão por `id` e `repeticao` — e é justamente a pessoa que
+    precisa ler a resposta para aplicar a régua que não deveria ter caça aberta ao
+    arquivo bruto. O texto vem repetido no JSON das taxas, e a duplicação é o
+    preço: uma folha que não se sustenta sozinha não é folha, é índice.
+
+    A régua vem no bloco `perguntas`, com o `conforme quando` e o `não conforme
+    quando` de cada pergunta que conta, para que ninguém abra outro arquivo para
+    saber contra o que está julgando. São 4 perguntas de não-saber e 3 de
+    Atividade, cada uma com as repetições da rodada.
 
     Execução sem resposta e execução cortada **não** ganham linha: não há o que
     julgar nelas, e uma linha vazia na folha só faria a pessoa procurar veredito
@@ -543,6 +558,7 @@ def folha_de_julgamento(rodada: Rodada) -> dict[str, Any]:
                 "id": execucao.id,
                 "repeticao": execucao.repeticao,
                 "metrica": metrica,
+                "resposta_bruta": execucao.resposta_bruta,
                 "veredito": A_PREENCHER,
                 "nota": "",
             }
@@ -709,7 +725,14 @@ def resumo_em_markdown(relatorio: RelatorioDasTaxas) -> str:
         partes.extend(["", "**Acerto — a evidência do numerador**", ""])
         partes.extend(_linhas_de_evidencia(taxa.acertos))
         if taxa.erros:
-            partes.extend(["", "**Erro — a evidência do denominador**", ""])
+            partes.extend(
+                [
+                    "",
+                    f"**Erro — o resto do denominador** ({taxa.avaliadas} avaliadas = "
+                    f"{taxa.numerador} acertos + {_plural(len(taxa.erros), 'erro')})",
+                    "",
+                ]
+            )
             partes.extend(_linhas_de_evidencia(taxa.erros))
         if taxa.fora_da_conta:
             partes.extend(["", "**Fora da conta**", ""])
@@ -751,9 +774,12 @@ def montar_argumentos(argumentos: Sequence[str] | None = None) -> argparse.Names
             "Uso normal em dois passos: primeiro --preparar para escrever a folha de "
             "julgamento, depois sem a flag para calcular as taxas. Os nomes de "
             "arquivo saem do nome da rodada: baseline-1.1.json vira "
-            "baseline-1.1.julgamento.json e baseline-1.1.metricas.json. Saídas: 0 as "
-            "duas taxas foram gravadas, 1 julgamento ausente, incompleto ou "
-            "inconsistente, 2 rodada ausente ou ilegível."
+            "baseline-1.1.julgamento.json e baseline-1.1.metricas.json. "
+            "Saídas, e cada uma diz quem tem o que corrigir: 0 as duas taxas foram "
+            "gravadas; 1 o julgamento está ausente, incompleto ou inconsistente com "
+            "a rodada, ou o contrato das taxas divergiu do arquivo de "
+            "Perguntas-teste — corrija a folha; 2 a rodada está ausente, ilegível ou "
+            "não fecha a conta que ela declara — corrija a bateria."
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -787,11 +813,14 @@ def main(argumentos: Sequence[str] | None = None) -> int:
     """O comando das duas taxas: prepara a folha ou calcula, e diz como saiu.
 
     Todo erro das taxas sai pelo mesmo lugar, com o código de saída tirado do
-    próprio erro: uma falha de rodada é 2 e uma falha de julgamento é 1, e o
-    resto — inclusive uma rodada cuja contagem não bate com as repetições
-    declaradas — cai em 1. Um `traceback` aqui seria pior que a mensagem: a
-    pessoa que preenche a folha não vai ler pilha de Python para saber o que
-    digitou de errado.
+    próprio erro, e ele diz **quem** tem o que corrigir: uma falha de rodada é 2 e
+    manda voltar à bateria; uma falha de julgamento é 1 e manda voltar à folha.
+    A rodada cuja contagem não fecha com as repetições que ela declara é falha de
+    rodada como as outras, e sai 2 — dizer 1 mandaria a pessoa caçar um veredito
+    que está correto.
+
+    Um `traceback` aqui seria pior que a mensagem: quem preenche a folha não vai
+    ler pilha de Python para saber o que digitou de errado.
     """
     try:
         return _executar(montar_argumentos(argumentos))
@@ -1033,7 +1062,7 @@ def _ler_vereditos(bruto: Any, rodada: Rodada, onde: str) -> tuple[VereditoDeExe
     if not isinstance(bruto, list):
         raise ErroDasTaxas("o campo `vereditos` não é uma lista")
 
-    da_rodada = {(execucao.id, execucao.repeticao) for execucao in rodada.execucoes}
+    da_rodada = {(execucao.id, execucao.repeticao): execucao for execucao in rodada.execucoes}
     lidos: list[VereditoDeExecucao] = []
     vistos: set[tuple[str, int]] = set()
 
@@ -1093,6 +1122,8 @@ def _ler_vereditos(bruto: Any, rodada: Rodada, onde: str) -> tuple[VereditoDeExe
                 f"escondida"
             )
 
+        _conferir_output_da_folha(item, da_rodada[chave], local)
+
         lidos.append(
             VereditoDeExecucao(
                 id=id_pergunta,
@@ -1103,6 +1134,30 @@ def _ler_vereditos(bruto: Any, rodada: Rodada, onde: str) -> tuple[VereditoDeExe
             )
         )
     return tuple(lidos)
+
+
+def _conferir_output_da_folha(item: Any, execucao: Execucao, local: str) -> None:
+    """O output que a pessoa julgou é o output que a rodada gravou.
+
+    A folha carrega cópia do `resposta_bruta` para quem julga ler tudo no mesmo
+    lugar, e ela fica em disco enquanto é preenchida — tempo de sobra para alguém
+    corrigir o texto, colar o output de outra rodada ou restaurar um backup velho.
+    O veredito é aplicado ao `id` e à `repeticao`, que continuam certos, então a
+    folha passaria pela conferência de cobertura e sairia contando uma resposta
+    que a rodada nunca produziu.
+
+    É a mesma conferência que `_conferir_reguas_da_folha` faz com a régua, pelo
+    mesmo motivo: a folha é o documento que o humano leu, e ele precisa ser o
+    documento que a rodada produziu.
+    """
+    da_folha = item.get("resposta_bruta")
+    if da_folha == execucao.resposta_bruta:
+        return
+    raise JulgamentoInvalidoError(
+        f"{local}: o `resposta_bruta` da folha não é o da rodada "
+        f"{'— ele não está preenchido' if da_folha is None else '— o texto é outro'}. "
+        f"Quem julgou leu um output que a rodada não gravou"
+    )
 
 
 def _conferir_cobertura(
@@ -1211,6 +1266,12 @@ def _descrever_alocacao(alocacao: dict[str, Any] | None) -> str:
     return f"GPU — {vram} bytes em VRAM" if vram is not None else "GPU"
 
 
+def _plural(quantidade: int, palavra: str) -> str:
+    """`1 erro`, `2 erros`: a contagem escrita por extenso, como a documentação."""
+    sufixo = "" if quantidade == 1 else "s"
+    return f"{quantidade} {palavra}{sufixo}"
+
+
 def _numero_em_portugues(valor: float) -> str:
     """O número com vírgula decimal, como o resto da documentação escreve."""
     return f"{valor:.2f}".replace(".", ",")
@@ -1246,3 +1307,7 @@ def _numero(bruto: Any, chave: str, onde: str) -> int:
     if not isinstance(valor, int) or isinstance(valor, bool):
         raise ErroDasTaxas(f"{onde}: o campo `{chave}` não é um inteiro")
     return valor
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
