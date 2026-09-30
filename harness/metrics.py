@@ -728,8 +728,15 @@ def folha_de_julgamento(rodada: Rodada) -> dict[str, Any]:
 
 
 def preparar_julgamento(rodada: Rodada, destino: Path) -> Path:
-    """Escreve em disco a folha que `folha_de_julgamento` monta."""
-    _gravar(destino, folha_de_julgamento(rodada))
+    """Escreve em disco a folha que `folha_de_julgamento` monta, e diz quantas linhas."""
+    folha = folha_de_julgamento(rodada)
+    _gravar(destino, folha)
+    pendentes = len(folha["vereditos"])
+    print(f"folha de julgamento escrita em {destino}")
+    print(
+        f"{pendentes} vereditos a preencher. Preencha `julgador`, `julgado_em` e o "
+        f"`veredito` de cada linha, e depois rode sem `--preparar`"
+    )
     return destino
 
 
@@ -994,12 +1001,6 @@ def _executar(opcoes: argparse.Namespace) -> int:
     if opcoes.preparar:
         destino = opcoes.julgamento or _com_sufixo(opcoes.rodada, "julgamento")
         preparar_julgamento(rodada, destino)
-        pendentes = len(folha_de_julgamento(rodada)["vereditos"])
-        print(f"folha de julgamento escrita em {destino}")
-        print(
-            f"{pendentes} vereditos a preencher. Preencha `julgador`, `julgado_em` e o "
-            f"`veredito` de cada linha, e depois rode sem `--preparar`"
-        )
         return SAIDA_OK
 
     caminho = opcoes.julgamento or _com_sufixo(opcoes.rodada, "julgamento")
@@ -1214,6 +1215,25 @@ def _ler_execucao(bruto: Any, onde: str) -> Execucao:
     )
 
 
+def _indice_da_rodada(rodada: Rodada) -> dict[ChaveExecucao, Execucao]:
+    """As execuções da rodada que entram em alguma taxa, por identidade.
+
+    Três conferências precisam deste mesmo mapa — a leitura da folha, a conferência de
+    cobertura e a conferência das réguas — e cada uma refazia o filtro por conta
+    própria. Filtro repetido é onde a regra começa a divergir sem ninguém ver: uma
+    delas passa a incluir a pergunta que não conta, e a taxa sai com uma execução a
+    mais que ninguém pediu.
+
+    `ChaveExecucao` resolve a colisão de `repeticao` entre perguntas diferentes, que é
+    o motivo de a chave ser o par e não o `id`.
+    """
+    return {
+        execucao.chave: execucao
+        for execucao in rodada.execucoes
+        if MEMBROS.get(execucao.id) is not None
+    }
+
+
 def _ler_linha(bruto: Any, local: str) -> LinhaDaFolha:
     """Uma linha da folha, lida do `dict` em que o JSON a traz.
 
@@ -1235,11 +1255,18 @@ def _ler_linha(bruto: Any, local: str) -> LinhaDaFolha:
 
 
 def _ler_vereditos(bruto: Any, rodada: Rodada, onde: str) -> tuple[VereditoDeExecucao, ...]:
-    """Os vereditos da folha, um a um, contra o vocabulário e o contrato das taxas."""
+    """Os vereditos da folha, um a um, contra o vocabulário e o contrato das taxas.
+
+    A ordem das conferências importa para a qualidade do erro: o `id` é conferido
+    contra o vocabulário antes de a execução ser procurada na rodada. Uma linha de `p2`
+    é um erro de classificação — a pergunta orientadora existe na rodada e não conta
+    em taxa nenhuma — e dizer que a rodada não tem essa execução mandaria quem preenche
+    a folha procurar um problema onde não está.
+    """
     if not isinstance(bruto, list):
         raise ErroDasTaxas("o campo `vereditos` não é uma lista")
 
-    da_rodada = {execucao.chave: execucao for execucao in rodada.execucoes}
+    da_rodada = _indice_da_rodada(rodada)
     lidos: list[VereditoDeExecucao] = []
     vistos: set[ChaveExecucao] = set()
 
@@ -1252,6 +1279,14 @@ def _ler_vereditos(bruto: Any, rodada: Rodada, onde: str) -> tuple[VereditoDeExe
                 f"{local}: {chave.como_texto()} tem dois vereditos"
             )
         vistos.add(chave)
+
+        esperada = MEMBROS.get(linha.id)
+        if esperada is None:
+            raise JulgamentoInvalidoError(
+                f"{local}: {linha.id} não entra em taxa nenhuma. `p2`, `p3` e "
+                f"`p4` pedem pergunta orientadora, que não é recusa nem "
+                f"Encaminhamento, e contá-las quebraria a conta"
+            )
         if chave not in da_rodada:
             raise JulgamentoInvalidoError(
                 f"{local}: a rodada {rodada.caminho} não tem a execução "
@@ -1263,13 +1298,6 @@ def _ler_vereditos(bruto: Any, rodada: Rodada, onde: str) -> tuple[VereditoDeExe
             raise JulgamentoInvalidoError(
                 f"{local}: `metrica` é {metrica!r} e as duas taxas são "
                 f"{list(METRICAS)}"
-            )
-        esperada = MEMBROS.get(linha.id)
-        if esperada is None:
-            raise JulgamentoInvalidoError(
-                f"{local}: {linha.id} não entra em taxa nenhuma. `p2`, `p3` e "
-                f"`p4` pedem pergunta orientadora, que não é recusa nem "
-                f"Encaminhamento, e contá-las quebraria a conta"
             )
         if metrica != esperada:
             raise JulgamentoInvalidoError(
@@ -1345,10 +1373,9 @@ def _conferir_cobertura(
     """
     julgadas = {veredito.chave for veredito in vereditos}
     faltando = [
-        f"{execucao.id} repetição {execucao.repeticao}"
-        for execucao in rodada.execucoes
-        if MEMBROS.get(execucao.id) is not None
-        and execucao.julgavel
+        execucao.chave.como_texto()
+        for execucao in _indice_da_rodada(rodada).values()
+        if execucao.julgavel
         and execucao.chave not in julgadas
     ]
     if not faltando:
@@ -1375,13 +1402,9 @@ def _conferir_reguas_da_folha(bruto: Any, rodada: Rodada, onde: str) -> None:
     if not isinstance(bruto, dict):
         raise ErroDasTaxas("o campo `perguntas` não é um objeto")
 
-    da_rodada = {
-        execucao.id: execucao
-        for execucao in rodada.execucoes
-        if MEMBROS.get(execucao.id) is not None
-    }
+    por_id = {execucao.id: execucao for execucao in _indice_da_rodada(rodada).values()}
     for id_pergunta, item in bruto.items():
-        execucao = da_rodada.get(id_pergunta)
+        execucao = por_id.get(id_pergunta)
         if execucao is None:
             raise JulgamentoInvalidoError(
                 f"{onde}: a folha traz a régua de {id_pergunta}, que não entra em "
