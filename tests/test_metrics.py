@@ -892,6 +892,49 @@ def test_folha_que_nao_e_utf8_falha_alto_sem_traceback(tmp_path: Path) -> None:
         carregar_julgamento(folha, lida)
 
 
+def test_arquivo_de_perguntas_que_nao_e_utf8_falha_alto_sem_traceback(tmp_path: Path) -> None:
+    """O arquivo das Perguntas-teste ilegível é do caminho, e sai com o código dele.
+
+    Esta leitura era a única do módulo sem guarda: `conferir_membros` é a primeira
+    coisa que o comando faz, antes de olhar a rodada, então um byte inválido nesse
+    arquivo saía como `UnicodeDecodeError` cru — com pilha de Python na tela e o
+    código de saída do interpretador, que é `1`. Quem lê a mensagem do `SETUP.md`
+    receberia o código da folha para um arquivo que não é a folha, e o
+    `docstring` do módulo promete o `3` para "um arquivo que não é UTF-8".
+    """
+    arquivo = tmp_path / "perguntas-teste.md"
+    arquivo.write_bytes(b"<!-- pergunta:a1 -->\n| conta na m\xfftrica do #13 | x |\n")
+
+    with pytest.raises(ArquivoInacessivelError, match="não consegui ler as Perguntas-teste"):
+        conferir_membros(arquivo)
+
+    with pytest.raises(ArquivoInacessivelError, match="não consegui ler as Perguntas-teste"):
+        metricas_declaradas(arquivo)
+
+
+def test_arquivo_de_perguntas_que_o_sistema_recusa_sai_pelo_codigo_do_caminho(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Permissão negada é do caminho, e sai com o código do caminho.
+
+    O caso do byte inválido e o da permissão são o mesmo `except`, mas a promessa do
+    `SETUP.md` cita os dois, e um teste que só exercita `UnicodeDecodeError` deixa o
+    outro sem prova. O `monkeypatch` substitui o `read_text` porque uma permissão
+    negada de verdade não se fabrica em teste portátil: `chmod` não significa a mesma
+    coisa no Windows, e o modo portable de travar um arquivo não existe na stdlib.
+    """
+    arquivo = tmp_path / "perguntas-teste.md"
+    arquivo.write_text(ARQUIVO_PERGUNTAS_PADRAO.read_text(encoding="utf-8"), encoding="utf-8")
+
+    def sem_permissao(self: Path, *argumentos: Any, **chave: Any) -> str:
+        raise PermissionError(13, "Permissão negada")
+
+    monkeypatch.setattr(Path, "read_text", sem_permissao)
+
+    with pytest.raises(ArquivoInacessivelError, match="não consegui ler as Perguntas-teste"):
+        conferir_membros(arquivo)
+
+
 def test_destino_que_nao_pode_ser_gravado_falha_alto_sem_traceback(tmp_path: Path) -> None:
     """Falha de escrita não é da folha nem da bateria, e tem código próprio.
 

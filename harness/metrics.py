@@ -423,18 +423,43 @@ def metricas_declaradas(arquivo: Path = ARQUIVO_PERGUNTAS_PADRAO) -> dict[str, s
     Um bloco sem a linha não aparece no resultado — e `conferir_membros` trata a
     ausência como erro, em vez de deixar um denominador mudar em silêncio.
     """
+    declaradas: dict[str, str] = {}
+    for id_pergunta, bloco in blocos_de_perguntas(arquivo).items():
+        achado = RE_LINHA_DA_METRICA.search(bloco)
+        if achado is not None:
+            declaradas[id_pergunta] = achado.group("valor").strip()
+    return declaradas
+
+
+def blocos_de_perguntas(arquivo: Path = ARQUIVO_PERGUNTAS_PADRAO) -> dict[str, str]:
+    """O arquivo de Perguntas-teste lido e partido em blocos, ou o erro do contrato.
+
+    Esta é a **única** leitura do arquivo, e ela existe para ser o único lugar onde
+    o `OSError` e o `UnicodeDecodeError` são convertidos. Antes these duas classes
+    escapavam daqui e subiam como `traceback`, com o código de saída do interpretador
+    — que é `1`, o código do julgamento. Duas consequências ruins de uma vez: quem
+    preenche a folha lia uma pilha de Python em vez de uma frase, e o `1` mandava
+    caçar um veredito que está correto quando o defeito era o caminho. O `docstring`
+    do módulo e o `SETUP.md` já prometem o `3` para "um arquivo que não é UTF-8" e
+    para permissão negada; aqui é onde essa promessa é cumprida.
+
+    Um arquivo que não existe é outra falha, com outro dono: é o contrato das taxas
+    que não tem com o que ser conferido, e quem tem que corrigir é quem responde
+    pelas Perguntas-teste, não quem rodou o comando. Daí o `1`, e não o `3`.
+    """
     if not arquivo.is_file():
         raise MembrosDivergentesError(
             f"o arquivo de Perguntas-teste não está em {arquivo}, e sem ele o "
             f"contrato das taxas não tem com o que ser conferido"
         )
 
-    declaradas: dict[str, str] = {}
-    for id_pergunta, bloco in _blocos_do_arquivo(arquivo.read_text(encoding="utf-8")).items():
-        achado = RE_LINHA_DA_METRICA.search(bloco)
-        if achado is not None:
-            declaradas[id_pergunta] = achado.group("valor").strip()
-    return declaradas
+    try:
+        return _blocos_do_arquivo(arquivo.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError) as exc:
+        raise ArquivoInacessivelError(
+            f"não consegui ler as Perguntas-teste em {arquivo}: {exc}. O caminho "
+            f"existe e tem permissão de leitura?"
+        ) from exc
 
 
 def conferir_membros(arquivo: Path = ARQUIVO_PERGUNTAS_PADRAO) -> None:
