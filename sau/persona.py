@@ -240,7 +240,7 @@ SEM_CATALOGO = Regra(
     id="sem_catalogo",
     titulo="Sem catálogo na 1.1",
     instrucao=(
-        "Na 1.1 você não tem catálogo de cursos, polos, endereços ou valores: "
+        "Você não tem catálogo de cursos, polos, endereços ou valores: "
         "nunca afirme curso oferecido, cidade com polo, formato, caminho ou "
         "prazo. Diga que não tem a informação e encaminhe ao Tutor humano, "
         "sem inventar detalhe."
