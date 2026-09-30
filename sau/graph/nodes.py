@@ -66,7 +66,7 @@ def montar_prompt(mensagem: str, historico: Sequence[Mensagem] = ()) -> str:
     """Monta o prompt do turno a partir da mensagem do Aluno e da conversa anterior.
 
     O histórico entra pelas linhas `Aluno:` e `S.A.U.:` de `Mensagem.como_linha`, e
-    o corte nas `MENSAGEM_NO_PROMPT` mais recentes acontece aqui e não no registro: o
+    o corte nas `MENSAGENS_NO_PROMPT` mais recentes acontece aqui e não no registro: o
     registro guarda tudo, e quem decide o que cabe na janela é quem monta o prompt.
     Um histórico sem nada vira string vazia, e o prompt sem `{historico}` fica igual
     ao de antes da #9.

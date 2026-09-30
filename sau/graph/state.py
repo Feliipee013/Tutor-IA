@@ -306,8 +306,10 @@ class RegistroDeConversas:
 
         A ordem vem do `id` monotônico e não do `em`: dois `time.time()` na mesma
         fração de segundo, em dois inserts seguidos, são indistinguíveis quando o
-        relógio vira a chave da ordenação. `enfileirar` e `desenfileirar` dos testes
-        dependem dessa ordem para afirmar que nada se embaralhou.
+        relógio vira a chave da ordenação. `test_as_mensagens_do_mesmo_aluno_sao_
+        respondidas_em_ordem` depende disso para afirmar que o prompt do segundo turno
+        tem a pergunta e a resposta do primeiro, e não as duas perguntas enfileiradas
+        sem as respostas entre elas.
 
         O teto de `MAXIMO_DE_MENSAGENS` é aplicado aqui, na leitura, e não na
         escrita: apagar a linha antiga a cada insert faria uma escrita por turno
