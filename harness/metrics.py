@@ -54,8 +54,14 @@ Códigos de saída:
   rodada; ou o contrato das taxas divergiu do arquivo de Perguntas-teste
 - `2` — a rodada não está lá, não é um JSON de rodada, ou não fecha a conta que
   ela mesma declara
-- `3` — o caminho não pôde ser lido ou gravado: permissão, disco, ou um arquivo
-  que não é UTF-8
+- `3` — o caminho não pôde ser lido ou gravado: permissão, disco, ou o arquivo
+  de Perguntas-teste congelado não abre
+
+Um arquivo fora de UTF-8 não é sempre `3`: o que decide é de quem é o arquivo. A
+rodada fora de UTF-8 é `2`, porque quem refaz é a bateria; a folha fora de UTF-8
+é `1`, porque quem preencheu é quem salvou com o encoding errado. Só o arquivo
+das Perguntas-teste vira `3`, porque ninguém o escreve na hora de rodar o
+comando.
 
 O código de saída diz **quem** tem o que corrigir: nos casos de `1` é a folha, nos
 casos de `2` é a bateria, e no `3` é o caminho ou a máquina. Uma folha preenchida
@@ -543,8 +549,11 @@ def blocos_de_perguntas(arquivo: Path = ARQUIVO_PERGUNTAS_PADRAO) -> dict[str, s
     — que é `1`, o código do julgamento. Duas consequências ruins de uma vez: quem
     preenche a folha lia uma pilha de Python em vez de uma frase, e o `1` mandava
     caçar um veredito que está correto quando o defeito era o caminho. O `docstring`
-    do módulo e o `SETUP.md` já prometem o `3` para "um arquivo que não é UTF-8" e
-    para permissão negada; aqui é onde essa promessa é cumprida.
+    do módulo e o `SETUP.md` prometem o `3` para permissão negada, disco cheio e
+    "um arquivo que não é UTF-8"; esta é a **única** leitura onde a última se
+    cumpre. O não-UTF-8 nos outros dois arquivos tem dono diferente, e por isso
+    outro código: a rodada é `2` e a folha é `1`, porque quem refaz cada uma
+    delas é quem a escreveu.
 
     Um arquivo que não existe é outra falha, com outro dono: é o contrato das taxas
     que não tem com o que ser conferido, e quem tem que corrigir é quem responde

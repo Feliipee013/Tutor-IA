@@ -636,8 +636,15 @@ ilegível, incompleto ou inconsistente com a rodada, e também quando o contrato
 das taxas divergiu do arquivo de Perguntas-teste — em todos esses casos quem age
 é a folha; `2` a rodada não está lá, não é um JSON de rodada, ou não fecha a
 conta que ela mesma declara — e nesses quem age é a bateria; `3` o caminho não
-pôde ser lido ou gravado, por permissão, disco cheio, ou um arquivo que não é
-UTF-8 — e nesses quem age é o caminho, não a folha nem a bateria.
+pôde ser lido ou gravado, por permissão ou disco cheio, e o
+`perguntas-teste/perguntas-teste.md` congelado não abre — e nesses quem age é o
+caminho, não a folha nem a bateria.
+
+Um arquivo fora de UTF-8 **não** é sempre `3`, e o que decide é de quem é o
+arquivo: a rodada fora de UTF-8 sai `2`, porque quem tem que refazer é a
+bateria; a folha fora de UTF-8 sai `1`, porque quem salvou com o encoding errado
+é quem a preencheu. Só o arquivo das Perguntas-teste vira `3`, porque ninguém o
+escreve na hora de rodar o comando.
 
 Nenhum dos três sai com `traceback`: a falha sai como frase, porque quem
 preenche a folha não vai ler pilha de Python para descobrir o que digitou de
