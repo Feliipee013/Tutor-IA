@@ -1,14 +1,14 @@
 # As duas taxas saem por execução e por pergunta, e as duas são publicadas
 
 ---
-status: accepted
+status: proposed
 ---
 
 A taxa de não-saber e a taxa de recusa de Atividade da #13 são publicadas em duas
 leituras: a **por execução**, que é a leitura primária, e a **por pergunta**, que é
-a leitura secundária. A `#13` pede "fração das perguntas"; o que o
-`harness/metrics.py` entregava antes deste ADR era a fração das execuções. Publicar
-as duas é a decisão, e não publicá-la como se a execução fosse a pergunta.
+a leitura secundária. A `#13` pede "fração das perguntas"; a fração que o harness
+tinha até aqui era a das execuções. Publicar as duas é a decisão, e não publicá-la
+como se a execução fosse a pergunta.
 
 Uma Pergunta-teste conta como acerto por pergunta quando **todas as suas execuções
 avaliadas conferem**, e o denominador por pergunta são as perguntas que tiveram ao
@@ -17,9 +17,9 @@ por pergunta, e nunca conta como erro.
 
 Este ADR trata do **denominador da taxa**. Ele não é o mesmo assunto que a
 **leitura de cada pergunta** — os rótulos `estavel`, `variavel` e `sem_avaliacao`,
-que descrevem o comportamento de uma Pergunta-teste e já vivem no JSON. Os dois
-nomes aparecem juntos e são coisas diferentes: uma é a fração que se publica, a outra
-é a classificação que ajuda a ler a fração.
+que descrevem o comportamento de uma Pergunta-teste. Os dois nomes aparecem juntos
+e são coisas diferentes: uma é a fração que se publica, a outra é a classificação
+que ajuda a ler a fração.
 
 ## Por que as duas, e não uma
 
@@ -80,10 +80,13 @@ mesmo defeito que tirar a execução cortada da conta por execução.
 
 ## Considered Options
 
-- **Só a leitura por execução.** Rejeitado: é o que estava em produção no `main`
-  enquanto este ADR não existia, e é o desvio que a revisão da #25 apontou. Entrega um
+- **Só a leitura por execução.** Rejeitado: é a leitura que a branch entregava até o
+  commit anterior a este, e é o desvio que a revisão da #25 apontou. Entrega um
   número cujo significado não é o que a #13 escreve, com a divergência declarada em
-  três lugares do relato e em nenhum registro.
+  três lugares do relato e em nenhum registro. O `harness/metrics.py` não existia no
+  `main` quando este ADR foi escrito — o módulo nasce nesta branch, em `4b95efc` —,
+  então a rejeitada é uma opção que existiu aqui e não uma escolha que o `main`
+  tinha em produção.
 - **Só a leitura por pergunta.** Rejeitado: é a letra da #13, e a letra da #13 não
   descreve o que a bateria mede. As 3 repetições existem para tornar a variação
   visível, e a leitura por pergunta é a que a apaga.
@@ -93,21 +96,21 @@ mesmo defeito que tirar a execução cortada da conta por execução.
 - **Por execução, ponderada por pergunta.** Rejeitado: a ponderação seria o
   denominador por pergunta com outro nome, e as duas leituras já dão o par.
 - **Uma taxa só, com a repetição declarada.** Rejeitado: é a leitura por execução, que
-  é a que a #25 entrega hoje.
+  é a que a #25 entregava antes deste ADR.
 
 ## Consequences
 
 - **A #13 é lida como falando de pergunta, e a resposta é que publicamos as duas.**
-  O critério de aceitação continua atendido, e o número que a leitura por pergunta dá
-  é o que a spec pede. Quem ler só `fracao` no JSON lê a leitura por execução, e quem
-  ler só `fracao_por_pergunta` lê a que a spec nomeia. Nenhuma das duas está escondida
-  no campo da outra.
+  Quem ler só `fracao` no JSON lê a leitura por execução, e quem ler só
+  `fracao_por_pergunta` lê a que a spec nomeia. Nenhuma das duas está escondida no
+  campo da outra.
 - **`fracao` e `fracao_formatada` continuam sendo as da execução.** A leitura por
   pergunta entra em campos novos, com nome que diz de quem é o denominador. Quem já
   leu o JSON da 1.1 lê o mesmo campo com o mesmo significado depois deste ADR.
 - **O ADR-0003 continua valendo, e continua sendo o que ele é:** quantas repetições o
-  harness roda. Ele não é reescrito aqui, e a frase que citava a justificativa do
-  denominador na `SETUP.md` e no relato passa a citar este.
+  harness roda. Ele não é reescrito aqui, e a seção do denominador do `SETUP.md` e a
+  seção *As duas taxas* do relato, ambas escritas nesta branch, citam este ADR em vez
+  de deixar a justificativa do denominador parecendo venir do ADR-0003.
 - **Uma rodada de repetição única continua sendo uma rodada legítima.** O
   `test_rodada_de_repeticao_unica_e_uma_rodada_legitima` verifica que o módulo não
   recusa a rodada por ter `repeticoes: 1` — o que ele não pode fazer é ler a
@@ -121,6 +124,13 @@ mesmo defeito que tirar a execução cortada da conta por execução.
   olhando.
 - **O relato passa a citar dois ADRs:** o ADR-0003 para a repetição e este para o
   denominador.
+- **Este ADR nasce na branch que o implementa, e o precedente do repositório é o
+  mesmo.** O ADR-0003 (`ea15d97`) e o ADR-0005 (`c005847`) foram criados no mesmo
+  commit do código que autorizam, então este não é um desvio do jeito do repositório
+  — é a forma que o repositório tem de registrar a decisão junto com o que a executa.
+  O que muda em relação a eles é o `status`: enquanto a PR está aberta, o ADR fica
+  `proposed`. Quem decide `accepted` é a review de quem lê o diff, e não o autor do
+  ADR que escreveu o próprio critério de aceitação.
 
 ## Referências
 
