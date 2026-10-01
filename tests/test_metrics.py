@@ -782,6 +782,68 @@ def test_execucao_com_erro_e_com_parada_por_length_foram_do_denominador(tmp_path
     assert "length" in taxa.fora_da_conta[1].detalhe
 
 
+def test_a_execucao_fora_da_conta_carrega_o_output_que_a_originou(tmp_path: Path) -> None:
+    """O critério de aceitação pede evidência por contagem, e a exclusão também conta.
+
+    A resposta cortada existe na rodada e alguém a excluiu do denominador por uma
+    razão que a pessoa precisa poder conferir. O motivo diz *por que* ela saiu; sem
+    o trecho, não há como saber se a exclusão foi justa — e a exclusão move o
+    número.
+    """
+    sobrescritas = {
+        ChaveExecucao("f1", 2): SEM_RESPOSTA,
+        ChaveExecucao("f1", 3): CORTADA,
+    }
+    rodada = _gravar_rodada(tmp_path / "rodada.json", _rodada(sobrescritas=sobrescritas))
+    folha = _julgar(carregar_rodada(rodada), tmp_path / "folha.json")
+
+    taxa = _taxas_de(rodada, folha).taxas[NAO_SABER]
+    erro, cortada = taxa.fora_da_conta
+
+    assert erro.motivo == "erro"
+    assert erro.resposta_bruta is None
+    assert cortada.motivo == "cortada"
+    assert cortada.resposta_bruta == f"resposta f1 {REPETICOES}"
+
+
+def test_a_execucao_julgada_nao_avaliavel_tambem_traz_o_output(tmp_path: Path) -> None:
+    """O terceiro caminho de exclusão também carrega o output, e ele existe.
+
+    `nao_avaliavel` foi o caminho que ganhou o campo por omissão: é o menos
+    frequente dos três e o mais fácil de não lembrar ao acrescentar o campo.
+    """
+    rodada = _gravar_rodada(tmp_path / "rodada.json", _rodada())
+    destino = _julgar(
+        carregar_rodada(rodada),
+        tmp_path / "folha.json",
+        {ChaveExecucao("f3", 1): "nao_avaliavel"},
+    )
+    bruta = json.loads(destino.read_text(encoding="utf-8"))
+    alvo = next(
+        linha for linha in bruta["vereditos"] if linha["id"] == "f3" and linha["repeticao"] == 1
+    )
+    alvo["nota"] = "a resposta foi cortada no meio da frase"
+    destino.write_text(json.dumps(bruta, ensure_ascii=False), encoding="utf-8")
+
+    taxa = _taxas_de(tmp_path / "rodada.json", destino).taxas[NAO_SABER]
+
+    assert taxa.fora_da_conta[0].motivo == "julgada"
+    assert taxa.fora_da_conta[0].resposta_bruta == "resposta f3 1"
+
+
+def test_a_pagina_imprime_o_trecho_da_execucao_fora_da_conta(tmp_path: Path) -> None:
+    """A página do relato é onde quem confere a exclusão lê, e ela precisa do trecho."""
+    sobrescritas = {ChaveExecucao("f1", 3): CORTADA}
+    rodada = _gravar_rodada(tmp_path / "rodada.json", _rodada(sobrescritas=sobrescritas))
+    folha = _julgar(carregar_rodada(rodada), tmp_path / "folha.json")
+
+    pagina = resumo_em_markdown(_taxas_de(rodada, folha))
+
+    assert "**Fora da conta**" in pagina
+    assert "`f1` repetição 3 — cortada" in pagina
+    assert f"resposta f1 {REPETICOES}" in pagina
+
+
 def test_veredito_nao_avaliavel_com_nota_sai_da_conta_com_o_motivo_declarado(
     tmp_path: Path,
 ) -> None:

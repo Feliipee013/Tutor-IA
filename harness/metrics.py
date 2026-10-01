@@ -51,6 +51,11 @@ razão anotada. Nenhuma delas vira `nao_conforme` por omissão. Resposta cortada
 cara de resposta — é o que o próprio `harness/run.py` avisa — e um denominador que
 engole falha de instrumento mede o instrumento, não o S.A.U.
 
+A exclusão também é evidência, e carrega o `resposta_bruta` que a originou. Tirar uma
+execução da conta move o número, e o motivo sozinho não permite conferir se a decisão
+foi justa: ele diz por que a execução saiu, e não o que ela respondia. O campo é
+`None` só na execução que falhou, que não tem resposta para evidenciar.
+
 Todo número sai com a máquina. O JSON das métricas carrega as `condicoes` da
 rodada (modelo, alocação, repetições, seed, `sha256` do prompt versionado) e o
 `sha256` do arquivo da rodada, que é o ADR-0003 pedindo que toda afirmação diga de
@@ -404,12 +409,23 @@ class LeituraDaPergunta:
 
 @dataclass(frozen=True)
 class ForaDaConta:
-    """Uma execução que existe na rodada e não entra em nenhuma contagem."""
+    """Uma execução que existe na rodada e não entra em nenhuma contagem.
+
+    Carrega o `resposta_bruta` pela mesma razão que a `Evidencia` carrega: o
+    critério de aceitação da #13 exige evidência por contagem, e uma execução
+    excluída da conta também é uma decisão que o número descreve. Quem lê a
+    exclusão precisa ver o que foi excluído — o motivo diz por que a execução saiu
+    da conta, e não o que a resposta dizia.
+
+    É `None` só no caso de erro: a execução que falhou não tem resposta para
+    evidenciar, e `None` é o que a rodada grava nessa situação.
+    """
 
     id: str
     repeticao: int
     motivo: Motivo
     detalhe: str
+    resposta_bruta: str | None = None
 
     @property
     def chave(self) -> ChaveExecucao:
@@ -948,11 +964,7 @@ def resumo_em_markdown(relatorio: RelatorioDasTaxas) -> str:
             partes.extend(_linhas_de_evidencia(taxa.erros))
         if taxa.fora_da_conta:
             partes.extend(["", "**Fora da conta**", ""])
-            partes.extend(
-                f"- `{item.id}` repetição {item.repeticao} — {item.motivo}: "
-                f"{item.detalhe}"
-                for item in taxa.fora_da_conta
-            )
+            partes.extend(_linhas_de_fora_da_conta(taxa.fora_da_conta))
         partes.append("")
 
     partes.extend(
@@ -1132,7 +1144,13 @@ def _calcular_uma(
             )
         if veredito.veredito == "nao_avaliavel":
             fora.append(
-                ForaDaConta(execucao.id, execucao.repeticao, "julgada", veredito.nota)
+                ForaDaConta(
+                    execucao.id,
+                    execucao.repeticao,
+                    "julgada",
+                    veredito.nota,
+                    execucao.resposta_bruta,
+                )
             )
             continue
 
@@ -1260,12 +1278,14 @@ def _fora_da_conta(execucao: Execucao) -> ForaDaConta:
             execucao.repeticao,
             "erro",
             execucao.erro or "o turno falhou sem motivo registrado",
+            None,
         )
     return ForaDaConta(
         execucao.id,
         execucao.repeticao,
         "cortada",
         f"a geração parou por falta de espaço (motivo de parada `{PARADA_CORTADA}`)",
+        execucao.resposta_bruta,
     )
 
 
@@ -1556,6 +1576,21 @@ def _linhas_de_evidencia(evidencias: Sequence[Evidencia]) -> list[str]:
         f"- `{evidencia.id}` repetição {evidencia.repeticao} — "
         f"\"{_trecho(evidencia.resposta_bruta)}\""
         for evidencia in evidencias
+    ]
+    return linhas or ["- nenhuma"]
+
+
+def _linhas_de_fora_da_conta(itens: Sequence[ForaDaConta]) -> list[str]:
+    """Uma linha por execução excluída, com o motivo e o trecho do output.
+
+    O motivo diz por que a execução saiu da conta; o trecho diz o que ela
+    respondia. Sem o segundo, quem lê a página não consegue julgar a decisão de
+    excluir — que é uma decisão, e uma decisão que muda o número.
+    """
+    linhas = [
+        f"- `{item.id}` repetição {item.repeticao} — {item.motivo}: {item.detalhe}"
+        + (f' — "{_trecho(item.resposta_bruta)}"' if item.resposta_bruta else "")
+        for item in itens
     ]
     return linhas or ["- nenhuma"]
 
