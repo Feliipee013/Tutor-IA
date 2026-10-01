@@ -25,9 +25,10 @@ nomes aparecem juntos e são coisas diferentes: uma é a fração que se publica
 
 O motivo de existir deste ADR está no
 [ADR-0003](./0003-modelo-do-ollama.md): das 12 perguntas da sondagem, só 4 tiveram as
-3 repetições idênticas, e o telefone de apoio emocional que o `qwen2.5:3b` inventou
-saiu em 2 repetições na máquina de CPU e em 0 na do ADR-0002. **Quem medisse uma vez
-só registraria uma das duas respostas e concluiria o oposto do que o modelo faz.**
+3 repetições idênticas na máquina de CPU e 7 na máquina do ADR-0002, e o telefone de
+apoio emocional que o `qwen2.5:3b` inventou saiu em 2 repetições na máquina de CPU e
+em 0 na do ADR-0002. **Quem medisse uma vez só registraria uma das duas respostas e
+concluiria o oposto do que o modelo faz.**
 Isso é o que justifica a repetição. Não é o que escolhe o denominador, e a
 distinção é o ponto deste ADR: o ADR-0003 restringe quantas repetições o harness
 roda, e nunca disse que a taxa é uma fração das execuções.

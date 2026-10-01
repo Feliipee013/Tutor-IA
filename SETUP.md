@@ -562,9 +562,11 @@ A falha ou o timeout de um turno grava `erro` na execução e a bateria segue.
 
 Cada pergunta roda **3 repetições**, com `temperature 0`, `seed 20260926` e
 `num_predict 256` — as condições do ADR-0003. O número não é detalhe: o ADR
-mediu que 7 das 12 perguntas da sondagem não tiveram as 3 repetições idênticas,
-então uma execução só registra uma das respostas possíveis e a taxa da #13 sai
-de uma amostra que não representa o comportamento. As flags `--repeticoes`,
+mediu que das 12 perguntas da sondagem só 4 tiveram as 3 repetições idênticas na
+máquina de CPU, e 7 na máquina do ADR-0002 — o número depende da máquina, e é
+por isso que ele é qualificado em vez de solto. Uma execução só registra uma das
+respostas possíveis, então a taxa da #13 sai de uma amostra que não representa o
+comportamento. As flags `--repeticoes`,
 `--temperatura`, `--seed` e `--num-predict` existem para a varredura da 1.2, e
 o que foi usado fica gravado em `condicoes` no próprio JSON.
 
@@ -632,13 +634,19 @@ execução fora da conta sem motivo declarado é uma execução escondida.
 
 O código de saída diz o que aconteceu, e diz quem tem o que corrigir: `0` as
 duas taxas foram calculadas e gravadas; `1` o julgamento está ausente,
-ilegível, incompleto ou inconsistente com a rodada, e também quando o contrato
-das taxas divergiu do arquivo de Perguntas-teste — em todos esses casos quem age
-é a folha; `2` a rodada não está lá, não é um JSON de rodada, ou não fecha a
-conta que ela mesma declara — e nesses quem age é a bateria; `3` o caminho não
-pôde ser lido ou gravado, por permissão ou disco cheio, e o
+ilegível, incompleto ou inconsistente com a rodada — e nesses quem age é a folha;
+`2` a rodada não está lá, não é um JSON de rodada, ou não fecha a conta que ela
+mesma declara — e nesses quem age é a bateria; `3` o caminho não pôde ser lido
+ou gravado, por permissão ou disco cheio, e o
 `perguntas-teste/perguntas-teste.md` congelado não abre — e nesses quem age é o
 caminho, não a folha nem a bateria.
+
+O `1` tem dois donos, e eles não são o mesmo. A folha ilegível, incompleta ou
+inconsistente com a rodada é de quem a preencheu. O contrato das taxas que
+divergiu do arquivo de Perguntas-teste é de quem responde pelas Perguntas-teste
+— e o caso em que o arquivo **não existe** também sai `1`, e pelo mesmo motivo:
+sem o arquivo congelado o contrato não tem com o que ser conferido, e a falha não
+é de quem rodou o comando. A mensagem do erro diz qual dos dois é o caso.
 
 Um arquivo fora de UTF-8 **não** é sempre `3`, e o que decide é de quem é o
 arquivo: a rodada fora de UTF-8 sai `2`, porque quem tem que refazer é a
@@ -658,9 +666,9 @@ Duas decisões que mudam o número e por isso valem ser ditas:
   [ADR-0006](docs/adr/0006-denominador-das-taxas.md) publica as duas leituras, e o
   denominador de cada uma é declarado no próprio nome do campo. A leitura por
   execução é a primária, com `4 × 3 = 12` e `3 × 3 = 9` em uma bateria de 3
-  repetições. A leitura por pergunta é a que a #13 pede, e o campo dela diz `3 de 4`
-  no caso de a `f2` errar 1 das 3 repetições, onde a leitura por execução dá
-  `11/12`. Uma Pergunta-teste conta como acerto por pergunta quando **todas** as suas
+  repetições. A leitura por pergunta é a que a #13 pede, e o campo dela diz
+  `3/4 perguntas = 0,75` no caso de a `f2` errar 1 das 3 repetições, onde a leitura
+  por execução dá `11/12 = 0,92`. Uma Pergunta-teste conta como acerto por pergunta quando **todas** as suas
   execuções avaliadas conferem, e pergunta sem execução avaliada fica fora do
   denominador, nunca como erro. As duas taxas saem em campos de nome explícito no
   JSON: `fracao` e `fracao_formatada` são as da execução, `fracao_por_pergunta` e

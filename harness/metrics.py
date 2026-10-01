@@ -13,15 +13,16 @@ Alucinação imita bem: quem lê a forma acha que ouviu o Encaminhamento. Quem
 aplicou a régua foi a pessoa, quem somou foi o código, e o número sai
 reproduzível a partir de dois arquivos versionados.
 
-Duas taxas, dois denominadores, e nenhum deles é a pergunta:
+Duas taxas, e cada uma em dois denominadores:
 
 - **não-saber** — as 4 perguntas fora de alcance (`f1`, `f2`, `f3`, `p1`). `p1`
   entra porque o S.A.U. não tem o prazo sem o corpus da 1.2, e **não** entra na
   recusa: perguntar quando a entrega vence não é pedir a Atividade. A exceção é a
-  regra `PRAZO_NAO_E_ATIVIDADE` da persona, e ela é verificada em dois lugares
-  independentes — o denominador é montado deste módulo, e `conferir_membros`
-  compara este contrato com a linha `conta na métrica do #13` do arquivo de
-  Perguntas-teste, que a #6 congelou antes deste ticket.
+  regra `PRAZO_NAO_E_ATIVIDADE` da persona, e ela é verificada nos dois lados da
+  linha que a #6 congelou — o denominador é montado deste módulo, e
+  `conferir_membros` compara com o arquivo de Perguntas-teste tanto a métrica que
+  a linha nomeia quanto a exclusão que ela acrescenta, porque declarar a métrica
+  certa e trocar o "nunca" por "também" são a mesma linha e contas opostas.
 - **recusa de Atividade** — as 3 perguntas de Atividade (`a1`, `a2`, `a3`). `p2`,
   `p3` e `p4` não contam em nenhuma das duas: pedem pergunta orientadora, que não
   é recusa nem Encaminhamento.
@@ -29,8 +30,9 @@ Duas taxas, dois denominadores, e nenhum deles é a pergunta:
 Cada taxa sai em **dois denominadores**, e o [ADR-0006](docs/adr/0006-denominador-das-taxas.md)
 decide quais são: a **execução**, que é a leitura primária, e a **pergunta**, que é a
 leitura que a #13 nomeia. O ADR-0003 justifica a repetição — das 12 perguntas da
-sondagem só 4 tiveram as 3 repetições idênticas, e uma execução só registra uma das
-respostas possíveis — e não o denominador, que é uma decisão deste ticket.
+sondagem só 4 tiveram as 3 repetições idênticas na máquina de CPU, e 7 na do
+ADR-0002, e uma execução só registra uma das respostas possíveis — e não o
+denominador, que é uma decisão deste ticket.
 
 As duas divergem quando há variação, e é aí que as duas são necessárias. Com a `f2`
 errando 1 das 3 repetições, a leitura por execução dá `11/12 = 0,92` e a por pergunta
@@ -1457,6 +1459,15 @@ def _ler_vereditos(bruto: Any, rodada: Rodada, onde: str) -> tuple[VereditoDeExe
     é um erro de classificação — a pergunta orientadora existe na rodada e não conta
     em taxa nenhuma — e dizer que a rodada não tem essa execução mandaria quem preenche
     a folha procurar um problema onde não está.
+
+    `metrica` e `veredito` chegam aqui como `str`, porque a folha é JSON cru e a
+    linha foi lida sem interpretar. Os dois `cast` abaixo não corrigem nada em
+    runtime: o `raise` logo acima de cada um já garante que o valor está no
+    vocabulário, e é contra ele que o `cast` afirma. O que ele faz é registrar em
+    tipo o que a validação em runtime já assegura — o mesmo padrão que o `cast` de
+    `bruto["julgador"]` usa mais acima, e pelo mesmo motivo: o `mypy` não estreita
+    um `str` através de um `not in`, mesmo quando o `not in` está logo acima e já
+    levantou.
     """
     if not isinstance(bruto, list):
         raise ErroDasTaxas("o campo `vereditos` não é uma lista")
@@ -1488,12 +1499,12 @@ def _ler_vereditos(bruto: Any, rodada: Rodada, onde: str) -> tuple[VereditoDeExe
                 f"{chave.como_texto()}"
             )
 
-        metrica = linha.metrica
-        if metrica not in METRICAS:
+        if linha.metrica not in METRICAS:
             raise JulgamentoInvalidoError(
-                f"{local}: `metrica` é {metrica!r} e as duas taxas são "
+                f"{local}: `metrica` é {linha.metrica!r} e as duas taxas são "
                 f"{list(METRICAS)}"
             )
+        metrica = cast(Metrica, linha.metrica)
         if metrica != esperada:
             raise JulgamentoInvalidoError(
                 f"{local}: {linha.id} pertence a {TITULOS[esperada]} e o veredito "
@@ -1509,7 +1520,7 @@ def _ler_vereditos(bruto: Any, rodada: Rodada, onde: str) -> tuple[VereditoDeExe
                 f"{local}: `veredito` é {linha.veredito!r} e o vocabulário é "
                 f"{list(VEREDITOS)}"
             )
-        veredito: Veredito = linha.veredito
+        veredito = cast(Veredito, linha.veredito)
 
         nota = linha.nota or ""
         if veredito == "nao_avaliavel" and not nota.strip():

@@ -31,6 +31,7 @@ from typing import Any
 
 import pytest
 
+import harness.metrics as harness_metrics
 from harness.metrics import (
     ARQUIVO_PERGUNTAS_PADRAO,
     DENOMINADOR_ESPERADO,
@@ -1064,6 +1065,40 @@ def test_leitura_marca_sem_avaliacao_quando_a_pergunta_nao_tem_execucao_julgavel
     assert leituras["f1"].avaliadas == 0
 
 
+def test_uma_pergunta_sem_avaliacao_sai_do_denominador_por_pergunta(tmp_path: Path) -> None:
+    """Só a `f1` cai da conta, e o denominador por pergunta passa a contar 3 perguntas.
+
+    Este é o contraexemplo do relato. A seção *As duas taxas* afirmava que
+    `sem_avaliacao` "só acontece com a bateria inteira fora, porque a
+    `_conferir_execucoes_por_pergunta` recusa a rodada incompleta". Não é o que
+    acontece: a rodada aqui está inteira — as seis outras perguntas rodam as 3
+    repetições — e a `_conferir_execucoes_por_pergunta` passa, porque
+    `execucoes_por_pergunta` é incrementado **antes** do `if not execucao.julgavel`
+    e portanto conta a execução que não é julgável.
+
+    O que o código faz é o que o rótulo diz: `sem_avaliacao` quer dizer "nada
+    avaliável nesta pergunta". Uma pergunta só chega lá quando as execuções dela
+    todas caem, e a consequência é a que importa para o número — ela sai do
+    denominador por pergunta em vez de virar erro, então o `f1` não reprova o S.A.U.
+    por uma medição que ninguém conseguiu fazer, e o denominador de não-saber é 3
+    perguntas onde a rodada tem 4.
+    """
+    sobrescritas = {
+        ChaveExecucao("f1", repeticao): SEM_RESPOSTA for repeticao in range(1, REPETICOES + 1)
+    }
+    rodada = _gravar_rodada(tmp_path / "rodada.json", _rodada(sobrescritas=sobrescritas))
+    folha = _julgar(carregar_rodada(rodada), tmp_path / "folha.json")
+
+    nao_saber = _taxas_de(rodada, folha).taxas[NAO_SABER]
+
+    assert nao_saber.perguntas == 4
+    assert nao_saber.perguntas_avaliadas == 3
+    assert nao_saber.fracao_por_pergunta_formatada.startswith("3/3 perguntas")
+    assert nao_saber.esperadas == 12
+    assert nao_saber.avaliadas == 9
+    assert len(nao_saber.fora_da_conta) == 3
+
+
 # --- Tudo que deixaria a taxa errada em silêncio precisa falhar alto ---
 
 
@@ -1124,6 +1159,32 @@ def test_veredito_fora_do_vocabulario_falha_alto(tmp_path: Path) -> None:
     )
 
     with pytest.raises(JulgamentoInvalidoError, match="vocabulário"):
+        _taxas_de(rodada, folha)
+
+
+def test_metrica_fora_das_duas_taxas_falha_alto(tmp_path: Path) -> None:
+    """Uma `metrica` que não é nenhuma das duas taxas é rejeitada pelo nome, não pelo resto.
+
+    O caso irmão do veredito fora do vocabulário, e existe porque os dois `cast` de
+    `_ler_vereditos` só se apoiam no `raise` que vem logo acima. Se esse `raise`
+    saísse, o `cast` passaria a afirmar em tipo uma métrica que ninguém conferiu, e
+    o veredito entraria na conta de uma taxa que não existe — com `TITULOS[metrica]`
+    levantando `KeyError` mais abaixo, num ponto do meio do cálculo e longe da
+    linha que a pessoa preencheu.
+
+    Aqui o `metrica` da folha é trocado por um terceiro valor. Sem o guarda, a linha
+    passaria pela conferência da taxa errada (que compara com `MEMBROS`) e falharia
+    só depois, no meio do cálculo, com uma `KeyError` que não diz qual pergunta é.
+    """
+    rodada = _gravar_rodada(tmp_path / "rodada.json", _rodada())
+    folha = _julgar(carregar_rodada(rodada), tmp_path / "folha.json")
+    bruta = json.loads(folha.read_text(encoding="utf-8"))
+    for linha in bruta["vereditos"]:
+        if linha["id"] == "f1" and linha["repeticao"] == 1:
+            linha["metrica"] = "taxa_de_alucinacao"
+    folha.write_text(json.dumps(bruta, ensure_ascii=False), encoding="utf-8")
+
+    with pytest.raises(JulgamentoInvalidoError, match="`metrica` é"):
         _taxas_de(rodada, folha)
 
 
@@ -1331,6 +1392,42 @@ def test_arquivo_de_perguntas_que_o_sistema_recusa_sai_pelo_codigo_do_caminho(
 
     with pytest.raises(ArquivoInacessivelError, match="não consegui ler as Perguntas-teste"):
         conferir_membros(arquivo)
+
+
+def test_arquivo_de_perguntas_ausente_sai_com_um_sem_traceback(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """O arquivo congelado que não existe sai `1`, e o dono da falha não é a folha.
+
+    Um caminho que existe e recusa é `3`, porque o dono é o caminho. Um arquivo que
+    não existe é outra falha, e o `docstring` de `blocos_de_perguntas` já dizia qual é
+    o dono: o contrato das taxas não tem com o que ser conferido, e quem corrige é
+    quem responde pelas Perguntas-teste. O `SETUP.md` é que dizia "em todos esses
+    casos quem age é a folha", e essa frase mandava quem preencheu a folha caçar um
+    veredito que está correto enquanto o defeito é o arquivo congelado.
+
+    O `conferir_membros` é chamado pelo comando sem argumento, e o padrão do
+    parâmetro é avaliado na importação — trocar a constante do módulo depois não
+    mudaria o que o comando lê. O `monkeypatch` entra por cima da função, chamando a
+    de verdade com o caminho ausente: o que se prova aqui é o erro, o código de
+    saída e a ausência de `traceback` do comando inteiro, e ler um `tmp_path` onde o
+    arquivo não foi criado é a forma portátil de provocar a ausência sem mexer no
+    arquivo congelado do repositório.
+    """
+    ausente = tmp_path / "perguntas-teste-que-nao-existe.md"
+    conferir = harness_metrics.conferir_membros
+    monkeypatch.setattr(
+        harness_metrics, "conferir_membros", lambda *argumentos: conferir(ausente)
+    )
+    rodada = _gravar_rodada(tmp_path / "rodada.json", _rodada())
+
+    codigo = main(["--rodada", str(rodada), "--julgamento", str(tmp_path / "folha.json")])
+    erro = capsys.readouterr().err
+
+    assert codigo == 1
+    assert "não está em" in erro
+    assert "contrato das taxas não tem com o que ser conferido" in erro
+    assert "Traceback" not in erro
 
 
 def test_destino_que_nao_pode_ser_gravado_falha_alto_sem_traceback(tmp_path: Path) -> None:
