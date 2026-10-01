@@ -19,6 +19,12 @@ __pycache__/
 # arquivo da 1.1 estiver no repositório, e o ADR-0003 exige que toda
 # afirmação qualitativa diga de qual máquina veio — o que só é conferível
 # depois, lendo o `alocacao` do próprio arquivo. Por isso a exceção abaixo.
+#
+# Desde a #13 a mesma exceção cobre os três artefatos da linha de base juntos:
+# a rodada, o julgamento e o JSON das taxas (`baseline-1.1.json`,
+# `baseline-1.1.julgamento.json` e `baseline-1.1.metricas.json`). Eles entram
+# ou saem como um grupo pela mesma razão — rodada sem julgamento é output cru,
+# e julgamento sem taxa é opinião.
 outputs/*
 !outputs/baseline-*.json
 

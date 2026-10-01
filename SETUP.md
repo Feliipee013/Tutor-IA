@@ -562,9 +562,11 @@ A falha ou o timeout de um turno grava `erro` na execução e a bateria segue.
 
 Cada pergunta roda **3 repetições**, com `temperature 0`, `seed 20260926` e
 `num_predict 256` — as condições do ADR-0003. O número não é detalhe: o ADR
-mediu que 7 das 12 perguntas da sondagem não tiveram as 3 repetições idênticas,
-então uma execução só registra uma das respostas possíveis e a taxa da #13 sai
-de uma amostra que não representa o comportamento. As flags `--repeticoes`,
+mediu que das 12 perguntas da sondagem só 4 tiveram as 3 repetições idênticas na
+máquina de CPU, e 7 na máquina do ADR-0002 — o número depende da máquina, e é
+por isso que ele é qualificado em vez de solto. Uma execução só registra uma das
+respostas possíveis, então a taxa da #13 sai de uma amostra que não representa o
+comportamento. As flags `--repeticoes`,
 `--temperatura`, `--seed` e `--num-predict` existem para a varredura da 1.2, e
 o que foi usado fica gravado em `condicoes` no próprio JSON.
 
@@ -596,6 +598,101 @@ linha de base da 1.1 é `qwen2.5:3b` sem RAG. A 1.2 grava
 `outputs/baseline-1.2.json` do mesmo jeito, e as duas declaram no próprio JSON o
 modelo, a alocação, as condições e o `sha256` do prompt versionado: é o que
 separa "o RAG mudou" de "a persona ou a máquina mudou" entre as duas rodadas.
+
+### As duas taxas (issue #13)
+
+`harness/metrics.py` transforma a rodada em número: a **taxa de não-saber** (as
+4 perguntas fora de alcance — `f1`, `f2`, `f3`, `p1`) e a **taxa de recusa de
+Atividade** (as 3 perguntas de Atividade — `a1`, `a2`, `a3`). Ele roda no host,
+não fala com o Ollama e só lê o JSON que a bateria acabou de gravar.
+
+O julgamento continua sendo humano, como a #6 decidiu: o script **não** decide
+conforme nem não conforme. A folha que ele escreve traz o output de cada
+execução ao lado do `veredito`, e o `conforme quando` e o `não conforme quando` da
+Pergunta-teste no bloco `perguntas` — quem marca é você, lendo a resposta no
+mesmo arquivo. Você não precisa abrir o JSON da rodada para julgar, e o script
+recusa a folha em que o texto da resposta não for mais o da rodada, porque um
+veredito sobre um output que a rodada não gravou conta errado sem avisar.
+
+```sh
+# 1. a folha de julgamento, em branco, com a régua de cada pergunta
+python -m harness.metrics --rodada outputs/baseline-1.1.json --preparar
+
+# 2. você preenche `julgador`, `julgado_em` e o `veredito` de cada linha
+
+# 3. as duas taxas, gravadas e impressas
+python -m harness.metrics --rodada outputs/baseline-1.1.json
+```
+
+Os nomes dos arquivos saem do nome da rodada: `baseline-1.1.julgamento.json` e
+`baseline-1.1.metricas.json`, ao lado dela. `--julgamento` e `--saida`
+sobrescrevem, se você precisar de outro caminho.
+
+O veredito de cada linha aceita três valores: `conforme`, `nao_conforme` e
+`nao_avaliavel` — este último exige a razão no campo `nota`, porque uma
+execução fora da conta sem motivo declarado é uma execução escondida.
+
+O código de saída diz o que aconteceu, e diz quem tem o que corrigir: `0` as
+duas taxas foram calculadas e gravadas; `1` o julgamento está ausente,
+ilegível, incompleto ou inconsistente com a rodada — e nesses quem age é a folha;
+`2` a rodada não está lá, não é um JSON de rodada, ou não fecha a conta que ela
+mesma declara — e nesses quem age é a bateria; `3` o caminho não pôde ser lido
+ou gravado, por permissão ou disco cheio, e o
+`perguntas-teste/perguntas-teste.md` congelado não abre — e nesses quem age é o
+caminho, não a folha nem a bateria.
+
+O `1` tem dois donos, e eles não são o mesmo. A folha ilegível, incompleta ou
+inconsistente com a rodada é de quem a preencheu. O contrato das taxas que
+divergiu do arquivo de Perguntas-teste é de quem responde pelas Perguntas-teste
+— e o caso em que o arquivo **não existe** também sai `1`, e pelo mesmo motivo:
+sem o arquivo congelado o contrato não tem com o que ser conferido, e a falha não
+é de quem rodou o comando. A mensagem do erro diz qual dos dois é o caso.
+
+Um arquivo fora de UTF-8 **não** é sempre `3`, e o que decide é de quem é o
+arquivo: a rodada fora de UTF-8 sai `2`, porque quem tem que refazer é a
+bateria; a folha fora de UTF-8 sai `1`, porque quem salvou com o encoding errado
+é quem a preencheu. Só o arquivo das Perguntas-teste vira `3`, porque ninguém o
+escreve na hora de rodar o comando.
+
+Nenhum dos três sai com `traceback`: a falha sai como frase, porque quem
+preenche a folha não vai ler pilha de Python para descobrir o que digitou de
+errado. Um cuidado: `argparse` também sai com `2` quando o argumento está
+inválido, e nesse caso o `2` é do `argparse` e vem acompanhado da mensagem de
+uso, não da tabela acima.
+
+Duas decisões que mudam o número e por isso valem ser ditas:
+
+- **As duas taxas saem por execução e por pergunta** — o
+  [ADR-0006](docs/adr/0006-denominador-das-taxas.md) publica as duas leituras, e o
+  denominador de cada uma é declarado no próprio nome do campo. A leitura por
+  execução é a primária, com `4 × 3 = 12` e `3 × 3 = 9` em uma bateria de 3
+  repetições. A leitura por pergunta é a que a #13 pede, e o campo dela diz
+  `3/4 perguntas = 0,75` no caso de a `f2` errar 1 das 3 repetições, onde a leitura
+  por execução dá `11/12 = 0,92`. Uma Pergunta-teste conta como acerto por pergunta quando **todas** as suas
+  execuções avaliadas conferem, e pergunta sem execução avaliada fica fora do
+  denominador, nunca como erro. As duas taxas saem em campos de nome explícito no
+  JSON: `fracao` e `fracao_formatada` são as da execução, `fracao_por_pergunta` e
+  `fracao_por_pergunta_formatada` as da pergunta. Ao lado dos dois números sai o
+  **comportamento de cada pergunta**, em três rótulos ascii contados sobre as
+  execuções avaliadas: `estavel` (todas conferem ou nenhuma), `variavel` (algumas
+  conferem) e `sem_avaliacao` (nenhuma entrou na conta). Numa rodada cheia de 3
+  repetições, `estavel` é 3 de 3 ou 0 de 3. O ADR-0003 justifica a *repetição*; o
+  denominador é este ADR, não ele.
+- **A pergunta do prazo (`p1`) conta em não-saber e nunca em recusa.** Perguntar
+  quando a entrega vence não é pedir a Atividade, e isso é a regra
+  `PRAZO_NAO_E_ATIVIDADE` da persona. A folha traz a métrica de cada pergunta
+  escrita à mão, e o código compara com o arquivo de Perguntas-teste congelado
+  pela #6: se os dois lados divergirem, o comando falha em vez de medir outra
+  coisa.
+
+Execução que falhou e execução com `motivo_de_parada == "length"` **não** entram
+no denominador. A segunda é a mais importante: o Ollama trata a falta de espaço
+como sucesso, e a resposta cortada sai com cara de resposta — julgá-la reprovaria
+o S.A.U. por um defeito da medição. As duas vão para `fora_da_conta`, com o
+motivo, e o JSON das taxas guarda o `resposta_bruta` inteiro de cada contagem.
+
+A folha carrega o `sha256` da rodada, e uma folha de uma rodada não vale para
+outra: aplicá-la a outra mediria a rodada errada sem reclamar.
 
 Enquanto isso, o agente de validação é o trio abaixo, e vale rodá-lo a cada
 commit:
