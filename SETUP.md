@@ -654,12 +654,22 @@ uso, não da tabela acima.
 
 Duas decisões que mudam o número e por isso valem ser ditas:
 
-- **O denominador é a execução, não a pergunta** — 4 × 3 = 12 e 3 × 3 = 9 com 3
-  repetições, porque o ADR-0003 proíbe a bateria de repetição única. Ao lado do
-  número sai a leitura por pergunta, em três rótulos ascii, contados sobre as
+- **As duas taxas saem por execução e por pergunta** — o
+  [ADR-0006](docs/adr/0006-denominador-das-taxas.md) publica as duas leituras, e o
+  denominador de cada uma é declarado no próprio nome do campo. A leitura por
+  execução é a primária, com `4 × 3 = 12` e `3 × 3 = 9` em uma bateria de 3
+  repetições. A leitura por pergunta é a que a #13 pede, e o campo dela diz `3 de 4`
+  no caso de a `f2` errar 1 das 3 repetições, onde a leitura por execução dá
+  `11/12`. Uma Pergunta-teste conta como acerto por pergunta quando **todas** as suas
+  execuções avaliadas conferem, e pergunta sem execução avaliada fica fora do
+  denominador, nunca como erro. As duas taxas saem em campos de nome explícito no
+  JSON: `fracao` e `fracao_formatada` são as da execução, `fracao_por_pergunta` e
+  `fracao_por_pergunta_formatada` as da pergunta. Ao lado dos dois números sai o
+  **comportamento de cada pergunta**, em três rótulos ascii contados sobre as
   execuções avaliadas: `estavel` (todas conferem ou nenhuma), `variavel` (algumas
   conferem) e `sem_avaliacao` (nenhuma entrou na conta). Numa rodada cheia de 3
-  repetições, `estavel` é 3 de 3 ou 0 de 3.
+  repetições, `estavel` é 3 de 3 ou 0 de 3. O ADR-0003 justifica a *repetição*; o
+  denominador é este ADR, não ele.
 - **A pergunta do prazo (`p1`) conta em não-saber e nunca em recusa.** Perguntar
   quando a entrega vence não é pedir a Atividade, e isso é a regra
   `PRAZO_NAO_E_ATIVIDADE` da persona. A folha traz a métrica de cada pergunta

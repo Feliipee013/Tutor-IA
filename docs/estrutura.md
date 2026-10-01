@@ -47,6 +47,7 @@ agente Implementar localizar o ponto de impacto sem varrer o repositório inteir
 | `docs/adr/` | decisões de arquitetura, com o que foi descartado e por quê | sim |
 | `docs/adr/0004-vram-por-maquina.md` | a VRAM é declarada por máquina: o contrato, como descobrir o valor e o que fazer sem GPU dedicada — **issue #7** | sim |
 | `docs/adr/0005-estado-da-conversa.md` | o estado da conversa vive num arquivo, isolado por `chat_id`, com TTL e ordem FIFO por conversa — **issue #9** | sim |
+| `docs/adr/0006-denominador-das-taxas.md` | as duas taxas da 1.1 saem por execução e por pergunta, e as duas são publicadas: o denominador de cada uma, e quando uma Pergunta-teste conta como acerto — **issue #13** | sim |
 | `docs/sprints/` | plano legível da 1.1 e da 1.2 | sim |
 | `docs/medicao-modelo/` | a sondagem, o script de medição e a saída de cada máquina — **issue #3** | sim |
 | `docs/tempo-primeira-resposta.md` | o tempo de primeira resposta na GTX 1650 do ADR-0002, com as condições e a nota dos números antigos da RX 7600 — **issue #7** | sim |
