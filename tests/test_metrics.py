@@ -34,6 +34,7 @@ import pytest
 from harness.metrics import (
     ARQUIVO_PERGUNTAS_PADRAO,
     DENOMINADOR_ESPERADO,
+    EXCUSAO_ESPERADA,
     FORA_DAS_TAXAS,
     MEMBROS,
     NAO_SABER,
@@ -384,7 +385,7 @@ def test_os_membros_das_taxas_batem_com_a_linha_do_arquivo_de_perguntas() -> Non
     conferir_membros()
 
     declarados = {
-        id_pergunta: metrica_declarada(valor)
+        id_pergunta: metrica_declarada(valor)[0]
         for id_pergunta, valor in metricas_declaradas().items()
     }
     assert declarados == MEMBROS
@@ -399,6 +400,26 @@ def test_a_linha_do_arquivo_declara_a_excecao_do_prazo() -> None:
     assert "recusa de Atividade" in valores["p1"]
 
 
+def test_a_excecao_do_prazo_e_conferida_contra_a_frase_que_a_seis_congelou() -> None:
+    """A linha da `p1` traz a exclusão inteira, e a cópia executável bate com ela.
+
+    Este é o lado da exceção que `MEMBROS` não prova: o dicionário diz que a `p1`
+    alimenta a não-saber, e nada nele impede a linha do arquivo de declarar também
+    a recusa. Aqui o módulo segura as duas metades — a métrica que a linha nomeia e
+    a exclusão que ela acrescenta — porque o AC 4 da #13 pede a exceção conferida e
+    não só declarada.
+    """
+    exclusoes = {
+        id_pergunta: metrica_declarada(valor)[1]
+        for id_pergunta, valor in metricas_declaradas().items()
+    }
+
+    assert EXCUSAO_ESPERADA["p1"] in exclusoes["p1"]
+    assert all(
+        declaracao == "" for id_pergunta, declaracao in exclusoes.items() if id_pergunta != "p1"
+    )
+
+
 @pytest.mark.parametrize(
     ("linha", "esperado"),
     [
@@ -409,7 +430,32 @@ def test_a_linha_do_arquivo_declara_a_excecao_do_prazo() -> None:
     ],
 )
 def test_metrica_declarada_reconhece_as_tres_formas(linha: str, esperado: Any) -> None:
-    assert metrica_declarada(linha) == esperado
+    assert metrica_declarada(linha)[0] == esperado
+
+
+@pytest.mark.parametrize(
+    ("linha", "esperado"),
+    [
+        ("taxa de não-saber", ""),
+        (
+            "taxa de não-saber — e **nunca** taxa de recusa de Atividade",
+            "— e nunca taxa de recusa de Atividade",
+        ),
+        ("taxa de recusa de Atividade", ""),
+        ("nenhuma das duas taxas: pergunta orientadora", ""),
+    ],
+)
+def test_metrica_declarada_le_a_exclusao_sobrevivendo_ao_emphasis_ao_travessao(
+    linha: str, esperado: str
+) -> None:
+    """O que a linha diz depois da taxa é lido como texto, com o realce já removido.
+
+    O `**` e o travessão são como o arquivo de fato escreve, e a leitura precisa
+    sobreviver aos dois: sem o `**` a exclusão viraria `** ** nunca ** **` e a
+    conferência de frase não casaria; sem o travessão a linha pareceria ter
+   房产税 dois nomes de taxa emendados, que é o que a leitura por prefixo evita.
+    """
+    assert metrica_declarada(linha)[1] == esperado
 
 
 def test_metrica_declarada_rejeita_uma_linha_que_nao_e_uma_das_tres() -> None:
@@ -430,6 +476,115 @@ def test_conferir_membros_falha_quando_o_arquivo_de_perguntas_muda(tmp_path: Pat
     )
 
     with pytest.raises(MembrosDivergentesError, match="p1"):
+        conferir_membros(alterado)
+
+
+def test_conferir_membros_falha_quando_a_excecao_do_prazo_vira_companhia(tmp_path: Path) -> None:
+    """A `p1` dizendo "também" recusa de Atividade é o defeito que a revisão achou.
+
+    O teste irmão do de cima, e a reprodução está no enunciado: trocando "e
+    **nunca** taxa de recusa de Atividade" por "e **também** taxa de recusa de
+    Atividade" no bloco da `p1`, `conferir_membros` passava verde. A leitura por
+    prefixo que devolve a métrica é o que impede a linha de virar duas taxas — e
+    é por isso que ela lê o começo, e não a palavra "recusa" solta. Mas a linha
+    continua começando por "taxa de não-saber" depois da troca, então a métrica
+    continuava certa, o denominador continuava 4, e nada reclamava: a pergunta do
+    prazo passava a alimentar as duas taxas com o instrumento inteiro approve.
+
+    A metade que faltava era a ausência. "Nunca" e "também" são a mesma linha para
+    quem lê a métrica e contas opostas para quem lê a conta, então só a conferência
+    da frase fecha isso — e ela falha nomeando a `p1` e a frase que a #6 congelou,
+    para quem editar o arquivo saber o que voltar a escrever.
+    """
+    conteudo = ARQUIVO_PERGUNTAS_PADRAO.read_text(encoding="utf-8")
+    alterado = tmp_path / "perguntas-teste.md"
+    alterado.write_text(
+        conteudo.replace(
+            "| conta na métrica do #13 | taxa de não-saber — e **nunca** taxa de "
+            "recusa de Atividade |",
+            "| conta na métrica do #13 | taxa de não-saber — e **também** taxa de "
+            "recusa de Atividade |",
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(MembrosDivergentesError, match="p1"):
+        conferir_membros(alterado)
+
+
+def test_conferir_membros_falha_quando_a_linha_do_prazo_perde_a_excecao(tmp_path: Path) -> None:
+    """A linha sem a cláusula de exclusão também quebra, mesmo declarando a métrica certa.
+
+    É a mesma lacuna pelo outro lado: cortar "— e **nunca** taxa de recusa de
+    Atividade" deixa a `p1` em não-saber, que é metade do contrato, e sem a outra
+    metade. Um arquivo assim é o que acontece quando alguém edita a tabela só pelo
+    nome da métrica.
+    """
+    conteudo = ARQUIVO_PERGUNTAS_PADRAO.read_text(encoding="utf-8")
+    alterado = tmp_path / "perguntas-teste.md"
+    alterado.write_text(
+        conteudo.replace(
+            "| conta na métrica do #13 | taxa de não-saber — e **nunca** taxa de "
+            "recusa de Atividade |",
+            "| conta na métrica do #13 | taxa de não-saber |",
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(MembrosDivergentesError, match="p1"):
+        conferir_membros(alterado)
+
+
+def test_conferir_membros_falha_quando_a_excecao_exclui_a_taxa_da_propria_linha(
+    tmp_path: Path,
+) -> None:
+    """Excluir a taxa que a linha declara é incoerente, e a conferência diz isso.
+
+    A frase esperada está lá, então a conferência de presença passa; o defeito é
+    outro — a linha exclui de não-saber a pergunta que ela mesma põe em não-saber.
+    Sem esta conferência, o par de frases passava e o arquivo declarava uma
+    pergunta que não existe: uma que está dentro e fora da mesma taxa.
+    """
+    conteudo = ARQUIVO_PERGUNTAS_PADRAO.read_text(encoding="utf-8")
+    alterado = tmp_path / "perguntas-teste.md"
+    alterado.write_text(
+        conteudo.replace(
+            "| conta na métrica do #13 | taxa de não-saber — e **nunca** taxa de "
+            "recusa de Atividade |",
+            "| conta na métrica do #13 | taxa de não-saber — e **nunca** taxa de "
+            "recusa de Atividade, e **nunca** taxa de não-saber |",
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(MembrosDivergentesError, match="p1"):
+        conferir_membros(alterado)
+
+
+def test_conferir_membros_falha_quando_uma_linha_traz_exclusao_que_nao_se_espera(
+    tmp_path: Path,
+) -> None:
+    """Uma pergunta que não é a `p1` não tem por que declarar exclusão nenhuma.
+
+    `EXCUSAO_ESPERADA` é o contrato fechado do arquivo, não uma lista de coisas a
+    procurar: a `p1` é a única linha do arquivo que declara duas coisas. Se uma
+    outra ganhar a mesma cláusula, é ou uma exclusão real que este módulo não
+    conhece ou texto a mais no arquivo congelado — e as duas coisas precisam de
+    quem decide, não de um check que passa.
+    """
+    conteudo = ARQUIVO_PERGUNTAS_PADRAO.read_text(encoding="utf-8")
+    alterado = tmp_path / "perguntas-teste.md"
+    alterado.write_text(
+        conteudo.replace(
+            "| conta na métrica do #13 | taxa de não-saber |",
+            "| conta na métrica do #13 | taxa de não-saber — e **nunca** taxa de "
+            "recusa de Atividade |",
+            1,
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(MembrosDivergentesError, match="f1"):
         conferir_membros(alterado)
 
 

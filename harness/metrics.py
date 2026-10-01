@@ -164,6 +164,24 @@ DENOMINADOR_ESPERADO: Final[dict[Metrica, int]] = {
 }
 """Quantas perguntas alimentam cada taxa, em perguntas e não em execuções."""
 
+EXCUSAO_ESPERADA: Final[dict[str, str]] = {
+    "p1": "nunca taxa de recusa de Atividade",
+}
+"""A exclusão que a linha da Pergunta-teste declara, por pergunta, como dado.
+
+Isto é dado e não prosa pela mesma razão que `MEMBROS` é: a fonte da verdade é a
+linha `conta na métrica do #13` que a #6 congelou, e este dicionário é a cópia
+executável dela. Só a `p1` tem exclusão, e é a única do arquivo que declara duas
+coisas na mesma linha — ela nomeia a recusa de Atividade **para tirá-la da conta**,
+e quem lê a linha por palavra solta entende o contrário do que o bloco diz.
+
+Por isso a exclusão é a frase inteira e não a palavra dela: `nunca` sozinho não diz
+de qual taxa, e `taxa de recusa de Atividade` sozinho não diz se entra ou sai. O que
+`conferir_membros` confere é a frase, porque é a frase que a #6 escreveu e porque
+trocar `nunca` por `também` deixa a linha inteira de pé — muda a conta das duas
+taxas e não muda uma palavra do código.
+"""
+
 ORDEM_DA_CADEIA: Final[tuple[str, ...]] = ("s1", "s2", "s3", "s4", "s5")
 """A cadeia especial de `perguntas-teste.md`, na ordem que o Aluno a disse.
 
@@ -510,22 +528,34 @@ def caminho_relativo(caminho: Path) -> str:
         return str(caminho)
 
 
-def metrica_declarada(valor: str) -> Metrica | None:
-    """Lê a métrica que o bloco da Pergunta-teste declara para a #13.
+def metrica_declarada(valor: str) -> tuple[Metrica | None, str]:
+    """Lê a métrica **e a exclusão** que o bloco da Pergunta-teste declara.
 
     O texto é livre por decisão da #6 — é o `conforme quando` que precisa de
-    palavra, o nome da métrica não — e por isso a leitura é pelo começo da frase,
-    não por palavra solta: a linha da `p1` é "taxa de não-saber — e **nunca** taxa
-    de recusa de Atividade", e quem procura a palavra "recusa" nela lê o
-    contrário do que o bloco declara.
+    palavra, o nome da métrica não — e por isso a leitura da métrica é pelo começo
+    da frase, não por palavra solta: a linha da `p1` é "taxa de não-saber — e
+    **nunca** taxa de recusa de Atividade", e quem procura a palavra "recusa" nela
+    lê o contrário do que o bloco declara. A leitura por prefixo continua sendo a
+    que devolve a métrica, e é ela que impede esse erro.
+
+    A exclusão sai do mesmo trecho: tudo o que a linha diz **depois** do nome da
+    taxa, como texto, sem parser de negação em prosa livre. Nenhuma gramática é
+    interpretada aqui, e a frase volta como está — quem decide se ela é a
+    esperada é `conferir_membros`, comparando com `EXCUSAO_ESPERADA`.
+
+    A linha que começa com "nenhuma" volta sem exclusão: "nenhuma das duas taxas" já
+    é a exclusação inteira, e o resto da linha é justificativa — a `p2` explica que
+    pergunta orientadora não é recusa nem Encaminhamento —, não uma segunda métrica.
     """
-    limpo = valor.replace("**", "").strip()
-    if limpo.startswith("taxa de não-saber"):
-        return NAO_SABER
-    if limpo.startswith("taxa de recusa"):
-        return RECUSA_DE_ATIVIDADE
+    limpo = " ".join(valor.replace("**", "").split())
+    for nome, metrica in (
+        ("taxa de não-saber", NAO_SABER),
+        ("taxa de recusa de Atividade", RECUSA_DE_ATIVIDADE),
+    ):
+        if limpo.startswith(nome):
+            return metrica, limpo[len(nome) :].strip()
     if limpo.startswith("nenhuma"):
-        return None
+        return None, ""
     raise MembrosDivergentesError(
         f"a linha `conta na métrica do #13` começou com {limpo!r}, e este módulo só "
         f"reconhece as três formas declaradas: taxa de não-saber, taxa de recusa "
@@ -613,13 +643,59 @@ def blocos_de_perguntas(arquivo: Path = ARQUIVO_PERGUNTAS_PADRAO) -> dict[str, s
         ) from exc
 
 
+def _conferir_exclusoes(exclusoes: Mapping[str, str]) -> None:
+    """A exclusão que cada linha declara é a que este módulo espera dela.
+
+    A metada que importa aqui é a ausência: declarar que a `p1` entra em não-saber
+    é metade do contrato, e a outra metade é declarar que ela **não** entra em
+    recusa. Ler a métrica pelo começo da frase prova a primeira metade e não prova
+    a segunda — a linha da `p1` continuaria passando se alguém trocasse o "nunca"
+    por "também", e a pergunta do prazo passaria a alimentar as duas taxas sem
+    nenhuma linha de código ter mudado. É o AC 4 da #13 na parte em que ele é
+    conferível, e a conferência é por frase e não por parser, porque a frase é o
+    que a #6 congelou.
+
+    São três defeitos e três frases, e o dono dos três é o mesmo — o arquivo
+    congelado. Quem lê a mensagem sabe o que voltar a escrever, e o porquê viaja
+    junto: a `p1` pergunta quando a entrega vence, e isso não é pedir a Atividade.
+    """
+    for id_pergunta, metrica in MEMBROS.items():
+        esperada = EXCUSAO_ESPERADA.get(id_pergunta, "")
+        declarada = exclusoes[id_pergunta]
+
+        if esperada and esperada not in declarada:
+            raise MembrosDivergentesError(
+                f"a linha `conta na métrica do #13` da {id_pergunta} não traz a "
+                f"exclusão que a #6 congelou: esperado {esperada!r} depois do nome "
+                f"da taxa, e a linha diz {declarada!r}. A {id_pergunta} pergunta "
+                f"quando a entrega vence, e perguntar isso não é pedir a Atividade: "
+                f"sem a frase, o arquivo não diz mais que ela fica fora da recusa"
+            )
+        if declarada and not esperada:
+            raise MembrosDivergentesError(
+                f"a linha `conta na métrica do #13` da {id_pergunta} traz a "
+                f"exclusão {declarada!r} e este módulo não espera exclusão dela: "
+                f"ou a exclusão é real e falta o par em `EXCUSAO_ESPERADA`, ou é "
+                f"texto a mais no arquivo congelado"
+            )
+        if metrica is not None and TITULOS[metrica].lower() in declarada:
+            raise MembrosDivergentesError(
+                f"a linha `conta na métrica do #13` da {id_pergunta} exclui a taxa "
+                f"que ela própria declara: {declarada!r}. A exclusão de uma linha é "
+                f"sempre sobre a outra taxa, e a {id_pergunta} não precisa de "
+                f"nenhuma"
+            )
+
+
 def conferir_membros(arquivo: Path = ARQUIVO_PERGUNTAS_PADRAO) -> None:
     """Confere `MEMBROS` contra o arquivo de Perguntas-teste congelado pela #6.
 
     É a verificação da exceção do prazo: `p1` precisa estar em não-saber nos dois
     lugares — no dicionário e na linha que a #6 escreveu antes deste ticket — e a
     "taxa de recusa" que aparece na mesma linha da `p1` é justamente o que não se
-    pode ler como segunda métrica.
+    pode ler como segunda métrica. A outra metade da exceção é conferida em
+    `_conferir_excusoes`: a linha tem que dizer que a pergunta do prazo **não** conta
+    em recusa, e dizer isso é diferente de estar em não-saber.
 
     Também confere a contagem 4 + 3 = 7 perguntas, porque um mapeamento certo com
     uma pergunta faltando produz uma taxa que parece inteira e não é.
@@ -629,10 +705,12 @@ def conferir_membros(arquivo: Path = ARQUIVO_PERGUNTAS_PADRAO) -> None:
     o denominador saber, ou ficaria de fora sem ninguém declarar que foi de fora.
     """
     blocos = blocos_de_perguntas(arquivo)
-    declarados = {
+    declaracoes = {
         id_pergunta: metrica_declarada(valor)
         for id_pergunta, valor in _linhas_da_metrica(blocos).items()
     }
+    declarados = {id_pergunta: metrica for id_pergunta, (metrica, _) in declaracoes.items()}
+    exclusoes = {id_pergunta: exclusao for id_pergunta, (_, exclusao) in declaracoes.items()}
 
     faltando = sorted(set(MEMBROS) - set(declarados))
     sobrando = sorted(set(declarados) - set(MEMBROS))
@@ -654,6 +732,8 @@ def conferir_membros(arquivo: Path = ARQUIVO_PERGUNTAS_PADRAO) -> None:
             f"O arquivo é congelado pela #6: quem muda a conta muda os dois lados, "
             f"com a issue aberta"
         )
+
+    _conferir_exclusoes(exclusoes)
 
     contagens = {
         metrica: sum(1 for valor in MEMBROS.values() if valor == metrica)
@@ -1145,11 +1225,11 @@ def _calcular_uma(
         if veredito.veredito == "nao_avaliavel":
             fora.append(
                 ForaDaConta(
-                    execucao.id,
-                    execucao.repeticao,
-                    "julgada",
-                    veredito.nota,
-                    execucao.resposta_bruta,
+                    id=execucao.id,
+                    repeticao=execucao.repeticao,
+                    motivo="julgada",
+                    detalhe=veredito.nota,
+                    resposta_bruta=execucao.resposta_bruta,
                 )
             )
             continue
@@ -1274,18 +1354,18 @@ def _fora_da_conta(execucao: Execucao) -> ForaDaConta:
     """
     if execucao.resposta_bruta is None:
         return ForaDaConta(
-            execucao.id,
-            execucao.repeticao,
-            "erro",
-            execucao.erro or "o turno falhou sem motivo registrado",
-            None,
+            id=execucao.id,
+            repeticao=execucao.repeticao,
+            motivo="erro",
+            detalhe=execucao.erro or "o turno falhou sem motivo registrado",
+            resposta_bruta=None,
         )
     return ForaDaConta(
-        execucao.id,
-        execucao.repeticao,
-        "cortada",
-        f"a geração parou por falta de espaço (motivo de parada `{PARADA_CORTADA}`)",
-        execucao.resposta_bruta,
+        id=execucao.id,
+        repeticao=execucao.repeticao,
+        motivo="cortada",
+        detalhe=f"a geração parou por falta de espaço (motivo de parada `{PARADA_CORTADA}`)",
+        resposta_bruta=execucao.resposta_bruta,
     )
 
 
