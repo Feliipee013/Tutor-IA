@@ -263,13 +263,20 @@ class Execucao:
 
 @dataclass(frozen=True)
 class Rodada:
-    """O JSON de uma rodada, lido e conferido."""
+    """O JSON de uma rodada, lido e conferido.
+
+    `repeticoes` é o único campo de `condicoes` que o cálculo usa, e ele é
+    validado como inteiro na leitura — um denominador que só é inteiro na
+    hora de multiplicar adia o erro para o meio do cálculo, onde ele vaza
+    `traceback` em vez de virar a falha de rodada que é.
+    """
 
     caminho: str
     sha256: str
     modelo: str
     url: str
     condicoes: dict[str, Any]
+    repeticoes: int
     alocacao: dict[str, Any] | None
     execucoes: tuple[Execucao, ...]
 
@@ -627,6 +634,14 @@ def carregar_rodada(caminho: Path) -> Rodada:
     Falha alto e com o nome do campo faltando, porque rodada é a evidência de tudo
     aqui: uma taxa calculada sobre uma rodada lida pela metade é um número que
     parece exatamente igual ao número certo.
+
+    `condicoes.repeticoes` é obrigatório e inteiro, conferido aqui e não na hora
+    de calcular. A leitura é o último lugar onde o defeito ainda é nomeável: no
+    cálculo ele é só um denominador, e um denominador que não é inteiro aparece
+    como `ValueError` de `int()` no meio da multiplicação — pilha de Python para
+    quem preencheu a folha direito. O `harness/run.py` sempre grava o campo, com
+    o `--repeticoes` já validado como inteiro maior ou igual a 1, então a
+    conferida aqui não fecha porta que a bateria abre.
     """
     if not caminho.is_file():
         raise RodadaInvalidaError(
@@ -650,6 +665,7 @@ def carregar_rodada(caminho: Path) -> Rodada:
         condicoes = bruto.get("condicoes")
         if not isinstance(condicoes, dict):
             raise ErroDasTaxas("o campo `condicoes` não é um objeto")
+        repeticoes = _numero(condicoes, "repeticoes", f"{onde}, em `condicoes`")
         alocacao = bruto.get("alocacao")
         if alocacao is not None and not isinstance(alocacao, dict):
             raise ErroDasTaxas("o campo `alocacao` não é um objeto nem nulo")
@@ -659,6 +675,7 @@ def carregar_rodada(caminho: Path) -> Rodada:
             modelo=_texto(bruto, "modelo", onde),
             url=_texto(bruto, "url", onde),
             condicoes=dict(condicoes),
+            repeticoes=repeticoes,
             alocacao=dict(alocacao) if isinstance(alocacao, dict) else None,
             execucoes=lidas,
         )
@@ -853,8 +870,7 @@ def resumo_em_markdown(relatorio: RelatorioDasTaxas) -> str:
         "## As duas taxas da 1.1",
         "",
         f"- Rodada: `{rodada.caminho}` — sha256 `{rodada.sha256}`",
-        f"- Modelo: `{rodada.modelo}` — {rodada.condicoes.get('repeticoes', '?')} "
-        f"repetições",
+        f"- Modelo: `{rodada.modelo}` — {rodada.repeticoes} repetições",
         f"- Alocação: {_descrever_alocacao(rodada.alocacao)}",
         f"- Julgamento: `{julgamento.caminho}` — {julgamento.julgador}, "
         f"{julgamento.julgado_em}",
@@ -981,11 +997,21 @@ def main(argumentos: Sequence[str] | None = None) -> int:
     ela declara é falha de rodada como as outras, e sai 2 — dizer 1 mandaria a
     pessoa caçar um veredito que está correto.
 
+    A rodada que declara as repetições fora de um inteiro é a mesma coisa, e sai 2
+    pelos dois passos: `carregar_rodada` roda antes do `--preparar`, de modo que a
+    folha não é escrita para uma rodada que o cálculo recusaria. Um `--preparar`
+    que sai 0 numa rodada que não fecha é sucesso falso na pior hora — a pessoa
+    preenche a folha inteira antes de descobrir que a evidência não existe.
+
     Um `traceback` aqui seria pior que a mensagem: quem preenche a folha não vai
     ler pilha de Python para saber o que digitou de errado. Por isso as leituras
     e as escritas convertem `OSError` e `UnicodeDecodeError` no erro do contrato
     que lhes cabe, em vez de deixá-las escapar: um arquivo que não é UTF-8 e um
-    disco cheio são defeitos de arquivo, não de folha nem de bateria.
+    disco cheio são defeitos de arquivo, não de folha nem de bateria. E o
+    denominador é conferido na leitura pelo mesmo motivo: ele é o único número
+    que vem do texto cru da rodada, e um `int()` no meio do cálculo é a forma mais
+    barata de produzir `traceback` num caminho que já prometeu não produzir
+    nenhum.
     """
     try:
         return _executar(montar_argumentos(argumentos))
@@ -1030,9 +1056,14 @@ def _calcular_uma(
     indice: dict[ChaveExecucao, VereditoDeExecucao],
     metrica: Metrica,
 ) -> Taxa:
-    """A taxa de uma métrica, com a execução como denominador."""
+    """A taxa de uma métrica, com a execução como denominador.
+
+    O denominador vem de `rodada.repeticoes`, que `carregar_rodada` já conferiu
+    como inteiro. converter aqui de novo seria conferir o mesmo campo em dois
+    lugares e deixar o segundo ser o que falha.
+    """
     ids = [id_pergunta for id_pergunta, valor in MEMBROS.items() if valor == metrica]
-    repeticoes = int(rodada.condicoes.get("repeticoes", 0) or 0)
+    repeticoes = rodada.repeticoes
 
     acertos: list[Evidencia] = []
     erros: list[Evidencia] = []

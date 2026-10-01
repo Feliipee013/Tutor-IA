@@ -1100,7 +1100,7 @@ def _rodar_como_modulo(*argumentos: str) -> subprocess.CompletedProcess[str]:
 def test_o_comodo_documentado_roda_e_nao_e_um_no_op(tmp_path: Path) -> None:
     """O comando do SETUP.md tem que escrever a folha, e dizer que escreveu.
 
-    Sem o guard de execução o `-m` sai com 0 e não faz nada — e o 0 é, na
+    Sem o guard de execução o `-m` sai com 0 e não faz nada — e o 0 é, no
     contrato deste módulo, "as duas taxas foram gravadas". Quem seguiu o
     documento receberia um sucesso falso e nenhuma folha para preencher.
     """
@@ -1138,6 +1138,69 @@ def test_o_comando_documentado_nao_esconde_a_falha_da_rodada(tmp_path: Path) -> 
     assert resultado.returncode == 2
     assert "FALHA" in resultado.stderr
     assert "Traceback" not in resultado.stderr
+
+
+@pytest.mark.parametrize("repeticoes", ["tres", 3.5, True, None, {}])
+def test_main_sai_com_dois_quando_as_repeticoes_declaradas_nao_sao_inteiras(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    repeticoes: object,
+) -> None:
+    """O denominador que não é inteiro é falha de rodada, e sai 2 sem `traceback`.
+
+    O `repeticoes` é o único número que este módulo tira do texto cru da rodada,
+    e ele é lido no meio do cálculo. Converte-lo ali produz um `ValueError` de
+    `int()` que escapa do `except ErroDasTaxas` de `main`: a pessoa que preencheu
+    a folha recebe uma pilha de Python e o código 1 — que pela tabela do
+    `SETUP.md` significa "a folha está errada". A folha está certa; quem está
+    errado é o `harness/run.py` que gravou aquilo.
+
+    O `True` entra na lista de propósito: em Python `True` é instância de `int`,
+    e sem a guarda de `bool` um `repeticoes: true` na rodada entraria como 1 —
+    medindo a bateria inteira com denominador 1 sem reclamar.
+
+    Nenhuma folha é escrita aqui, de propósito. Sem ela, a única falha possível
+    seria a do próprio `repeticoes`: se a ordem alguma vez inverter e o comando
+    passar a olhar a folha antes da rodada, o código vira 1 e o teste falha. O 2
+    é a prova de que a rodada foi conferida primeiro.
+    """
+    documento = _rodada()
+    documento["condicoes"]["repeticoes"] = repeticoes
+    rodada = _gravar_rodada(tmp_path / "rodada.json", documento)
+
+    codigo = main(["--rodada", str(rodada)])
+
+    erro = capsys.readouterr().err
+    assert codigo == 2
+    assert "FALHA" in erro
+    assert "repeticoes" in erro
+    assert "Traceback" not in erro
+
+
+def test_o_comando_documentado_rejeita_a_rodada_que_nao_declara_repeticoes(
+    tmp_path: Path,
+) -> None:
+    """`--preparar` tem de recusar a rodada que o cálculo vai recusar.
+
+    `carregar_rodada` roda antes do ramo de `--preparar`, então a folha não é
+    escrita para uma rodada cujo denominador não fecha. Sem esta ordem, o passo 1
+    do `SETUP.md` sairia com 0 e entregaria uma folha para preencher — e o 0 é,
+    no contrato deste módulo, "as duas taxas foram gravadas". Quem preenchesse
+    receberia sucesso falso e só descobriria o defeito depois de julgar as 21
+    linhas.
+    """
+    documento = _rodada()
+    documento["condicoes"]["repeticoes"] = "tres"
+    rodada = _gravar_rodada(tmp_path / "baseline-1.1.json", documento)
+    folha = tmp_path / "baseline-1.1.julgamento.json"
+
+    resultado = _rodar_como_modulo("--rodada", str(rodada), "--preparar")
+
+    assert resultado.returncode == 2
+    assert "FALHA" in resultado.stderr
+    assert "Traceback" not in resultado.stderr
+    assert not folha.exists()
+    assert not (tmp_path / "baseline-1.1.metricas.json").exists()
 
 
 def test_main_prepara_a_folha_e_sai_com_zero(
