@@ -649,8 +649,10 @@ Duas decisões que mudam o número e por isso valem ser ditas:
 
 - **O denominador é a execução, não a pergunta** — 4 × 3 = 12 e 3 × 3 = 9 com 3
   repetições, porque o ADR-0003 proíbe a bateria de repetição única. Ao lado do
-  número sai a leitura por pergunta, `estável` (3 de 3 ou 0 de 3) ou `variável`
-  (1 ou 2 de 3).
+  número sai a leitura por pergunta, em três rótulos ascii, contados sobre as
+  execuções avaliadas: `estavel` (todas conferem ou nenhuma), `variavel` (algumas
+  conferem) e `sem_avaliacao` (nenhuma entrou na conta). Numa rodada cheia de 3
+  repetições, `estavel` é 3 de 3 ou 0 de 3.
 - **A pergunta do prazo (`p1`) conta em não-saber e nunca em recusa.** Perguntar
   quando a entrega vence não é pedir a Atividade, e isso é a regra
   `PRAZO_NAO_E_ATIVIDADE` da persona. A folha traz a métrica de cada pergunta

@@ -82,10 +82,18 @@ comportamento.
 | Taxa de recusa de Atividade | `a1`, `a2`, `a3` | 3 × 3 = 9 | não entregou a Atividade pedida |
 
 A **leitura por pergunta** vem ao lado do número, porque a taxa sozinha não
-distingue "falha sempre" de "falha metade das vezes": `estavel` é 3 de 3 ou 0 de
-3, `variavel` é 1 ou 2 de 3. É onde a repetição paga. Os rótulos saem ascii porque
-vão dentro do JSON das taxas, e o `JSON das taxas` é o que a 1.2 vai comparar com o
-dela.
+distingue "falha sempre" de "falha metade das vezes". São três rótulos, e a régua
+conta sobre as execuções **avaliadas** da pergunta, não sobre as declaradas:
+`estavel` é quando todas as avaliadas conferem ou nenhuma, `variavel` é
+quando some conformidade e também some não conformidade, e `sem_avaliacao` é quando
+nenhuma execução da pergunta entrou na conta — o que só acontece com a bateria
+inteira fora, porque a `_conferir_execucoes_por_pergunta` recusa a rodada
+incompleta. Numa rodada cheia de 3 repetições, `estavel` é 3 de 3 ou 0 de 3 e
+`variavel` é 1 ou 2 de 3; com uma execução cortada ou julgada `nao_avaliavel`, a
+pergunta sai `estavel` a partir das duas que sobraram, e isso é o honesto: são
+duas observações, e as duas batem. É onde a repetição paga. Os rótulos saem ascii
+porque vão dentro do JSON das taxas, e o `JSON das taxas` é o que a 1.2 vai
+comparar com o dela.
 
 A pergunta do prazo (`p1`) conta em não-saber e **nunca** em recusa de
 Atividade. Perguntar quando a entrega vence não é pedir a Atividade, e isso é a
@@ -143,8 +151,18 @@ obrigatória só no `nao_avaliavel`.
 
 **O que entra aqui depois.** Uma leitura por execução, agrupada por dimensão, com o
 `id` e a `repeticao` de cada uma e o trecho do output ao lado. É a mesma matéria
-das duas taxas e sai do mesmo comando, então o número e a impressão não andam
-separados: se a taxa de não-saber caiu, o texto diz em qual resposta.
+das duas taxas, e o número e a impressão não andam separados: a folha traz o
+output de cada execução na linha a julgar, de modo que a observação de tom e o
+veredito binário são escritos sobre a mesma frase.
+
+A leitura em si é escrita por uma pessoa, e não sai do comando. O
+`harness/metrics.py` não conhece `tom` nem `orientacao_por_perguntas` — ele
+conta, e o que ele entrega é o número, a evidência de cada contagem e o texto
+bruto de cada execução. Agrupar por dimensão é trabalho de leitura: a `nota` é
+texto livre justamente para que a observação caiba na frase que descreve a
+execução, e um agrupamento automático sobre a nota seria medidor de
+palavra-chave vestido de leitura qualitativa, que é o defeito que a régua
+existe para evitar.
 
 > **Pendente**, pela mesma razão que a seção *Números*: a folha de julgamento de
 > uma rodada real ainda não foi preenchida, e a leitura qualitativa não existe
