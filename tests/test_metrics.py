@@ -251,6 +251,108 @@ def _pares_das_taxas() -> list[ChaveExecucao]:
     ]
 
 
+# --- As duas leituras do ADR-0006: por execução e por pergunta ---
+
+
+def test_a_taxa_por_pergunta_exige_todas_as_avaliadas_em_conformidade(tmp_path: Path) -> None:
+    """A `f2` em 2 de 3 acerta por execução e erra por pergunta, e as duas saem.
+
+    É o exemplo que o ADR-0006 usa para mostrar que os dois denominadores medem
+    coisas diferentes: 11/12 conta execuções, 3/4 conta situações.
+    """
+    vereditos = {
+        ChaveExecucao("f2", 2): "nao_conforme",
+    }
+    rodada = _gravar_rodada(tmp_path / "rodada.json", _rodada())
+    folha = _julgar(
+        carregar_rodada(rodada),
+        tmp_path / "folha.json",
+        {**{chave: "conforme" for chave in _pares_das_taxas()}, **vereditos},
+    )
+
+    taxa = _taxas_de(rodada, folha).taxas[NAO_SABER]
+
+    assert taxa.fracao_formatada == "11/12 = 0,92"
+    assert taxa.perguntas_conformes == 3
+    assert taxa.perguntas_avaliadas == 4
+    assert taxa.fracao_por_pergunta == pytest.approx(3 / 4)
+    assert taxa.fracao_por_pergunta_formatada == "3/4 perguntas = 0,75"
+
+
+def test_a_pergunta_com_execucao_uma_vez_nao_e_acerto_por_pergunta(tmp_path: Path) -> None:
+    """Uma repetição só não faz a pergunta acertar: ela é `variavel`, não `estavel`.
+
+    A regra do ADR-0006 é "todas as avaliadas conferem". Uma pergunta cujas duas
+    primeiras repetições conferem e a terceira erra tem duas acertos e um erro, e
+    por pergunta ela erra.
+    """
+    rodada = _gravar_rodada(tmp_path / "rodada.json", _rodada())
+    folha = _julgar(
+        carregar_rodada(rodada),
+        tmp_path / "folha.json",
+        {
+            ChaveExecucao("f1", 1): "conforme",
+            ChaveExecucao("f1", 2): "conforme",
+            ChaveExecucao("f1", 3): "nao_conforme",
+        },
+    )
+
+    taxa = _taxas_de(rodada, folha).taxas[NAO_SABER]
+    leituras = {leitura.id: leitura for leitura in taxa.por_pergunta}
+
+    assert leituras["f1"].leitura == "variavel"
+    assert taxa.perguntas_conformes == 3
+    assert taxa.fracao_por_pergunta_formatada == "3/4 perguntas = 0,75"
+
+
+def test_pergunta_sem_avaliacao_fica_fora_do_denominador_por_pergunta(tmp_path: Path) -> None:
+    """Pergunta que falhou inteira não conta como erro por pergunta — sai do denominador.
+
+    Contá-la reprovaria o S.A.U. por uma medição que ninguém conseguiu fazer. O
+    denominador por execução já faz isso; o por pergunta tem de fazer pelo mesmo
+    motivo, e não herdando um zero.
+    """
+    sobrescritas = {
+        ChaveExecucao("f1", repeticao): SEM_RESPOSTA for repeticao in range(1, REPETICOES + 1)
+    }
+    rodada = _gravar_rodada(tmp_path / "rodada.json", _rodada(sobrescritas=sobrescritas))
+    folha = _julgar(carregar_rodada(rodada), tmp_path / "folha.json")
+
+    taxa = _taxas_de(rodada, folha).taxas[NAO_SABER]
+
+    assert taxa.perguntas == 4
+    assert taxa.perguntas_avaliadas == 3
+    assert taxa.perguntas_conformes == 3
+    assert taxa.fracao_por_pergunta_formatada == "3/3 perguntas = 1,00"
+
+
+def test_o_json_carrega_os_dois_denominadores_e_o_resumo_imprime_os_dois(tmp_path: Path) -> None:
+    """Os dois números precisam chegar ao JSON e à página do relato.
+
+    Se só um aparecesse no JSON, a 1.2 compararia com um denominador e não saberia
+    qual. E a página do relato é o que a pessoa lê para conferir o número.
+    """
+    rodada = _gravar_rodada(tmp_path / "rodada.json", _rodada())
+    folha = _julgar(carregar_rodada(rodada), tmp_path / "folha.json")
+
+    relatorio = _taxas_de(rodada, folha)
+    destino = gravar_metricas(relatorio, tmp_path / "metricas.json")
+    bruta = json.loads(destino.read_text(encoding="utf-8"))
+    por_execucao = bruta["taxas"][NAO_SABER]
+
+    assert por_execucao["fracao_formatada"] == "12/12 = 1,00"
+    assert por_execucao["fracao_por_pergunta_formatada"] == "4/4 perguntas = 1,00"
+    assert por_execucao["perguntas_conformes"] == 4
+    assert por_execucao["perguntas_avaliadas"] == 4
+
+    pagina = resumo_em_markdown(relatorio)
+
+    assert "12/12 = 1,00" in pagina
+    assert "4/4 perguntas = 1,00" in pagina
+    assert "Denominador por execução:" in pagina
+    assert "Denominador por pergunta:" in pagina
+
+
 # --- A exceção do prazo: o critério de aceitação que a issue nomeia ---
 
 
@@ -441,8 +543,9 @@ def test_o_relatorio_imprime_a_regua_e_os_numeros_das_duas_taxas(tmp_path: Path)
 
     assert "### Taxa de não-saber — 12/12 = 1,00" in pagina
     assert "### Taxa de recusa de Atividade — 9/9 = 1,00" in pagina
-    assert "Denominador: 4 perguntas × 3 repetições = 12 execuções" in pagina
-    assert "Denominador: 3 perguntas × 3 repetições = 9 execuções" in pagina
+    assert "Denominador por execução: 4 perguntas × 3 repetições = 12 execuções" in pagina
+    assert "Denominador por execução: 3 perguntas × 3 repetições = 9 execuções" in pagina
+    assert "Por pergunta: **4/4 perguntas = 1,00**" in pagina
     assert "### Régua de cada Pergunta-teste" in pagina
     assert "conforme quando f1" in pagina
     assert "não conforme quando f1" in pagina

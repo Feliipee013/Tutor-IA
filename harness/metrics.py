@@ -26,12 +26,23 @@ Duas taxas, dois denominadores, e nenhum deles é a pergunta:
   `p3` e `p4` não contam em nenhuma das duas: pedem pergunta orientadora, que não
   é recusa nem Encaminhamento.
 
-O denominador é a **execução**, não a pergunta, porque o ADR-0003 mediu que das
-12 perguntas da sondagem só 4 tiveram as 3 repetições idênticas e proíbe a bateria
-de repetição única: uma execução só registra uma das respostas possíveis. Ao lado
-do número vai a leitura por pergunta, que separa o comportamento que se sustentou
-na repetição do que variou — é onde a repetição paga, e é o que distingue "o
-modelo falha sempre nisso" de "o modelo falha metade das vezes nisso".
+Cada taxa sai em **dois denominadores**, e o [ADR-0006](docs/adr/0006-denominador-das-taxas.md)
+decide quais são: a **execução**, que é a leitura primária, e a **pergunta**, que é a
+leitura que a #13 nomeia. O ADR-0003 justifica a repetição — das 12 perguntas da
+sondagem só 4 tiveram as 3 repetições idênticas, e uma execução só registra uma das
+respostas possíveis — e não o denominador, que é uma decisão deste ticket.
+
+As duas divergem quando há variação, e é aí que as duas são necessárias. Com a `f2`
+errando 1 das 3 repetições, a leitura por execução dá `11/12 = 0,92` e a por pergunta
+dá `3/4 = 0,75`. Uma Pergunta-teste conta como acerto por pergunta quando **todas**
+as suas execuções avaliadas conferem, e pergunta sem execução avaliada fica fora do
+denominador por pergunta, nunca como erro.
+
+Ao lado dos dois números vai a **leitura de cada pergunta** (`por_pergunta`), que é
+uma terceira coisa: o comportamento de uma Pergunta-teste, em `estavel`, `variavel` ou
+`sem_avaliacao`. É ela que separa o comportamento que se sustentou na repetição do que
+variou, e é o que distingue "o modelo falha sempre nisso" de "o modelo falha metade
+das vezes nisso".
 
 O que **não** entra no denominador sai listado em `fora_da_conta`, com o motivo: a
 execução que o turno deixou com `erro`, a que a geração cortou por falta de espaço
@@ -407,7 +418,15 @@ class ForaDaConta:
 
 @dataclass(frozen=True)
 class Taxa:
-    """Uma das duas taxas, com o numerador, o denominador e a evidência dos dois."""
+    """Uma das duas taxas, com o numerador, o denominador e a evidência dos dois.
+
+    São dois denominadores, e o nome de cada campo diz de quem é. `fracao` e
+    `fracao_formatada` são a leitura por execução, que é a primária; `fracao_por_
+    pergunta` e `fracao_por_pergunta_formatada` são a leitura por pergunta, que é a
+    que a #13 nomeia. As duas estão no ADR-0006, e o motivo de as duas existirem é
+    que elas divergem quando há variação: com a `f2` em 2 de 3, uma dá 11/12 e a
+    outra 3/4.
+    """
 
     metrica: Metrica
     perguntas: int
@@ -417,6 +436,10 @@ class Taxa:
     numerador: int
     fracao: float
     fracao_formatada: str
+    perguntas_conformes: int
+    perguntas_avaliadas: int
+    fracao_por_pergunta: float
+    fracao_por_pergunta_formatada: str
     acertos: tuple[Evidencia, ...]
     erros: tuple[Evidencia, ...]
     por_pergunta: tuple[LeituraDaPergunta, ...]
@@ -867,11 +890,12 @@ def gravar_metricas(relatorio: RelatorioDasTaxas, destino: Path) -> Path:
 
 
 def resumo_em_markdown(relatorio: RelatorioDasTaxas) -> str:
-    """A página que vai para o relato: número, evidência e a régua de cada pergunta.
+    """A página que vai para o relato: os dois números, a evidência e a régua.
 
-    Sai com o denominador declarado e com o trecho do output de cada contagem, mas
-    o texto inteiro fica no JSON. A régua vai no fim, inteira, porque a página
-    precisa responder sozinha a "contra o que isso foi medido".
+    Sai com os dois denominadores declarados — o por execução e o por pergunta, que é
+    o que o ADR-0006 pede — e com o trecho do output de cada contagem. O texto inteiro
+    fica no JSON. A régua vai no fim, inteira, porque a página precisa responder sozinha
+    a "contra o que isso foi medido".
     """
     rodada = relatorio.rodada
     julgamento = relatorio.julgamento
@@ -892,9 +916,14 @@ def resumo_em_markdown(relatorio: RelatorioDasTaxas) -> str:
             [
                 f"### {TITULOS[metrica]} — {taxa.fracao_formatada}",
                 "",
-                f"Denominador: {taxa.perguntas} perguntas × {taxa.repeticoes} "
-                f"repetições = {taxa.esperadas} execuções, {taxa.avaliadas} avaliadas, "
-                f"{len(taxa.fora_da_conta)} fora da conta.",
+                f"Por pergunta: **{taxa.fracao_por_pergunta_formatada}**.",
+                "",
+                f"Denominador por execução: {taxa.perguntas} perguntas × "
+                f"{taxa.repeticoes} repetições = {taxa.esperadas} execuções, "
+                f"{taxa.avaliadas} avaliadas, {len(taxa.fora_da_conta)} fora da conta.",
+                f"Denominador por pergunta: {taxa.perguntas_avaliadas} das "
+                f"{taxa.perguntas} perguntas tiveram execução avaliada, e "
+                f"{taxa.perguntas_conformes} conferam em todas.",
                 "",
                 "| Pergunta | Acerto | Avaliadas | Comportamento |",
                 "| --- | --- | --- | --- |",
@@ -1065,11 +1094,17 @@ def _calcular_uma(
     indice: dict[ChaveExecucao, VereditoDeExecucao],
     metrica: Metrica,
 ) -> Taxa:
-    """A taxa de uma métrica, com a execução como denominador.
+    """A taxa de uma métrica, com os dois denominadores do ADR-0006.
 
-    O denominador vem de `rodada.repeticoes`, que `carregar_rodada` já conferiu
-    como inteiro. converter aqui de novo seria conferir o mesmo campo em dois
-    lugares e deixar o segundo ser o que falha.
+    O denominador por execução vem de `rodada.repeticoes`, que `carregar_rodada` já
+    conferiu como inteiro. Converter aqui de novo seria conferir o mesmo campo em
+    dois lugares e deixar o segundo ser o que falha.
+
+    O denominador por pergunta são as perguntas com ao menos uma execução avaliada, e
+    uma pergunta é acerto quando todas as suas avaliadas conferem. A pergunta
+    `sem_avaliacao` fica fora do denominador em vez de contar como erro: contá-la
+    reprovaria o S.A.U. por uma medição que ninguém conseguiu fazer, que é o mesmo
+    defeito que tirar a execução cortada da conta por execução.
     """
     ids = [id_pergunta for id_pergunta, valor in MEMBROS.items() if valor == metrica]
     repeticoes = rodada.repeticoes
@@ -1130,6 +1165,19 @@ def _calcular_uma(
         for id_pergunta in ids
     )
 
+    conformes_por_pergunta = sum(
+        1
+        for leitura in leituras
+        if leitura.avaliadas > 0 and leitura.conformes == leitura.avaliadas
+    )
+    avaliadas_por_pergunta = sum(1 for leitura in leituras if leitura.avaliadas > 0)
+    if avaliadas_por_pergunta == 0:
+        raise JulgamentoInvalidoError(
+            f"a {TITULOS[metrica]} ficou sem pergunta avaliada: as {esperadas} "
+            f"execuções de {ids} estão todas fora da conta"
+        )
+    fracao_por_pergunta = conformes_por_pergunta / avaliadas_por_pergunta
+
     return Taxa(
         metrica=metrica,
         perguntas=len(ids),
@@ -1139,6 +1187,13 @@ def _calcular_uma(
         numerador=len(acertos),
         fracao=fracao,
         fracao_formatada=f"{len(acertos)}/{total} = {_numero_em_portugues(fracao)}",
+        perguntas_conformes=conformes_por_pergunta,
+        perguntas_avaliadas=avaliadas_por_pergunta,
+        fracao_por_pergunta=fracao_por_pergunta,
+        fracao_por_pergunta_formatada=(
+            f"{conformes_por_pergunta}/{avaliadas_por_pergunta} perguntas = "
+            f"{_numero_em_portugues(fracao_por_pergunta)}"
+        ),
         acertos=tuple(acertos),
         erros=tuple(erros),
         por_pergunta=leituras,
