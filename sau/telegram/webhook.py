@@ -90,9 +90,9 @@ instantes") antes da recusa, e a recusa chega logo em seguida. É o que a issue 
 — recusar educado, e não espera silenciosa."""
 
 TEXTO_BOAS_VINDAS = (
-    "Olá! Eu sou o S.A.U., o assistente virtual de apoio aos Alunos da Unopar. "
-    "Pergunte sobre prazos, formato de trabalhos, materiais ou o ambiente virtual. "
-    "Se eu não souber a resposta, te encaminho a um Tutor humano."
+    "Olá! Eu sou o S.A.U., o assistente virtual que orienta sobre processos de "
+    "estágio. Pergunte sobre prazos, documentação, contratos, seguro ou a ordem das "
+    "etapas. Se eu não souber a resposta, te encaminho à Coordenação de Estágios."
 )
 """As boas-vindas do `/start`: fixas e sem o modelo.
 

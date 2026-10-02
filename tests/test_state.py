@@ -91,14 +91,14 @@ def test_o_historico_de_uma_aluna_nao_aparece_na_conversa_da_outra(
     mensagens passaria por quase todo o resto da suíte — a falha só apareceria na
     resposta do modelo, ou seja, tarde demais para ser fácil.
     """
-    _troca(registro, _ALUNA, "qual o prazo da Atividade 2?", "vence dia 12")
-    _troca(registro, _OUTRA_ALUNA, "e a de inglês?", "vence dia 19")
+    _troca(registro, _ALUNA, "qual o prazo do relatório final?", "vence dia 12")
+    _troca(registro, _OUTRA_ALUNA, "e a da matrícula?", "vence dia 19")
 
     da_aluna = registro.historico(_ALUNA)
     da_outra = registro.historico(_OUTRA_ALUNA)
 
-    assert [m.texto for m in da_aluna] == ["qual o prazo da Atividade 2?", "vence dia 12"]
-    assert [m.texto for m in da_outra] == ["e a de inglês?", "vence dia 19"]
+    assert [m.texto for m in da_aluna] == ["qual o prazo do relatório final?", "vence dia 12"]
+    assert [m.texto for m in da_outra] == ["e a da matrícula?", "vence dia 19"]
     assert all(m.texto != "vence dia 12" for m in da_outra)
 
 
@@ -111,7 +111,7 @@ def test_a_mensagem_do_aluno_e_a_do_sau_sao_gravadas_pelo_papel_certo(
     Aluno como se ele a tivesse dito, e o histórico inteiro viraria uma alucinação
     estrutural. É por isso que `Mensagem.papel` é `Literal` e não `str`.
     """
-    _troca(registro, _ALUNA, "qual o prazo da Atividade 2?", "vence dia 12")
+    _troca(registro, _ALUNA, "qual o prazo do relatório final?", "vence dia 12")
 
     assert [m.papel for m in registro.historico(_ALUNA)] == ["aluno", "sau"]
 
@@ -143,13 +143,13 @@ def test_a_conversa_sobrevive_a_um_reinicio_do_servico(tmp_path: Path) -> None:
     caminho = str(tmp_path / "conversas.db")
 
     primeiro = RegistroDeConversas(caminho)
-    _troca(primeiro, _ALUNA, "qual o prazo da Atividade 2?", "vence dia 12")
+    _troca(primeiro, _ALUNA, "qual o prazo do relatório final?", "vence dia 12")
     primeiro.fechar()
 
     segundo = RegistroDeConversas(caminho)
     try:
         assert [m.texto for m in segundo.historico(_ALUNA)] == [
-            "qual o prazo da Atividade 2?",
+            "qual o prazo do relatório final?",
             "vence dia 12",
         ]
     finally:
@@ -169,14 +169,14 @@ def test_a_conversa_reaberta_no_arquivo_e_a_mesma_e_nao_outra(
     caminho = str(tmp_path / "conversas.db")
 
     primeiro = RegistroDeConversas(caminho)
-    _troca(primeiro, _ALUNA, "qual o prazo da Atividade 2?", "vence dia 12")
+    _troca(primeiro, _ALUNA, "qual o prazo do relatório final?", "vence dia 12")
     primeiro.fechar()
 
     segundo = RegistroDeConversas(caminho)
     try:
         conversa = segundo.conversa(_ALUNA)
         assert [m.texto for m in conversa.historico()] == [
-            "qual o prazo da Atividade 2?",
+            "qual o prazo do relatório final?",
             "vence dia 12",
         ]
     finally:
@@ -224,7 +224,7 @@ def test_conversa_inativa_expira_e_sai_da_memoria(
     O relógio é o do teste, e por isso não há espera: `avancar(31)` é o que faz os
     trinta minutos do TTL passarem.
     """
-    _troca(registro, _ALUNA, "qual o prazo da Atividade 2?", "vence dia 12")
+    _troca(registro, _ALUNA, "qual o prazo do relatório final?", "vence dia 12")
     relogio.avancar(31)
 
     vencidas = registro.expirar()
@@ -244,11 +244,11 @@ def test_conversa_que_ainda_esta_no_ttl_sobrevive(
     continua com a conversa quando volta, que é a diferença entre um produto e um
     cadastro de mensagens.
     """
-    _troca(registro, _ALUNA, "qual o prazo da Atividade 2?", "vence dia 12")
+    _troca(registro, _ALUNA, "qual o prazo do relatório final?", "vence dia 12")
     relogio.avancar(29)
 
     assert registro.expirar() == []
-    assert [m.texto for m in registro.historico(_ALUNA)][0] == "qual o prazo da Atividade 2?"
+    assert [m.texto for m in registro.historico(_ALUNA)][0] == "qual o prazo do relatório final?"
 
 
 def test_a_varredura_apaga_so_a_conversa_vencida(
@@ -264,13 +264,16 @@ def test_a_varredura_apaga_so_a_conversa_vencida(
     turno da segunda Aluna que varre, e o resultado é o mesmo. Por isso a afirmação é
     feita logo depois do turno, e não antes.
     """
-    _troca(registro, _ALUNA, "qual o prazo da Atividade 2?", "vence dia 12")
+    _troca(registro, _ALUNA, "qual o prazo do relatório final?", "vence dia 12")
     relogio.avancar(31)
-    _troca(registro, _OUTRA_ALUNA, "e a de inglês?", "vence dia 19")
+    _troca(registro, _OUTRA_ALUNA, "e a da matrícula?", "vence dia 19")
 
     assert registro.historico(_ALUNA) == []
     assert _ALUNA not in registro.conversas_vivas
-    assert [m.texto for m in registro.historico(_OUTRA_ALUNA)] == ["e a de inglês?", "vence dia 19"]
+    assert [m.texto for m in registro.historico(_OUTRA_ALUNA)] == [
+        "e a da matrícula?",
+        "vence dia 19",
+    ]
     assert registro.conversas_vivas == [_OUTRA_ALUNA]
 
 
@@ -286,7 +289,7 @@ def test_a_varredura_acontece_no_caminho_do_turno(
     Sem esta afirmação, uma implementação com `expirar()` exposto e nunca chamado
     passaria toda a suíte — o registro ficaria de pé, sem ninguém chamando a limpeza.
     """
-    _troca(registro, _ALUNA, "qual o prazo da Atividade 2?", "vence dia 12")
+    _troca(registro, _ALUNA, "qual o prazo do relatório final?", "vence dia 12")
     relogio.avancar(31)
 
     registro.conversa(_OUTRA_ALUNA)

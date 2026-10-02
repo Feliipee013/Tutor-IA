@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "sau"
 version = "0.1.0"
-description = "S.A.U. - Sistema de Apoio Unopar (Tutor Virtual EaD)"
+description = "S.A.U. - Sistema de Apoio Unopar (agente de orientação de estágios)"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [

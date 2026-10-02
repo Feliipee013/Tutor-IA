@@ -113,7 +113,7 @@ a seção** e o chunking vira uma escolha da equipe, não uma heurística.
 | Caminho | O que faz | Ticket | Existe |
 | --- | --- | --- | --- |
 | `harness/run.py` | roda as 10 Perguntas-teste, 3 repetições cada, e grava os outputs brutos com as condições da medição | #12 | sim |
-| `harness/metrics.py` | taxa de não-saber e taxa de recusa de Atividade, com a folha de julgamento humano e a evidência de cada contagem | #13 | sim |
+| `harness/metrics.py` | taxa de não-saber e taxa de recusa de Atividade, com a folha de julgamento humano e a evidência de cada contagem. Os dois nomes são do instrumento, amarrados às linhas `conta na métrica do #13` de `perguntas-teste/perguntas-teste.md` | #13 | sim |
 | `harness/casos.py` | os cinco casos de alucinação, com o motivo do erro de cada um | P2 | não |
 
 O harness é a régua das duas sprints: a 1.2 roda **o mesmo** harness sobre

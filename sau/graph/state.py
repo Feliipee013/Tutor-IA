@@ -71,8 +71,8 @@ segura o registro, e o TTL da conversa é quem decide quando ele some.
 MINUTOS_POR_TTL_PADRAO = 30
 """Quanto tempo uma conversa fica sem ser tocada antes de ser apagada.
 
-Trinta minutos é a escala do plantão da madrugada: uma pausa de trinta minutos
-entre duas perguntas é conversa nova, não a mesma conversa retomada. O TTL é o que
+Trinta minutos é a escala de uma dúvida pontual de processo: uma pausa de trinta
+minutos entre duas perguntas é conversa nova, não a mesma conversa retomada. O TTL é o que
 faz o arquivo não crescer sem limite — sem ele, `docker compose down` sem `-v`
 seria a única limpeza do sistema.
 """
@@ -314,8 +314,8 @@ class RegistroDeConversas:
         A chave é o `chat_id` do Telegram e não o `from.id`, e é o ADR-0001 quem
         decide: o estado é por conversa, não por pessoa. O limite conhecido é o
         grupo — duas pessoas num grupo compartilhado compartilham o estado, e o
-        S.A.U. conversa com a turma em vez de com uma pessoa. No plantão da
-        madrugada, que é conversa particular, o limite não aparece.
+        S.A.U. conversa com a turma em vez de com uma pessoa. Na conversa
+        particular, que é o canal do Aluno, o limite não aparece.
 
         Chamar isto também é o que **varre as conversas inativas**. A limpeza é
         oportunista e acontece no caminho do turno, e não num cron: o ADR-0001

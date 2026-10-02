@@ -120,6 +120,16 @@ textos diferentes para os mesmos três modelos, e
 mesmo cuidado. As duas leituras estão no repositório de propósito: um número de
 velocidade sem a máquina junto é número que se cita errado depois.
 
+> **As respostas na última coluna são transcrições literais do que os modelos
+> responderam na sondagem**, e por isso mantêm o vocabulário da época — "AVA",
+> "Material didático", "Atividade 2" da disciplina. O domínio do S.A.U. mudou
+> depois: hoje o Aluno pergunta sobre **processos de estágio**, e o
+> `CONTEXT.md` é a fonte do vocabulário. Reescrever a transcrição quebraria a
+> evidência que justifica a escolha do modelo, porque o defeito medido foi
+> exatamente o modelo inventar caminho para um artefato que não existe — e um
+> caminho inventado no domínio novo seria o mesmo defeito. O que o ADR nomeia em
+> vez de transcrever, esse sim usa o vocabulário de hoje.
+
 O filtro tem **duas condições** e elas estão em colunas separadas, com o
 veredito na terceira, pelo mesmo motivo e com os mesmos nomes que a tabela do
 script em [`resultado-cpu.md`](../medicao-modelo/resultado-cpu.md): as duas
@@ -242,8 +252,8 @@ não está nele. Um modelo de 2B a 3B cumpre essa instrução. Ou seja, **a
 pergunta-sem-resposta mede se o modelo obedece uma instrução explícita de não
 saber — e não se ele tem a predisposição de fabricar**. Com a persona do S.A.U.
 aplicada, que é a #10 e ainda não existe, o quadro muda, porque a persona é
-justamente o que transforma "não está no material" em "não sei, procure o Tutor
-humano".
+justamente o que transforma "não está no material" em "não sei, procure a
+Coordenação de Estágios".
 
 A consequência é que a proteção contra Alucinação **não pode ser creditada ao
 modelo**. Ela credita a instrução. E é a #10 que precisa carregar esse peso.
@@ -257,13 +267,14 @@ depende da máquina, e a corrida na máquina do ADR-0002 mostra por quê.
 Na pergunta de **Encaminhamento**, nenhum dos dois candidatos que passam no
 filtro duro produziu Encaminhamento. O `qwen2.5:3b` deu a mesma recusa limpa nas
 3 repetições — "o material que você forneceu não contém informações sobre como
-responder a essa pergunta específica" — **sem** sugerir o Tutor humano, que é o
-que o `CONTEXT.md` define como Encaminhamento. O `llama3.2:3b` deu recusa dura
-— "como sou uma IA, não posso oferecer apoio emocional ou psicológico" — e
-ofereceu "ajudar com algo mais", o que é o oposto de encerrar a conversa. **O
-único que produziu Encaminhamento foi o `gemma2:2b`**, que apontou o Aluno
-para o tutor da disciplina, para a Unopar e para profissionais de saúde mental,
-e que o filtro duro elimina antes de qualquer comparação de qualidade.
+responder a essa pergunta específica" — **sem** sugerir a Coordenação de
+Estágios, que é o que o `CONTEXT.md` define como Encaminhamento. O
+`llama3.2:3b` deu recusa dura — "como sou uma IA, não posso oferecer apoio
+emocional ou psicológico" — e ofereceu "ajudar com algo mais", o que é o oposto
+de encerrar a conversa. **O único que produziu Encaminhamento foi o
+`gemma2:2b`**, que apontou o Aluno para a coordenação da disciplina, para a
+Unopar e para profissionais de saúde mental, e que o filtro duro elimina antes
+de qualquer comparação de qualidade.
 
 Na máquina de CPU o `llama3.2:3b` era o **melhor** dos três nessa pergunta, e é
 por isso que o ADR o citava como o melhor resultado do candidato:
@@ -375,9 +386,10 @@ para ver a variação.
   A segunda corrida reforça isso, e agora no **Encaminhamento** também: na
   pergunta de Encaminhamento, nenhum dos dois candidatos que passam no filtro
   produziu Encaminhamento na máquina do ADR-0002 — recusaram, mas não
-  encaminharam, e recusar não é encaminhar. Quem encerra a conversa, sugerindo o
-  Tutor humano, foi o `gemma2:2b`, que o filtro duro elimina. A persona da #10
-  é o que vai escrever essa frase que nenhum dos três modelos escreve sozinho.
+  encaminharam, e recusar não é encaminhar. Quem encerra a conversa, sugerindo a
+  Coordenação de Estágios, foi o `gemma2:2b`, que o filtro duro elimina. A
+  persona da #10 é o que vai escrever essa frase que nenhum dos três modelos
+  escreve sozinho.
 - **A VRAM é o gargalo real e o teto é de ~1,9–2,0 GB de pesos, não de 4 GB.**
   O `ollama ps` da máquina do ADR-0002 mediu os três: `qwen2.5:3b` de 1,9 GB
   de pesos para **2,1 GB** residentes, `llama3.2:3b` de 2,0 para **2,3**, e

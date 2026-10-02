@@ -22,7 +22,7 @@ ler antes de mexer em qualquer coisa:
 
 | Arquivo | Para que serve |
 | --- | --- |
-| [`CONTEXT.md`](./CONTEXT.md) | glossário do domínio. S.A.U., Aluno, Pergunta Frequente, Atividade, Encaminhamento, Alucinação, Pergunta-teste |
+| [`CONTEXT.md`](./CONTEXT.md) | glossário do domínio. S.A.U., Aluno, Estágio, Documentação de Estágio, Prazos / Calendário de Estágio, Fluxo de Estágio, Pergunta Frequente, Atividade, Coordenação de Estágios, Encaminhamento, Alucinação, Pergunta-teste |
 | [`AGENTS.md`](./AGENTS.md) | como o agente trabalha neste repo: skills, regras de organização, Context7 |
 | [`docs/adr/`](./docs/adr/) | decisões de arquitetura já tomadas, com o que foi descartado e por quê |
 | [`docs/sprints/1.1.md`](./docs/sprints/1.1.md) | o que a sprint 1.1 entrega e em que ordem |
@@ -679,11 +679,11 @@ Duas decisões que mudam o número e por isso valem ser ditas:
   repetições, `estavel` é 3 de 3 ou 0 de 3. O ADR-0003 justifica a *repetição*; o
   denominador é este ADR, não ele.
 - **A pergunta do prazo (`p1`) conta em não-saber e nunca em recusa.** Perguntar
-  quando a entrega vence não é pedir a Atividade, e isso é a regra
-  `PRAZO_NAO_E_ATIVIDADE` da persona. A folha traz a métrica de cada pergunta
-  escrita à mão, e o código compara com o arquivo de Perguntas-teste congelado
-  pela #6: se os dois lados divergirem, o comando falha em vez de medir outra
-  coisa.
+  quando um documento vence não é pedir a Atividade, e essa é a distinção que o
+  `CONTEXT.md` faz entre Pergunta Frequente e Atividade. A folha traz a métrica
+  de cada pergunta escrita à mão, e o código compara com o arquivo de
+  Perguntas-teste congelado pela #6: se os dois lados divergirem, o comando falha
+  em vez de medir outra coisa.
 
 Execução que falhou e execução com `motivo_de_parada == "length"` **não** entram
 no denominador. A segunda é a mais importante: o Ollama trata a falta de espaço
