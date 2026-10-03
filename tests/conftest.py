@@ -16,10 +16,13 @@ from collections.abc import Iterator
 import pytest
 
 from sau.graph.nodes import limpar_cache_recuperacao
+from sau.rag.retrieve import limpar_ultimo_indice
 
 
 @pytest.fixture(autouse=True)
 def _cache_da_recuperacao_limpo() -> Iterator[None]:
     limpar_cache_recuperacao()
+    limpar_ultimo_indice()
     yield
     limpar_cache_recuperacao()
+    limpar_ultimo_indice()

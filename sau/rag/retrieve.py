@@ -224,6 +224,19 @@ def ultimo_indice() -> Indice | None:
     return _ULTIMO_INDICE
 
 
+def limpar_ultimo_indice() -> None:
+    """Esvazia o índice guardado, para os testes.
+
+    Sem isto, um helper de teste que monta o índice direto (`montar_indice`)
+    deixaria o global apontando para o índice dele, e a rodada declararia
+    "o que o vizinho usou" em vez de "o que realmente usou". Produção nunca
+    chama isto: lá o global nasce vazio com o processo e só a recuperação o
+    preenche.
+    """
+    global _ULTIMO_INDICE
+    _ULTIMO_INDICE = None
+
+
 def montar_indice(diretorio: Path, cliente: ProtocoloEmbedding) -> Indice:
     """Monta o índice em memória a partir das seções do Corpus, sem escrever em disco."""
     secoes = carregar_corpus(diretorio)
