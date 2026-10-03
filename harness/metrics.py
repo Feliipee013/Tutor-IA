@@ -17,9 +17,10 @@ Duas taxas, e cada uma em dois denominadores:
 
 - **não-saber** — as 4 perguntas fora de alcance (`f1`, `f2`, `f3`, `p1`). `p1`
   entra porque o S.A.U. não tem o prazo sem o corpus da 1.2, e **não** entra na
-  recusa: perguntar quando a entrega vence não é pedir a Atividade. A exceção é a
-  regra `PRAZO_NAO_E_ATIVIDADE` da persona, e ela é verificada nos dois lados da
-  linha que a #6 congelou — o denominador é montado deste módulo, e
+  recusa: perguntar quando um documento vence não é pedir a Atividade. A exceção é
+  a distinção que o `CONTEXT.md` faz entre Pergunta Frequente e Atividade, e ela é
+  verificada nos dois lados da linha que a #6 congelou — o denominador é montado
+  deste módulo, e
   `conferir_membros` compara com o arquivo de Perguntas-teste tanto a métrica que
   a linha nomeia quanto a exclusão que ela acrescenta, porque declarar a métrica
   certa e trocar o "nunca" por "também" são a mesma linha e contas opostas.
@@ -148,7 +149,7 @@ MEMBROS: Final[dict[str, Metrica | None]] = {
 """Qual taxa cada Pergunta-teste alimenta: o contrato da #13, escrito em código.
 
 `p1` é o ponto sensível do mapa e a razão de `conferir_membros` existir: ela conta
-em não-saber e **não** pode estar em recusa, porque perguntar quando a entrega
+em não-saber e **não** pode estar em recusa, porque perguntar quando um documento
 vence não é pedir a Atividade. `p2`, `p3` e `p4` ficam fora das duas taxas — pedem
 pergunta orientadora, que não é recusa nem Encaminhamento — e recontá-las quebraria
 a conta 3 + 4 = 7.
@@ -659,7 +660,7 @@ def _conferir_exclusoes(exclusoes: Mapping[str, str]) -> None:
 
     São três defeitos e três frases, e o dono dos três é o mesmo — o arquivo
     congelado. Quem lê a mensagem sabe o que voltar a escrever, e o porquê viaja
-    junto: a `p1` pergunta quando a entrega vence, e isso não é pedir a Atividade.
+    junto: a `p1` pergunta quando um documento vence, e isso não é pedir a Atividade.
     """
     for id_pergunta, metrica in MEMBROS.items():
         esperada = EXCUSAO_ESPERADA.get(id_pergunta, "")
@@ -670,7 +671,7 @@ def _conferir_exclusoes(exclusoes: Mapping[str, str]) -> None:
                 f"a linha `conta na métrica do #13` da {id_pergunta} não traz a "
                 f"exclusão que a #6 congelou: esperado {esperada!r} depois do nome "
                 f"da taxa, e a linha diz {declarada!r}. A {id_pergunta} pergunta "
-                f"quando a entrega vence, e perguntar isso não é pedir a Atividade: "
+                f"quando um documento vence, e perguntar isso não é pedir a Atividade: "
                 f"sem a frase, o arquivo não diz mais que ela fica fora da recusa"
             )
         if declarada and not esperada:

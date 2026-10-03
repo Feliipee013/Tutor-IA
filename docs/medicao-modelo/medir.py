@@ -715,10 +715,10 @@ def tempos_de_primeiro_token(candidato: Candidato) -> dict[str, float]:
     ela não é uma atípica e sim outra coisa: o script usa `keep_alive: 0` entre
     candidatos, então a primeira repetição de cada pergunta paga a carga do
     modelo e as outras duas não. Misturar as três só destruiria o número que a
-    régua do ADR-0003 quer — o plantão é com o modelo quente.
+    régua do ADR-0003 quer — o atendimento é com o modelo quente.
 
     A repetição 1 continua visível, com o seu `carga_segundos`, para o cold start
-    não ser escondido: quem espera o primeiro Aluno de uma madrugada paga a
+    não ser escondido: quem espera o primeiro Aluno de um plantão noturno paga a
     carga, e isso é fato, não ruído.
     """
     quentes = [r.primeiro_token_segundos for r in candidato.respostas if r.repeticao > 1]

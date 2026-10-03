@@ -100,7 +100,7 @@ def main() -> None:
     configurar_logging(config.log_level)
 
     logger.info("=" * 60)
-    logger.info("S.A.U. - Sistema de Apoio Unopar (Tutor Virtual EaD)")
+    logger.info("S.A.U. - Sistema de Apoio Unopar (agente de orientação de estágios)")
     logger.info("Iniciando serviço do bot no container...")
     logger.info("=" * 60)
 

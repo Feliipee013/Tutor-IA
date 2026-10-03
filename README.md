@@ -1,6 +1,26 @@
 # Tutor-IA (S.A.U. - Sistema de Apoio Unopar)
 
-Tutor virtual 24/7 para atendimento a dúvidas de rotina dos alunos de cursos EaD da Unopar, com foco no plantão da madrugada.
+Agente de orientação sobre processos de estágio: atende 24/7 as dúvidas
+recorrentes do Aluno sobre o Estágio — prazos, documentação, contratos, seguro e
+o fluxo que ele precisa seguir.
+
+O que o agente orienta é o **processo**: qual documento existe, o que preencher,
+quem assina, onde entregar e em qual prazo confirmar. Ele **não emite parecer
+jurídico** sobre o que o termo de compromisso, o contrato ou a norma exigem, e
+**não substitui a coordenação institucional**: nesses casos a resposta é o
+**Encaminhamento** à Coordenação de Estágios. Quando o prazo ou o documento não
+estiver confirmado, o agente diz que não sabe — e pergunta — em vez de inventar.
+
+## Casos de uso
+
+- "Quais documentos eu preciso entregar para começar o estágio?"
+- "Já assinei o termo de compromisso; o que vem depois?"
+- "Onde eu entrego o relatório de atividades?"
+- "O seguro de acidentes pessoais é obrigatório no meu caso?"
+- "Até quando tenho para assinar o contrato de estágio?"
+
+O vocabulário inteiro dos quatro artefatos — `CONTEXT.md`, `sau/persona.py`,
+este README e `AGENTS.md` — vem do glossário de `CONTEXT.md`.
 
 ## Arquitetura e Topologia
 
@@ -254,12 +274,12 @@ log do serviço.
 
 Desde a [#9](docs/adr/0005-estado-da-conversa.md) o S.A.U. lembra do que cada
 Aluno perguntou. O que ele disse numa mensagem entra no prompt da seguinte, então
-"e o prazo da outra?" não precisa repetir o nome da Atividade, e o isolamento é
+"e o prazo da outra?" não precisa repetir o nome do documento, e o isolamento é
 por `chat_id`: a conversa de um Aluno nunca entra no prompt de outro.
 
 O histórico vive num arquivo SQLite, num volume nomeado do compose
 (`conversas`), e é apagado depois de `CONVERSA_TTL_MINUTOS` de inatividade — o
-que o Aluno perguntou às 3h da manhã não fica guardado para sempre. Além disso, a
+que o Aluno perguntou não fica guardado para sempre. Além disso, a
 conversa de cada Aluno é respondida na ordem em que as mensagens chegaram: duas
 perguntas seguidas do mesmo Aluno não se embaralham. Entre Alunos diferentes não
 há ordem, e não deveria haver — um Aluno não espera na fila de outro.

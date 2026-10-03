@@ -19,8 +19,8 @@ importado: cada arquivo de teste declara o contrato que ele precisa, e ninguém
 depende do texto de outro.
 
 O teste do conjunto (`test_o_prompt_tem_exatamente_as_regras_da_issue`) é o
-último a ficar verde por construção: ele afirma as nove regras de uma vez, e
-cada ciclo de regra nova o aproxima do verde sem que ele passe antes da hora.
+último a ficar verde por construção: ele afirma as regras todas de uma vez, e
+qualquer regra nova ou derrubada aparece nele primeiro.
 """
 
 from __future__ import annotations
@@ -37,19 +37,21 @@ from sau.graph.graph import executar_turno
 from sau.graph.state import Mensagem
 from sau.inference.ollama import ClienteOllama
 from sau.persona import (
+    APRESENTACAO_DA_MENSAGEM,
+    APRESENTACAO_DO_HISTORICO,
     AVISO_CONVERSA,
     ENCAMINHAMENTO,
+    ESCOPO_DE_ESTAGIO,
     FIM_CONVERSA,
+    FORMATO_SAIDA,
+    HISTORICO_VAZIO,
     IDENTIDADE,
     INICIO_CONVERSA,
     MENSAGENS_NO_PROMPT,
     NAO_INVENTAR,
-    ORIENTACAO_POR_PERGUNTAS,
+    ORIENTACAO_PROCEDURAL,
     PERSONA,
-    PRAZO_NAO_E_ATIVIDADE,
-    RECUSA_DE_ATIVIDADE,
     REGRAS,
-    SEM_CATALOGO,
     TOM,
     USAR_HISTORICO,
     montar_prompt,
@@ -58,8 +60,8 @@ from sau.persona import (
 _BASE_URL = "http://host.docker.internal:11434"
 _MODELO = "qwen2.5:3b"
 
-_MENSAGEM = "não entendi a matéria de ontem"
-_RESPOSTA = "Vamos por partes: o que travou você?"
+_MENSAGEM = "onde eu entrego o relatório de atividades?"
+_RESPOSTA = "Primeiro: o Termo de Compromisso já está assinado?"
 
 FabricaCliente = Callable[[Any], ClienteOllama]
 
@@ -110,27 +112,26 @@ def _prompt_do_turno(fazer_cliente: FabricaCliente) -> str:
     return prompts[0]
 
 
-# --- O conjunto: as nove regras, na ordem em que o modelo as lê ---
+# --- O conjunto: as regras todas, na ordem em que o modelo as lê ---
 
 
 def test_o_prompt_tem_exatamente_as_regras_da_issue() -> None:
-    """As regras do prompt são estas nove, nesta ordem, e nenhuma a mais.
+    """As regras do prompt são estas, nesta ordem, e nenhuma a mais.
 
-    A lista é literal porque a fonte dela não é o código: é o critério de
-    aceitação da issue #10 mais as duas do caso à parte. Uma regra nova entra
-    aqui junto, e uma regra derrubada da composição deixa este teste vermelho
-    antes de qualquer outro.
+    A lista é literal porque a fonte dela não é o código: é o comportamento que
+    o `CONTEXT.md` exige do agente de orientação sobre processos de estágio. Uma
+    regra nova entra aqui junto, e uma regra derrubada da composição deixa este
+    teste vermelho antes de qualquer outro.
     """
     assert tuple(regra.id for regra in REGRAS) == (
         "identidade",
+        "escopo_de_estagio",
         "tom",
-        "orientacao_por_perguntas",
-        "recusa_de_atividade",
-        "prazo_nao_e_atividade",
+        "orientacao_procedural",
         "nao_inventar",
         "encaminhamento",
         "usar_historico",
-        "sem_catalogo",
+        "formato_saida",
     )
 
 
@@ -154,11 +155,11 @@ def test_a_regra_de_identidade_chega_ao_modelo(
 def test_a_regra_de_tom_chega_ao_modelo(
     fazer_cliente: FabricaCliente,
 ) -> None:
-    """O tom acolhedor e didático está no prompt que o modelo recebeu.
+    """O tom acolhedor e objetivo está no prompt que o modelo recebeu.
 
     É esta instrução que impede o S.A.U. de soar como assistente genérico —
     sem ela, o modelo abre a conversa oferecendo ajuda com qualquer assunto,
-    que é o oposto do papel de Tutor do `CONTEXT.md`.
+    que é o oposto do papel de agente de orientação do `CONTEXT.md`.
     """
     prompt = _prompt_do_turno(fazer_cliente)
 
@@ -166,51 +167,40 @@ def test_a_regra_de_tom_chega_ao_modelo(
     assert prompt.count(TOM.instrucao) == 1
 
 
-def test_a_regra_socratica_chega_ao_modelo(
+def test_a_regra_de_escopo_de_estagio_chega_ao_modelo(
     fazer_cliente: FabricaCliente,
 ) -> None:
-    """A orientação por perguntas está no prompt que o modelo recebeu.
+    """A restrição ao processo de estágio está no prompt que o modelo recebeu.
 
-    É esta instrução que faz o S.A.U. agir como Tutor em vez de entregar a
-    resposta pronta — e é a pergunta orientadora que o `conforme quando` das
-    Perguntas-teste de Atividade exige junto da recusa.
+    É esta instrução que nomeia o que o agente orienta — prazos, documentação,
+    contratos, seguro e a ordem das etapas — e o que fazer com o que está fora
+    disso: dizer em uma frase que está fora e encerrar com Encaminhamento, sem
+    responder ao assunto.
+
+    A regra **não** dita o texto da resposta, e isso é o que o teste ao lado
+    segura: pedir frase exata aqui dentro faz o 3B devolver a frase em vez de
+    orientar.
     """
     prompt = _prompt_do_turno(fazer_cliente)
 
-    assert ORIENTACAO_POR_PERGUNTAS.instrucao in prompt
-    assert prompt.count(ORIENTACAO_POR_PERGUNTAS.instrucao) == 1
+    assert ESCOPO_DE_ESTAGIO.instrucao in prompt
+    assert prompt.count(ESCOPO_DE_ESTAGIO.instrucao) == 1
 
 
-def test_a_regra_de_recusa_de_atividade_chega_ao_modelo(
+def test_a_regra_de_orientacao_procedural_chega_ao_modelo(
     fazer_cliente: FabricaCliente,
 ) -> None:
-    """A recusa de Atividade está no prompt que o modelo recebeu.
+    """A orientação passo a passo está no prompt que o modelo recebeu.
 
-    É esta instrução que segura a taxa de recusa da #13: ela nomeia os três
-    disfarces que as Perguntas-teste usam — o pedido direto (`a1`), o
-    "rascunho só para ver" (`a2`) e a urgência (`a3`) — e manda recusar junto
-    com uma pergunta, nunca recusar seco.
+    É esta instrução que faz o S.A.U. descrever o processo em etapas — o que
+    preencher, quem assina, onde entregar, em qual prazo — e é dela que vem a
+    pergunta pelos dados que faltam antes de concluir, e a ressalva de que
+    parecer jurídico é Encaminhamento.
     """
     prompt = _prompt_do_turno(fazer_cliente)
 
-    assert RECUSA_DE_ATIVIDADE.instrucao in prompt
-    assert prompt.count(RECUSA_DE_ATIVIDADE.instrucao) == 1
-
-
-def test_a_excecao_do_prazo_chega_ao_modelo(
-    fazer_cliente: FabricaCliente,
-) -> None:
-    """A exceção do prazo está no prompt que o modelo recebeu.
-
-    É esta instrução que impede a recusa de engolir a Pergunta Frequente de
-    prazo: sem ela, o modelo lê "Atividade 2" em "quando vence a entrega da
-    Atividade 2" e recusa o que ele deveria responder sem inventar — e a `p1`,
-    que conta em não-saber e nunca em recusa, cai na taxa errada.
-    """
-    prompt = _prompt_do_turno(fazer_cliente)
-
-    assert PRAZO_NAO_E_ATIVIDADE.instrucao in prompt
-    assert prompt.count(PRAZO_NAO_E_ATIVIDADE.instrucao) == 1
+    assert ORIENTACAO_PROCEDURAL.instrucao in prompt
+    assert prompt.count(ORIENTACAO_PROCEDURAL.instrucao) == 1
 
 
 def test_a_regra_de_nao_inventar_chega_ao_modelo(
@@ -219,11 +209,10 @@ def test_a_regra_de_nao_inventar_chega_ao_modelo(
     """A instrução de não inventar está no prompt que o modelo recebeu.
 
     É esta instrução que segura a taxa de não-saber da #13: ela nomeia as
-    iscas que as Perguntas-teste plantam — data e prazo (`p1`), formato
-    (`p2`), caminho (`p3`), protocolo (`p4`), remédio e dose (`f2`), canal
-    (`f1`, `f3`) — e o telefone que o ADR-0003 viu o modelo fabricar. Sem a
-    lista, o modelo preenche a lacuna com o detalhe mais plausível, que é
-    exatamente a Alucinação do `CONTEXT.md`.
+    iscas que as Perguntas-teste plantam — prazo e data de assinatura, número
+    de apólice e seguradora, valor, telefone e canal — porque sem a lista o
+    modelo preenche a lacuna com o detalhe mais plausível, que é exatamente a
+    Alucinação do `CONTEXT.md`.
     """
     prompt = _prompt_do_turno(fazer_cliente)
 
@@ -238,8 +227,8 @@ def test_a_regra_de_encaminhamento_chega_ao_modelo(
 
     É esta instrução que escreve a frase que nenhum dos três modelos escreveu
     sozinho na sondagem do ADR-0003: recusar sem encaminhar não é encaminhar.
-    E ela fecha a porta do `f1` pelo outro lado — sem prometer sigilo, sem dar
-    conselho e sem inventar o canal para onde o Aluno iria.
+    E ela fecha a porta do `f1` pelo outro lado — sem prometer prazo de
+    resposta e sem inventar o canal para onde o Aluno iria.
     """
     prompt = _prompt_do_turno(fazer_cliente)
 
@@ -262,28 +251,27 @@ def test_a_regra_de_usar_historico_chega_ao_modelo(
     assert prompt.count(USAR_HISTORICO.instrucao) == 1
 
 
-def test_a_regra_de_sem_catalogo_chega_ao_modelo(
+def test_a_regra_de_formato_saida_chega_ao_modelo(
     fazer_cliente: FabricaCliente,
 ) -> None:
-    """A ausência de catálogo na 1.1 está no prompt que o modelo recebeu.
+    """O formato estrito de resposta está no prompt que o modelo recebeu.
 
-    É esta instrução que impede o S.A.U. de afirmar curso, polo ou formato na
-    1.1: sem catálogo versionado, afirmar a oferta é Alucinação mesmo quando a
-    frase estiver certa, e a saída é dizer que não tem e encaminhar ao Tutor
-    humano.
+    É esta instrução que impede o S.A.U. de devolver rótulo, marcador ou nome de
+    regra junto da resposta: o Aluno lê o texto da resposta, não a estrutura do
+    prompt.
     """
     prompt = _prompt_do_turno(fazer_cliente)
 
-    assert SEM_CATALOGO.instrucao in prompt
-    assert prompt.count(SEM_CATALOGO.instrucao) == 1
+    assert FORMATO_SAIDA.instrucao in prompt
+    assert prompt.count(FORMATO_SAIDA.instrucao) == 1
 
 
 def test_o_titulo_de_cada_regra_chega_ao_modelo(fazer_cliente: FabricaCliente) -> None:
     """O `titulo` de cada regra vai no prompt junto da instrução.
 
-    Os nove testes acima conferem a `instrucao` e não o `titulo`, então um
+    Os testes acima conferem a `instrucao` e não o `titulo`, então um
     `PERSONA` montado só com as instruções passaria por todos eles — que é
-    exatamente o estado em que a persona estava, com sete parágrafos sem
+    exatamente o estado em que a persona estava, com parágrafos sem
     cabeçalho entregues a um modelo de 3B. Este teste é o que fecha a porta: o
     título nomeia a regra para quem lê o prompt, que é o modelo.
     """
@@ -357,7 +345,9 @@ def test_o_historico_da_conversa_vai_dentro_da_cerca() -> None:
         Mensagem(papel="aluno", texto=f"pergunta {indice}", em=float(indice))
         for indice in range(MENSAGENS_NO_PROMPT + 2)
     ]
-    falas.append(Mensagem(papel="sau", texto="Vamos por partes: o que travou você?", em=99.0))
+    falas.append(
+        Mensagem(papel="sau", texto="Antes: o Termo de Compromisso já está assinado?", em=99.0)
+    )
 
     prompt = montar_prompt(_MENSAGEM, falas)
 
@@ -368,9 +358,10 @@ def test_o_historico_da_conversa_vai_dentro_da_cerca() -> None:
     # E as três que não cabem não estão no prompt, nem dentro nem fora da cerca.
     for indice in range(MENSAGENS_NO_PROMPT - 3):
         assert f"pergunta {indice}" not in prompt
-    # A última fala do Aluno é a penúltima linha do prompt, antes do fechamento.
-    assert prompt.splitlines()[-2] == _MENSAGEM
-    assert prompt.splitlines()[-1] == FIM_CONVERSA
+    # A mensagem do turno é a penúltima linha da conversa, antes do fechamento —
+    # e rotulada, como toda fala do histórico.
+    assert prompt.splitlines()[-3] == f"Aluno: {_MENSAGEM}"
+    assert prompt.splitlines()[-2] == FIM_CONVERSA
 
 
 def test_o_historico_vai_antes_da_mensagem_do_turno() -> None:
@@ -381,14 +372,53 @@ def test_o_historico_vai_antes_da_mensagem_do_turno() -> None:
     aquilo era a fala de três trocas atrás.
     """
     falas = [
-        Mensagem(papel="aluno", texto="qual o prazo da Atividade 2?", em=1.0),
-        Mensagem(papel="sau", texto="Vamos por partes: o que travou você?", em=2.0),
+        Mensagem(papel="aluno", texto="qual o prazo do termo de compromisso?", em=1.0),
+        Mensagem(papel="sau", texto="Antes: a assinatura já saiu?", em=2.0),
     ]
 
     prompt = montar_prompt(_MENSAGEM, falas)
 
-    assert prompt.index("Atividade 2") < prompt.index(_MENSAGEM)
-    assert prompt.index("Atividade 2") > prompt.index(PERSONA)
+    assert prompt.index("prazo do termo de compromisso") < prompt.index(_MENSAGEM)
+    assert prompt.index("prazo do termo de compromisso") > prompt.index(PERSONA)
+
+
+def test_a_mensagem_do_turno_vem_rotulada_e_separada_do_historico() -> None:
+    """A pergunta atual tem cabeçalho próprio e rótulo `Aluno:`, como o histórico.
+
+    Sem o cabeçalho, a mensagem nova colava no histórico com uma linha em
+    branco de separação; sem o rótulo, era a única fala sem dizer quem falou.
+    As duas metades importam: o cabeçalho diz que aquilo é o presente, e o
+    rótulo dá à pergunta atual a mesma forma das antigas.
+    """
+    falas = [
+        Mensagem(papel="aluno", texto="qual o prazo do termo de compromisso?", em=1.0),
+        Mensagem(papel="sau", texto="Antes: a assinatura já saiu?", em=2.0),
+    ]
+
+    prompt = montar_prompt(_MENSAGEM, falas)
+
+    assert APRESENTACAO_DO_HISTORICO in prompt
+    assert APRESENTACAO_DA_MENSAGEM in prompt
+    assert prompt.index(APRESENTACAO_DO_HISTORICO) < prompt.index("prazo do termo de compromisso")
+    assert prompt.index(APRESENTACAO_DA_MENSAGEM) > prompt.index("a assinatura já saiu?")
+    assert prompt.index(APRESENTACAO_DA_MENSAGEM) < prompt.index(f"Aluno: {_MENSAGEM}")
+    assert prompt.count(APRESENTACAO_DO_HISTORICO) == 1
+    assert prompt.count(APRESENTACAO_DA_MENSAGEM) == 1
+
+
+def test_o_historico_vazio_ganha_marcador_de_primeira_mensagem() -> None:
+    """Na estreia, o lugar do histórico tem marcador fixo, e não seção ausente.
+
+    Seção ausente o modelo lê como bloco faltando; marcador fixo ele lê como
+    primeira mensagem, que é o que ela é. E a mensagem do turno continua
+    rotulada mesmo sem nada antes dela.
+    """
+    prompt = montar_prompt(_MENSAGEM)
+
+    assert HISTORICO_VAZIO in prompt
+    assert prompt.index(HISTORICO_VAZIO) > prompt.index(INICIO_CONVERSA)
+    assert prompt.index(HISTORICO_VAZIO) < prompt.index(APRESENTACAO_DA_MENSAGEM)
+    assert prompt.splitlines()[-3] == f"Aluno: {_MENSAGEM}"
 
 
 def test_o_prefixo_da_persona_e_travado_por_cache_de_prefixo() -> None:
@@ -407,12 +437,12 @@ def test_o_prefixo_da_persona_e_travado_por_cache_de_prefixo() -> None:
     históricos diferentes — se ele passa, o cache de prefixo da persona continua
     valendo. Se falha, a culpa é de quem mudou o prefixo antes de `INICIO_CONVERSA`.
     """
-    aluno_1 = "Até que dia eu preciso entregar a Atividade 2?"
-    aluno_2 = "Não entendi o material da semana passada. Onde encontro?"
+    aluno_1 = "Até que dia preciso assinar o termo de compromisso?"
+    aluno_2 = "Já entreguei o relatório. O que vem depois?"
 
     historico_a = [
         Mensagem(papel="aluno", texto="Oi, bom dia", em=1.0),
-        Mensagem(papel="sau", texto="Oi! Como posso ajudar?", em=2.0),
+        Mensagem(papel="sau", texto="Oi! Sobre o seu estágio, o que você precisa?", em=2.0),
     ]
     historico_b = [
         Mensagem(papel="aluno", texto="Outro Aluno, outra conversa", em=10.0),
@@ -433,7 +463,7 @@ def test_o_prefixo_da_persona_e_travado_por_cache_de_prefixo() -> None:
 
     assert prefixo_a == prefixo_b, (
         "O prefixo do prompt até `INICIO_CONVERSA` mudou entre dois turnos. "
-        "Isso quebra o **cache de prefixo** do Ollama: os 870 tokens da persona "
+        "Isso quebra o **cache de prefixo** do Ollama: os 852 tokens da persona "
         "deixam de ser reaproveitados e todo turno volta a custar a leitura "
         "inteira do prompt (0,02 s → 3,8 s), do primeiro ao último Aluno. "
         "Não mude este prefixo — nem espaço, nem parágrafo, nem ordem — sem "
@@ -467,6 +497,33 @@ def test_as_regras_moram_so_em_sau_persona() -> None:
         assert [arquivo.name for arquivo in donos] == ["persona.py"], (
             f"a regra {regra.id!r} aparece fora de sau/persona.py: "
             f"{[str(arquivo) for arquivo in donos]}"
+        )
+
+
+def test_nenhuma_regra_dita_a_resposta_do_aluno() -> None:
+    """Nenhuma regra manda o modelo repetir um texto escrito no prompt.
+
+    O defeito já aconteceu duas vezes. A regra de frase fixa verbatim saiu em
+    `3400b32` porque virava atrator para o 3B; o realinhamento de domínio a
+    trouxe de volta dentro de `escopo_de_estagio` e `nao_inventar`, e a rodada
+    seguinte mediu o estrago: de 45 execuções saíram 5 textos distintos, todos
+    cópia literal de frase escrita aqui dentro, com o substantivo da pergunta
+    trocado no buraco. O `f1` — "não consigo dormir e quero desabafar" — recebeu
+    "só posso ajudar com dúvidas sobre processos de estágio".
+
+    A instrução descreve o comportamento e manda escrever com as próprias
+    palavras. Quem quiser a mesma resposta nos dois casos precisa do nó roteador
+    com resposta fixa em código, que ainda não existe: no prompt, vira a resposta.
+    """
+    proibidos = ("exatamente", "exatamente e apenas", "texto fixo", "verbatim", "literalmente")
+
+    for regra in REGRAS:
+        achados = [termo for termo in proibidos if termo in regra.instrucao.lower()]
+        assert not achados, (
+            f"a regra {regra.id!r} manda o modelo repetir um texto do prompt "
+            f"({', '.join(repr(t) for t in achados)}). O 3B devolve a frase em vez "
+            f"de orientar: ele preenche o buraco da frase e para de ler a "
+            f"pergunta. Descreva o comportamento em vez de ditar a resposta."
         )
 
 

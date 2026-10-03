@@ -33,8 +33,10 @@ from sau.telegram import webhook
 from sau.telegram.webhook import (
     CABECALHO_SECRET_TOKEN,
     TEXTO_ACK,
+    TEXTO_BOAS_VINDAS,
     TEXTO_FALHA,
     TEXTO_FILA_CHEIA,
+    TEXTO_REENGAJAMENTO,
     CredencialTelegramAusenteError,
     ExecutorTurno,
     criar_app,
@@ -59,7 +61,7 @@ UPDATE_DO_ALUNO: dict[str, Any] = {
         "message_id": 42,
         "chat": {"id": 55_512_345, "type": "private"},
         "from": {"id": 55_512_345, "is_bot": False, "first_name": "Aluna"},
-        "text": "qual o prazo de entrega da Atividade 2?",
+        "text": "qual o prazo de entrega do relatório final?",
     },
 }
 
@@ -1365,9 +1367,9 @@ def test_o_historico_de_um_aluno_nao_vai_para_o_prompt_de_outro(
         # perguntas só, a conversa da primeira nunca é lida de volta e o teste não
         # distingue "o histórico funciona" de "o histórico é sempre vazio" — e as duas
         # coisas são defeitos, um pelo motivo oposto ao outro.
-        _postar(app, _update_de(11, "qual o prazo da Atividade 2?"))
-        _postar(app, _update_de(11, "e a de matemática?"))
-        _postar(app, _update_de(22, "e aquela atividade de inglês?"))
+        _postar(app, _update_de(11, "qual o prazo do relatório final?"))
+        _postar(app, _update_de(11, "e a da declaração da Empresa?"))
+        _postar(app, _update_de(22, "e a da matrícula?"))
     finally:
         registro.fechar()
         telegram.fechar()
@@ -1375,17 +1377,19 @@ def test_o_historico_de_um_aluno_nao_vai_para_o_prompt_de_outro(
     assert len(ModeloQueEspelha.prompts) == 3, "um dos turnos não chegou ao modelo"
     da_aluna, da_aluna_ainda, da_outra = ModeloQueEspelha.prompts
     # A segunda pergunta da primeira Aluna carrega a troca inteira da primeira vez.
-    assert "Atividade 2" in da_aluna_ainda, (
+    assert "relatório final" in da_aluna_ainda, (
         f"o segundo turno da Aluna não recebeu o histórico: {da_aluna_ainda!r}"
     )
     assert RESPOSTA_1 in da_aluna_ainda, (
         f"o histórico não trouxe a resposta anterior: {da_aluna_ainda!r}"
     )
     # E a outra Aluna não viu nada da primeira, nem da pergunta nem da resposta.
-    assert "Atividade 2" not in da_outra, "a pergunta da primeira Aluna vazou para a segunda"
-    assert "matemática" not in da_outra, "a conversa da primeira Aluna vazou inteira"
+    assert "relatório final" not in da_outra, "a pergunta da primeira Aluna vazou para a segunda"
+    assert "declaração da Empresa" not in da_outra, (
+        "a conversa da primeira Aluna vazou inteira"
+    )
     assert RESPOSTA_1 not in da_outra, "a resposta da primeira Aluna vazou"
-    assert "atividade de inglês" in da_outra
+    assert "matrícula" in da_outra
 
 
 def test_as_mensagens_do_mesmo_aluno_sao_respondidas_em_ordem(
@@ -1430,10 +1434,10 @@ def test_as_mensagens_do_mesmo_aluno_sao_respondidas_em_ordem(
         monkeypatch.setattr(webhook, "ClienteOllama", ModeloQueEspera)
         app = _app(telegram, registro=registro, executor=None, agendar=None)
 
-        _postar(app, _update_de(31, "qual o prazo da Atividade 1?"))
+        _postar(app, _update_de(31, "qual o prazo do relatório final?"))
         assert chegou_na_fila.wait(5.0), "o primeiro turno não chegou ao modelo"
 
-        _postar(app, _update_de(31, "e a de matemática?"))
+        _postar(app, _update_de(31, "e a da declaração da Empresa?"))
 
         solta_o_primeiro.set()
         for thread in threads_do_turno:
@@ -1450,8 +1454,8 @@ def test_as_mensagens_do_mesmo_aluno_sao_respondidas_em_ordem(
     assert RESPOSTA_1 in segundo, (
         f"o segundo turno rodou antes do primeiro gravar a resposta: {segundo!r}"
     )
-    assert "Atividade 1" in segundo
-    assert "matemática" in segundo
+    assert "relatório final" in segundo
+    assert "declaração da Empresa" in segundo
     # E a entrega saiu na ordem em que o Aluno perguntou.
     assert telegram.textos == [TEXTO_ACK, TEXTO_ACK, RESPOSTA_1, RESPOSTA_2]
 
@@ -1472,9 +1476,9 @@ def test_a_conversa_registra_a_falha_como_parte_do_que_o_aluno_viu(
     try:
         monkeypatch.setattr(webhook, "ClienteOllama", ModeloQueFalha)
         app = _app(telegram, registro=registro, executor=None)
-        _postar(app, _update_de(41, "qual o prazo da Atividade 1?"))
+        _postar(app, _update_de(41, "qual o prazo do relatório final?"))
         monkeypatch.setattr(webhook, "ClienteOllama", ModeloQueEspelha)
-        _postar(app, _update_de(41, "e a de matemática?"))
+        _postar(app, _update_de(41, "e a da declaração da Empresa?"))
         # A conversa é lida antes do `fechar`: ler depois é ler um registro fechado,
         # e o teste passaria a estar exercitando o `sqlite3` e não o turno.
         historico = registro.historico(41)
@@ -1483,14 +1487,129 @@ def test_a_conversa_registra_a_falha_como_parte_do_que_o_aluno_viu(
         telegram.fechar()
 
     assert [(m.papel, m.texto) for m in historico] == [
-        ("aluno", "qual o prazo da Atividade 1?"),
+        ("aluno", "qual o prazo do relatório final?"),
         ("sau", TEXTO_FALHA),
-        ("aluno", "e a de matemática?"),
+        ("aluno", "e a da declaração da Empresa?"),
         ("sau", RESPOSTA_1),
     ], f"a conversa gravada não é a que o Aluno teve: {historico}"
     assert TEXTO_FALHA in ModeloQueEspelha.prompts[0], (
         f"o turno seguinte não viu a falha anterior: {ModeloQueEspelha.prompts[0]!r}"
     )
+
+
+# --- Boas-vindas e reengajamento: os dois caminhos sem inferência total ---
+
+
+def test_start_devolve_boas_vindas_sem_chamar_o_modelo(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """O `/start` é comando, não pergunta: volta fixa, sem geração.
+
+    Mandar para o modelo rendeu o "Olá novamente!" da conversa real — além de
+    errado, um turno de inferência gasto à toa. A conversa gravada é a que o
+    Aluno teve: o comando como `aluno` e as boas-vindas como `sau`.
+    """
+    telegram = TelegramFalso()
+    registro = RegistroDeConversas(str(tmp_path / "conversas.db"))
+    ModeloQueEspelha.prompts = []
+    try:
+        monkeypatch.setattr(webhook, "ClienteOllama", ModeloQueEspelha)
+        app = _app(telegram, registro=registro, executor=None)
+        _postar(app, _update_de(44, "/start"))
+        historico = registro.historico(44)
+    finally:
+        registro.fechar()
+        telegram.fechar()
+
+    assert telegram.textos == [TEXTO_ACK, TEXTO_BOAS_VINDAS]
+    assert ModeloQueEspelha.prompts == []
+    assert [(m.papel, m.texto) for m in historico] == [
+        ("aluno", "/start"),
+        ("sau", TEXTO_BOAS_VINDAS),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("texto", "esperado"),
+    [
+        ("/start", True),
+        ("/START", True),
+        ("/start carga-do-botao", True),
+        ("/start@saubot", True),
+        ("qual o prazo?", False),
+        ("começar", False),
+        ("/status", False),
+    ],
+)
+def test_eh_comando_start(texto: str, esperado: bool) -> None:
+    """Só o comando com fronteira é `/start`: carga e menção passam, resto não."""
+    assert webhook._eh_comando_start(texto) is esperado
+
+
+def test_volta_depois_do_ttl_gruda_reengajamento_na_resposta(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Quem voltou depois da expiração lê o "que bom te ver de novo" na frente.
+
+    A frase vai grudada na resposta do turno, e não como mensagem separada: o
+    Aluno já levou o acuse, e terceira mensagem viraria espera. O primeiro turno
+    sai puro — o sinal só nasce da expiração.
+    """
+    agora = [1_700_000_000.0]
+    telegram = TelegramFalso()
+    registro = RegistroDeConversas(
+        str(tmp_path / "conversas.db"), ttl_minutos=30, agora=lambda: agora[0]
+    )
+    try:
+        monkeypatch.setattr(webhook, "ClienteOllama", ModeloFalso)
+        app = _app(telegram, registro=registro, executor=None)
+        _postar(app, _update_de(45, "qual o prazo?"))
+        agora[0] += 31 * 60
+        _postar(app, _update_de(45, "e o formato?"))
+    finally:
+        registro.fechar()
+        telegram.fechar()
+
+    assert telegram.textos == [
+        TEXTO_ACK,
+        ModeloFalso.texto,
+        TEXTO_ACK,
+        f"{TEXTO_REENGAJAMENTO}\n\n{ModeloFalso.texto}",
+    ]
+
+
+def test_start_vence_o_reengajamento_e_consome_o_sinal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A volta que começou pelo comando já foi saudada: sem frase grudada.
+
+    O sinal é consumido de qualquer jeito — se vazasse, o turno seguinte
+    reengajaria uma conversa que acabou de receber as boas-vindas.
+    """
+    agora = [1_700_000_000.0]
+    telegram = TelegramFalso()
+    registro = RegistroDeConversas(
+        str(tmp_path / "conversas.db"), ttl_minutos=30, agora=lambda: agora[0]
+    )
+    try:
+        monkeypatch.setattr(webhook, "ClienteOllama", ModeloFalso)
+        app = _app(telegram, registro=registro, executor=None)
+        _postar(app, _update_de(46, "qual o prazo?"))
+        agora[0] += 31 * 60
+        _postar(app, _update_de(46, "/start"))
+        _postar(app, _update_de(46, "e o formato?"))
+    finally:
+        registro.fechar()
+        telegram.fechar()
+
+    assert telegram.textos == [
+        TEXTO_ACK,
+        ModeloFalso.texto,
+        TEXTO_ACK,
+        TEXTO_BOAS_VINDAS,
+        TEXTO_ACK,
+        ModeloFalso.texto,
+    ]
 
 
 # --- Payload inválido ---
@@ -1937,12 +2056,12 @@ def test_quando_a_vaga_esta_ocupada_o_aluno_recebe_a_posicao_e_a_estimativa(
         app = _app(telegram, executor=None, semaforo=semaforo)
 
         primeiro = VooDePost(
-            lambda: _postar(app, _update_de(41, "qual o prazo da Atividade 1?"))
+            lambda: _postar(app, _update_de(41, "qual o prazo do relatório final?"))
         )
         ModeloQueSeguraAVaga.esperar_chegadas(1)
 
         segundo = VooDePost(
-            lambda: _postar(app, _update_de(42, "e a de matemática?"))
+            lambda: _postar(app, _update_de(42, "e a da declaração da Empresa?"))
         )
         recebidas = entregas.esperar(42, 2)
 
@@ -1994,14 +2113,14 @@ def test_sem_vaga_o_aluno_recebe_a_posicao_e_a_estimativa(
         app = _app(telegram, executor=None, semaforo=SemaforoDeInferencia(k=1))
 
         primeiro = VooDePost(
-            lambda: _postar(app, _update_de(51, "qual o prazo da Atividade 1?"))
+            lambda: _postar(app, _update_de(51, "qual o prazo do relatório final?"))
         )
         ModeloQueSeguraAVaga.esperar_chegadas(1)
 
-        segunda = VooDePost(lambda: _postar(app, _update_de(52, "e a de matemática?")))
+        segunda = VooDePost(lambda: _postar(app, _update_de(52, "e a da declaração da Empresa?")))
         textos_da_segunda = entregas.esperar(52, 2)
         terceira = VooDePost(
-            lambda: _postar(app, _update_de(53, "e a de história?"))
+            lambda: _postar(app, _update_de(53, "e a da matrícula?"))
         )
         textos_da_terceira = entregas.esperar(53, 2)
 
@@ -2044,10 +2163,10 @@ def test_a_posicao_na_fila_entra_na_conversa_e_nao_no_historico(
 
     O que aconteceria se a posição entrasse no histórico é pior do que um histórico
     comprido: o modelo leria "você está na posição 3 da fila, e a resposta deve sair
-    em cerca de 2 minutos" como se o Tutor tivesse dito aquilo. Ele passaria a
+    em cerca de 2 minutos" como se o S.A.U. tivesse dito aquilo. Ele passaria a
     comentar a própria fila, e o próximo turno da Aluna comecaria por um turno que
     o S.A.U. não deu. É o tipo de dano que a suíte não perceberia sozinha: o turno
-    continua respondendo, a resposta continua chegando, e o defeito é só o Tutor
+    continua respondendo, a resposta continua chegando, e o defeito é só o S.A.U.
     falando de coisa que não é assunto dele.
 
     A conversa da Aluna 62 é a prova, e ela é a do turno **completo**: a pergunta
@@ -2065,10 +2184,10 @@ def test_a_posicao_na_fila_entra_na_conversa_e_nao_no_historico(
         )
 
         primeiro = VooDePost(
-            lambda: _postar(app, _update_de(62, "qual o prazo da Atividade 1?"))
+            lambda: _postar(app, _update_de(62, "qual o prazo do relatório final?"))
         )
         ModeloQueSeguraAVaga.esperar_chegadas(1)
-        segundo = VooDePost(lambda: _postar(app, _update_de(63, "e a de matemática?")))
+        segundo = VooDePost(lambda: _postar(app, _update_de(63, "e a da declaração da Empresa?")))
         # A 63 foi avisada da posição, ou seja, a espera existiu de verdade.
         assert "posição 2" in entregas.esperar(63, 2)[1]
 
@@ -2080,11 +2199,11 @@ def test_a_posicao_na_fila_entra_na_conversa_e_nao_no_historico(
         # A 63 recebeu três mensagens ao Aluno, e a conversa dela tem duas falas.
         assert len(entregas.textos(63)) == 3, entregas.textos(63)
         assert [m.texto for m in registro.conversa(63).historico()] == [
-            "e a de matemática?",
+            "e a da declaração da Empresa?",
             ModeloQueSeguraAVaga.texto,
         ], (
             "a posição na fila entrou no histórico: o modelo vai ler a espera do Aluno "
-            "como se o Tutor tivesse falado sobre a própria fila"
+            "como se o S.A.U. tivesse falado sobre a própria fila"
         )
     finally:
         ModeloQueSeguraAVaga.soltar()
@@ -2122,11 +2241,11 @@ def test_o_mesmo_aluno_nunca_tem_dois_turnos_dentro_do_semaphore(
         app = _app(telegram, executor=None, semaforo=semaforo)
 
         primeiro = VooDePost(
-            lambda: _postar(app, _update_de(61, "qual o prazo da Atividade 1?"))
+            lambda: _postar(app, _update_de(61, "qual o prazo do relatório final?"))
         )
         ModeloQueSeguraAVaga.esperar_chegadas(1)
         segundo = VooDePost(
-            lambda: _postar(app, _update_de(61, "e a de matemática?"))
+            lambda: _postar(app, _update_de(61, "e a da declaração da Empresa?"))
         )
         # Espera o **acuse** da segunda mensagem, que é o ponto em que o turno do
         # segundo existe. O `VooDePost` só diz que a thread subiu; ele não diz que o
@@ -2230,17 +2349,17 @@ def test_acima_do_teto_o_turno_e_recusado(
             )
 
         primeiro = VooDePost(
-            lambda: _postar(app, _update_de(71, "qual o prazo da Atividade 1?"))
+            lambda: _postar(app, _update_de(71, "qual o prazo do relatório final?"))
         )
         ModeloQueSeguraAVaga.esperar_chegadas(1)
-        segundo = VooDePost(lambda: _postar(app, _update_de(72, "e a de matemática?")))
+        segundo = VooDePost(lambda: _postar(app, _update_de(72, "e a da declaração da Empresa?")))
         # A 72 tem de estar de fato na fila antes de a 73 chegar, senão o teto seria
         # testado com a fila vazia e a recusa viria por outro motivo. A espera é pela
         # mensagem de posição da 72, que é o próprio sinal de "entrei na fila" — e é
         # o que evita ler `turnos_esperando` no meio de uma corrida.
         textos_da_72 = entregas.esperar(72, 2)
         assert "posição 2" in textos_da_72[1], textos_da_72[1]
-        terceiro = VooDePost(lambda: _postar(app, _update_de(73, "e a de história?")))
+        terceiro = VooDePost(lambda: _postar(app, _update_de(73, "e a da matrícula?")))
 
         assert entregas.esperar(73, 2) == [TEXTO_ACK, TEXTO_FILA_CHEIA], (
             f"o turno acima do teto não recebeu a recusa: {entregas.textos(73)}"
@@ -2300,18 +2419,18 @@ def test_a_fila_cheia_recusa_o_aluno_com_educacao(
 
         with caplog.at_level(logging.WARNING, logger=LOGGER):
             primeiro = VooDePost(
-                lambda: _postar(app, _update_de(81, "qual o prazo da Atividade 1?"))
+                lambda: _postar(app, _update_de(81, "qual o prazo do relatório final?"))
             )
             ModeloQueSeguraAVaga.esperar_chegadas(1)
             segundo = VooDePost(
-                lambda: _postar(app, _update_de(82, "e a de matemática?"))
+                lambda: _postar(app, _update_de(82, "e a da declaração da Empresa?"))
             )
             # A 82 na fila pelo observável, e não por leitura do contador: a mensagem de
             # posição é o sinal de que ela entrou, e esperar por ela tira a corrida da
             # afirmação seguinte.
             assert "posição 2" in entregas.esperar(82, 2)[1]
             recusado = VooDePost(
-                lambda: _postar(app, _update_de(83, "e a de história?"))
+                lambda: _postar(app, _update_de(83, "e a da matrícula?"))
             )
             # A recusa chega da thread do turno, e por isso se espera por ela como se
             # espera por qualquer entrega: o `VooDePost` ter subido não diz que o
@@ -2342,7 +2461,7 @@ def test_a_fila_cheia_recusa_o_aluno_com_educacao(
         # E a recusa entrou na conversa, para o próximo turno do mesmo Aluno.
         historico = registro.conversa(83).historico()
         assert [m.texto for m in historico] == [
-            "e a de história?",
+            "e a da matrícula?",
             TEXTO_FILA_CHEIA,
         ], f"a conversa do Aluno recusado não é a conversa que ele teve: {historico}"
     finally:
@@ -2380,9 +2499,9 @@ def test_dois_alunos_sao_atendidos_ao_mesmo_tempo(
         app = _app(telegram, executor=None, semaforo=semaforo)
 
         primeiro = VooDePost(
-            lambda: _postar(app, _update_de(91, "qual o prazo da Atividade 1?"))
+            lambda: _postar(app, _update_de(91, "qual o prazo do relatório final?"))
         )
-        segundo = VooDePost(lambda: _postar(app, _update_de(92, "e a de matemática?")))
+        segundo = VooDePost(lambda: _postar(app, _update_de(92, "e a da declaração da Empresa?")))
 
         ModeloQueSeguraAVaga.esperar_chegadas(2)
         assert semaforo.vagas_livres == 0, "as duas vagas deveriam estar ocupadas"

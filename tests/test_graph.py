@@ -30,7 +30,7 @@ _MODELO = "qwen2.5:3b"
 
 # Uma Pergunta Frequente de prazo, e não um pedido de Atividade. O `CONTEXT.md`
 # separa os dois conceitos e diz que um é o outro pelo motivo: "perguntar quando
-# a entrega vence não é pedir a Atividade". A frase da Aluna cita o prazo sem
+# um documento vence não é pedir a Atividade". A frase da Aluna cita o prazo sem
 # nomear a Atividade, que é a forma como o `CONTEXT.md` diz que a dúvida é
 # rotineira — e é a única resposta aceitável do modelo, porque um prazo é dado
 # que ele não tem e não pode inventar.

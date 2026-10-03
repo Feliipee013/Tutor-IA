@@ -301,8 +301,8 @@ def test_a_saida_do_modelo_vai_no_log_inteira(caplog: pytest.LogCaptureFixture) 
     """
     texto = (
         "Oi! Eu não tenho essa informação aqui. Como eu não sei o prazo, não "
-        "vou inventar um — isso é pior do que dizer que não sei. Procure o seu "
-        "Tutor humano, que ele tem o calendário da disciplina."
+        "vou inventar um — isso é pior do que dizer que não sei. Procure a "
+        "Coordenação de Estágios, que ela tem o calendário do estágio."
     )
     client = _criar_mock_client({
         "POST /api/generate": (200, {**_payload_do_generate(), "response": texto}),
