@@ -173,9 +173,13 @@ def test_a_regra_de_escopo_de_estagio_chega_ao_modelo(
     """A restrição ao processo de estágio está no prompt que o modelo recebeu.
 
     É esta instrução que nomeia o que o agente orienta — prazos, documentação,
-    contratos, seguro e a ordem das etapas — e a resposta fixa para o que está
-    fora disso, que é o Encaminhamento na sua forma mais dura: a recusa de
-    escopo não pede nada, ela entrega o texto.
+    contratos, seguro e a ordem das etapas — e o que fazer com o que está fora
+    disso: dizer em uma frase que está fora e encerrar com Encaminhamento, sem
+    responder ao assunto.
+
+    A regra **não** dita o texto da resposta, e isso é o que o teste ao lado
+    segura: pedir frase exata aqui dentro faz o 3B devolver a frase em vez de
+    orientar.
     """
     prompt = _prompt_do_turno(fazer_cliente)
 
@@ -459,7 +463,7 @@ def test_o_prefixo_da_persona_e_travado_por_cache_de_prefixo() -> None:
 
     assert prefixo_a == prefixo_b, (
         "O prefixo do prompt até `INICIO_CONVERSA` mudou entre dois turnos. "
-        "Isso quebra o **cache de prefixo** do Ollama: os 868 tokens da persona "
+        "Isso quebra o **cache de prefixo** do Ollama: os 852 tokens da persona "
         "deixam de ser reaproveitados e todo turno volta a custar a leitura "
         "inteira do prompt (0,02 s → 3,8 s), do primeiro ao último Aluno. "
         "Não mude este prefixo — nem espaço, nem parágrafo, nem ordem — sem "
@@ -493,6 +497,33 @@ def test_as_regras_moram_so_em_sau_persona() -> None:
         assert [arquivo.name for arquivo in donos] == ["persona.py"], (
             f"a regra {regra.id!r} aparece fora de sau/persona.py: "
             f"{[str(arquivo) for arquivo in donos]}"
+        )
+
+
+def test_nenhuma_regra_dita_a_resposta_do_aluno() -> None:
+    """Nenhuma regra manda o modelo repetir um texto escrito no prompt.
+
+    O defeito já aconteceu duas vezes. A regra de frase fixa verbatim saiu em
+    `3400b32` porque virava atrator para o 3B; o realinhamento de domínio a
+    trouxe de volta dentro de `escopo_de_estagio` e `nao_inventar`, e a rodada
+    seguinte mediu o estrago: de 45 execuções saíram 5 textos distintos, todos
+    cópia literal de frase escrita aqui dentro, com o substantivo da pergunta
+    trocado no buraco. O `f1` — "não consigo dormir e quero desabafar" — recebeu
+    "só posso ajudar com dúvidas sobre processos de estágio".
+
+    A instrução descreve o comportamento e manda escrever com as próprias
+    palavras. Quem quiser a mesma resposta nos dois casos precisa do nó roteador
+    com resposta fixa em código, que ainda não existe: no prompt, vira a resposta.
+    """
+    proibidos = ("exatamente", "exatamente e apenas", "texto fixo", "verbatim", "literalmente")
+
+    for regra in REGRAS:
+        achados = [termo for termo in proibidos if termo in regra.instrucao.lower()]
+        assert not achados, (
+            f"a regra {regra.id!r} manda o modelo repetir um texto do prompt "
+            f"({', '.join(repr(t) for t in achados)}). O 3B devolve a frase em vez "
+            f"de orientar: ele preenche o buraco da frase e para de ler a "
+            f"pergunta. Descreva o comportamento em vez de ditar a resposta."
         )
 
 

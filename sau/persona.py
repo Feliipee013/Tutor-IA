@@ -14,7 +14,7 @@ comportamento do S.A.U. continua sem passar por ela: edita o texto de uma regra.
 
 A persona vem **primeiro** por causa do cache de prefixo do Ollama, e não por
 estética do prompt nem por desempenho do modelo. O que a leitura de um turno
-repetido não refaz é o prefixo já lido: os 868 tokens da persona com a cerca são
+repetido não refaz é o prefixo já lido: os 852 tokens da persona com a cerca são
 os mesmos bytes em todo turno de todo Aluno, então ficam na memória do Ollama e
 a leitura recomeça do que muda. Medido na máquina do ADR-0002: o prefixo frio
 custa 3,8 s de leitura e o prefixo quente, 0,02 s. Mover a persona para depois da
@@ -76,11 +76,9 @@ ESCOPO_DE_ESTAGIO = Regra(
         "Atenda APENAS dúvidas sobre o processo de estágio: prazos e calendário, "
         "documentação a entregar, assinatura do termo de compromisso ou do contrato "
         "de estágio, seguro de acidentes pessoais e a ordem das etapas. "
-        "Se o Aluno perguntar sobre qualquer outro assunto, responda EXATAMENTE e "
-        "APENAS o seguinte texto fixo: 'Desculpe, mas só posso ajudar com dúvidas "
-        "sobre processos de estágio (como prazos, documentação, contratos e seguro). "
-        "Para outros assuntos, por favor, entre em contato com o atendimento geral "
-        "da instituição.'"
+        "Quando o Aluno perguntar sobre qualquer outro assunto, diga em uma frase "
+        "que isso está fora do que você orienta e encerre com Encaminhamento. "
+        "Não responda ao assunto, não discuta o assunto e não ofereça ajuda com ele."
     ),
 )
 
@@ -115,10 +113,9 @@ NAO_INVENTAR = Regra(
         "invente datas de vencimento específicas, número de apólice de seguro, "
         "seguradora, valores, telefones, e-mails diretos ou caminhos de sistema que "
         "você não tem certeza. "
-        "Se a informação depender de validação de cadastro que você não tem, "
-        "responda EXATAMENTE: 'Não tenho os detalhes específicos deste documento ou "
-        "prazo no momento. Por favor, entre em contato com a Coordenação de "
-        "Estágios.'"
+        "Se a resposta depender de um dado que você não tem, diga em uma frase que não "
+        "tem esse dado e encerre com Encaminhamento. Escreva essa frase com as "
+        "suas palavras, trocando a ordem dela conforme a pergunta do Aluno."
     ),
 )
 
@@ -168,6 +165,21 @@ REGRAS: tuple[Regra, ...] = (
 
 `test_o_prompt_tem_exatamente_as_regras_da_issue` afirma o conjunto inteiro:
 regra nova entra ali junto, regra derrubada quebra ali primeiro.
+
+**Nenhuma regra pede frase exata.** Foi tentado duas vezes e as duas voltaram.
+A regra de frase fixa verbatim foi removida em `3400b32` depois do teste de
+campo: virava atrator para o 3B. O realinhamento de domínio trouxe-a de volta,
+dentro de `escopo_de_estagio` e `nao_inventar` — e a rodada seguinte provou o
+mesmo defeito, pior: de 45 execuções saíram 5 textos distintos, todos cópia
+literal de frase escrita aqui dentro, com o substantivo da pergunta trocado no
+buraco. `f1` é "não consigo dormir e quero desabafar" e o modelo respondeu que só
+ajudava com processos de estágio. As duas regras continuam existindo, e é o
+comportamento que elas pedem que importa; o texto que o 3B devolve não pode ser
+ditado dentro do prompt, porque aí ele vira a resposta.
+
+A instrução descreve o que fazer e manda escrever com as próprias palavras
+seguindo a pergunta. Quem quiser o mesmo texto para os dois casos precisa do nó
+roteador com resposta fixa em código, que ainda não existe.
 """
 
 PERSONA: str = "\n\n".join(f"{regra.titulo}\n{regra.instrucao}" for regra in REGRAS)
