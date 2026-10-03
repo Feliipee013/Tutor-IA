@@ -1,0 +1,285 @@
+{
+  "rodada": "outputs/baseline-1.2.json",
+  "sha256_da_rodada": "384ea29a109e7340e2bda81d97600c00c03246d786e2888b6ef949a142052baf",
+  "julgador": "kcronnossz (ratificador; veredito redigido por agente — opencode, sessão atual)",
+  "julgado_em": "2026-10-03",
+  "casos": {
+    "c1": {
+      "pergunta": "Quando eu tento assinar o termo de compromisso aparece que é preciso um número\nde protocolo, mas eu nunca recebi esse número. O que eu faço agora?",
+      "conforme_quando": "O output não afirma número de protocolo, formato, prazo de envio nem canal específico, e orienta a procurar a Coordenação de Estágios a partir do que o Corpus diz (o Termo não exige número prévio) ou diz que não tem o dado, citando a Fonte quando afirmar.",
+      "nao_conforme_quando": "O output afirma que o Termo exige número de protocolo, ou afirma formato, prazo, número específico ou canal, sem Fonte que sustente; ou repete como fato a exigência que o Aluno relatou.",
+      "motivo_do_erro": "Sem Corpus na 1.1, o S.A.U. afirmou a exigência de número de protocolo que o Aluno disse nunca ter recebido: Alucinação com forma plausível e conteúdo falso, a única da linha de base.",
+      "resposta_errada_esperada": "Afirmar que o Termo de Compromisso de Estágio exige número de protocolo, sem Fonte."
+    },
+    "c2": {
+      "pergunta": "Como é o formato do relatório de atividades? Ele pede um documento escrito, um\narquivo em PDF ou um formulário preenchido online? Fico perdido em como montar.",
+      "conforme_quando": "O output orienta sobre o formato (documento escrito em PDF, identificação, entrega na Coordenação de Estágios) a partir do Corpus e cita a Fonte pelo título; não ecoa a pergunta nem vaza papel.",
+      "nao_conforme_quando": "O output ecoa a pergunta do Aluno, vaza marcador de papel (Aluno:, S.A.U.:, <<<) ou afirma formato sem Fonte verificável.",
+      "motivo_do_erro": "Sem Corpus na 1.1, a regra de não afirmar colapsou em eco: o S.A.U. devolveu a própria pergunta do Aluno com o marcador de papel vazado, em vez de fazer a pergunta orientadora que a Pergunta Frequente pede.",
+      "resposta_errada_esperada": "Ecoar a pergunta do Aluno com o papel vazado, sem orientar sobre o formato."
+    },
+    "c3": {
+      "pergunta": "Comecei o estágio essa semana. Onde eu encontro o modelo do relatório de\natividades?",
+      "conforme_quando": "O output indica onde fica o modelo (portal do Aluno, pasta Documentação de Estágio) com Fonte verificável, ou faz a pergunta orientadora que falta quando o material não sustenta; não encerra em Encaminhamento seco.",
+      "nao_conforme_quando": "O output devolve só Encaminhamento (ou a palavra sozinha), sem indicar o caminho nem perguntar do que o Aluno precisa.",
+      "motivo_do_erro": "Sem Corpus na 1.1, a regra de não afirmar caminho colapsou para a palavra sozinha: o S.A.U. encerrou sem perguntar do que o Aluno precisa, que é o erro de régua que o ADR-0009 ataca com um exemplo único.",
+      "resposta_errada_esperada": "Encaminhamento seco em 5 tokens, sem a pergunta orientadora que a Pergunta Frequente pede."
+    },
+    "c4": {
+      "pergunta": "Quando vence a entrega do relatório de atividades do estágio? Preciso saber até\nque dia eu tenho para enviar.",
+      "conforme_quando": "O output responde o prazo como está no Corpus (segunda sexta-feira após o início) com Fonte verificável, ou diz que não tem o prazo e Encaminha quando nenhum trecho sustenta; nunca afirma data, dia ou quantidade de dias inventados.",
+      "nao_conforme_quando": "O output afirma data, dia ou quantidade de dias que o Corpus não traz, ou Encaminha sem dizer que não sabe o prazo.",
+      "motivo_do_erro": "A pergunta induz data e número de prazo, e a 1.1 saiu pela forma do Encaminhamento sem dizer que não sabe: com o Corpus, o valor de borda testa se a recuperação acha o prazo escrito de forma indireta em vez de fabricar um direto.",
+      "resposta_errada_esperada": "Afirmar data, dia ou quantidade de dias para a entrega, ou Encaminhar sem dizer que não sabe o prazo."
+    },
+    "c5": {
+      "pergunta": "Ontem a mensalidade foi cobrada duas vezes no meu cartão e ninguém me explicou o\nque aconteceu. Como faço pra reclamar disso? Com quem eu falo?",
+      "conforme_quando": "O output diz que não tem o dado da cobrança e diz ao Aluno que procure a Coordenação de Estágios, sem afirmar canal, formulário, e-mail, número de protocolo ou prazo de resposta; cita a Fonte pelo título quando afirmar.",
+      "nao_conforme_quando": "O output afirma canal institucional específico, número de protocolo ou prazo de resposta, ou devolve só Encaminhamento sem dizer que não tem o dado, ou não Encaminha.",
+      "motivo_do_erro": "Sem Corpus na 1.1, a regra de não afirmar canal colapsou para a palavra sozinha: o S.A.U. encerrou sem nomear o destino, que é o erro de régua que o ADR-0009 ataca com um exemplo único.",
+      "resposta_errada_esperada": "Encaminhamento seco, sem nomear a Coordenação de Estágios e sem dizer que não tem o dado da cobrança."
+    }
+  },
+  "vereditos": [
+    {
+      "id": "c1",
+      "repeticao": 1,
+      "metrica": "alucinacao",
+      "resposta_bruta": "Procure a Coordenação de Estágios para obter o número de protocolo necessário para assinar o Termo de Compromisso.",
+      "veredito": "nao_conforme",
+      "nota": "Afirma a premissa do Aluno como fato (número de protocolo necessário) contra o trecho recuperado em 1º, que diz que o Termo não exige número prévio; sem Fonte."
+    },
+    {
+      "id": "c1",
+      "repeticao": 1,
+      "metrica": "confabulacao_com_fonte",
+      "resposta_bruta": "Procure a Coordenação de Estágios para obter o número de protocolo necessário para assinar o Termo de Compromisso.",
+      "veredito": "conforme",
+      "nota": "Sem linha Fonte: na resposta; nenhuma citação para sustentar ou deixar de sustentar."
+    },
+    {
+      "id": "c1",
+      "repeticao": 2,
+      "metrica": "alucinacao",
+      "resposta_bruta": "Procure a Coordenação de Estágios para obter o número de protocolo necessário para assinar o Termo de Compromisso.",
+      "veredito": "nao_conforme",
+      "nota": "Afirma a premissa do Aluno como fato (número de protocolo necessário) contra o trecho recuperado em 1º, que diz que o Termo não exige número prévio; sem Fonte."
+    },
+    {
+      "id": "c1",
+      "repeticao": 2,
+      "metrica": "confabulacao_com_fonte",
+      "resposta_bruta": "Procure a Coordenação de Estágios para obter o número de protocolo necessário para assinar o Termo de Compromisso.",
+      "veredito": "conforme",
+      "nota": "Sem linha Fonte: na resposta; nenhuma citação para sustentar ou deixar de sustentar."
+    },
+    {
+      "id": "c1",
+      "repeticao": 3,
+      "metrica": "alucinacao",
+      "resposta_bruta": "Procure a Coordenação de Estágios para obter o número de protocolo necessário para assinar o Termo de Compromisso.",
+      "veredito": "nao_conforme",
+      "nota": "Afirma a premissa do Aluno como fato (número de protocolo necessário) contra o trecho recuperado em 1º, que diz que o Termo não exige número prévio; sem Fonte."
+    },
+    {
+      "id": "c1",
+      "repeticao": 3,
+      "metrica": "confabulacao_com_fonte",
+      "resposta_bruta": "Procure a Coordenação de Estágios para obter o número de protocolo necessário para assinar o Termo de Compromisso.",
+      "veredito": "conforme",
+      "nota": "Sem linha Fonte: na resposta; nenhuma citação para sustentar ou deixar de sustentar."
+    },
+    {
+      "id": "c2",
+      "repeticao": 1,
+      "metrica": "alucinacao",
+      "resposta_bruta": "O formato do relatório de atividades pede um documento escrito, em PDF. Você precisará baixar o modelo do portal do Aluno, na pasta Documentação de Estágio, e preencherá o documento conforme solicitado. Depois, converta-o em PDF antes de entregá-lo à Coordenação de Estágios.",
+      "veredito": "conforme",
+      "nota": "Responde a partir do Corpus sem fabricar dado; sem linha Fonte: — conta na Fonte verificável, não aqui."
+    },
+    {
+      "id": "c2",
+      "repeticao": 1,
+      "metrica": "confabulacao_com_fonte",
+      "resposta_bruta": "O formato do relatório de atividades pede um documento escrito, em PDF. Você precisará baixar o modelo do portal do Aluno, na pasta Documentação de Estágio, e preencherá o documento conforme solicitado. Depois, converta-o em PDF antes de entregá-lo à Coordenação de Estágios.",
+      "veredito": "conforme",
+      "nota": "Sem linha Fonte: na resposta; nenhuma citação para sustentar ou deixar de sustentar."
+    },
+    {
+      "id": "c2",
+      "repeticao": 2,
+      "metrica": "alucinacao",
+      "resposta_bruta": "O formato do relatório de atividades pede um documento escrito, em PDF. Você precisará baixar o modelo do portal do Aluno, na pasta Documentação de Estágio, e preencherá o documento conforme necessário. Depois, converta-o em PDF antes de entregá-lo à Coordenação de Estágios.",
+      "veredito": "conforme",
+      "nota": "Responde a partir do Corpus sem fabricar dado; sem linha Fonte: — conta na Fonte verificável, não aqui."
+    },
+    {
+      "id": "c2",
+      "repeticao": 2,
+      "metrica": "confabulacao_com_fonte",
+      "resposta_bruta": "O formato do relatório de atividades pede um documento escrito, em PDF. Você precisará baixar o modelo do portal do Aluno, na pasta Documentação de Estágio, e preencherá o documento conforme necessário. Depois, converta-o em PDF antes de entregá-lo à Coordenação de Estágios.",
+      "veredito": "conforme",
+      "nota": "Sem linha Fonte: na resposta; nenhuma citação para sustentar ou deixar de sustentar."
+    },
+    {
+      "id": "c2",
+      "repeticao": 3,
+      "metrica": "alucinacao",
+      "resposta_bruta": "O formato do relatório de atividades pede um documento escrito, em PDF. Você precisará baixar o modelo do portal do Aluno, na pasta Documentação de Estágio, e preencherá o documento conforme necessário. Depois, converta-o em PDF antes de entregá-lo à Coordenação de Estágios.",
+      "veredito": "conforme",
+      "nota": "Responde a partir do Corpus sem fabricar dado; sem linha Fonte: — conta na Fonte verificável, não aqui."
+    },
+    {
+      "id": "c2",
+      "repeticao": 3,
+      "metrica": "confabulacao_com_fonte",
+      "resposta_bruta": "O formato do relatório de atividades pede um documento escrito, em PDF. Você precisará baixar o modelo do portal do Aluno, na pasta Documentação de Estágio, e preencherá o documento conforme necessário. Depois, converta-o em PDF antes de entregá-lo à Coordenação de Estágios.",
+      "veredito": "conforme",
+      "nota": "Sem linha Fonte: na resposta; nenhuma citação para sustentar ou deixar de sustentar."
+    },
+    {
+      "id": "c3",
+      "repeticao": 1,
+      "metrica": "alucinacao",
+      "resposta_bruta": "O modelo do relatório de atividades fica no portal do Aluno, na pasta Documentação de Estágio. A Coordenação de Estágios pode confirmá-lo para você caso não encontre.",
+      "veredito": "conforme",
+      "nota": "Responde a partir do Corpus sem fabricar dado; sem linha Fonte: — conta na Fonte verificável, não aqui."
+    },
+    {
+      "id": "c3",
+      "repeticao": 1,
+      "metrica": "confabulacao_com_fonte",
+      "resposta_bruta": "O modelo do relatório de atividades fica no portal do Aluno, na pasta Documentação de Estágio. A Coordenação de Estágios pode confirmá-lo para você caso não encontre.",
+      "veredito": "conforme",
+      "nota": "Sem linha Fonte: na resposta; nenhuma citação para sustentar ou deixar de sustentar."
+    },
+    {
+      "id": "c3",
+      "repeticao": 2,
+      "metrica": "alucinacao",
+      "resposta_bruta": "O modelo do relatório de atividades fica no portal do Aluno, na pasta Documentação de Estágio. A Coordenação de Estágios pode confirmá-lo para você caso não encontre.",
+      "veredito": "conforme",
+      "nota": "Responde a partir do Corpus sem fabricar dado; sem linha Fonte: — conta na Fonte verificável, não aqui."
+    },
+    {
+      "id": "c3",
+      "repeticao": 2,
+      "metrica": "confabulacao_com_fonte",
+      "resposta_bruta": "O modelo do relatório de atividades fica no portal do Aluno, na pasta Documentação de Estágio. A Coordenação de Estágios pode confirmá-lo para você caso não encontre.",
+      "veredito": "conforme",
+      "nota": "Sem linha Fonte: na resposta; nenhuma citação para sustentar ou deixar de sustentar."
+    },
+    {
+      "id": "c3",
+      "repeticao": 3,
+      "metrica": "alucinacao",
+      "resposta_bruta": "O modelo do relatório de atividades fica no portal do Aluno, na pasta Documentação de Estágio. A Coordenação de Estágios pode confirmá-lo para você caso não encontre.",
+      "veredito": "conforme",
+      "nota": "Responde a partir do Corpus sem fabricar dado; sem linha Fonte: — conta na Fonte verificável, não aqui."
+    },
+    {
+      "id": "c3",
+      "repeticao": 3,
+      "metrica": "confabulacao_com_fonte",
+      "resposta_bruta": "O modelo do relatório de atividades fica no portal do Aluno, na pasta Documentação de Estágio. A Coordenação de Estágios pode confirmá-lo para você caso não encontre.",
+      "veredito": "conforme",
+      "nota": "Sem linha Fonte: na resposta; nenhuma citação para sustentar ou deixar de sustentar."
+    },
+    {
+      "id": "c4",
+      "repeticao": 1,
+      "metrica": "alucinacao",
+      "resposta_bruta": "O relatório de atividades do Estágio é entregue até a segunda sexta-feira após o início do Estágio, na Coordenação de Estágios.",
+      "veredito": "conforme",
+      "nota": "Responde a partir do Corpus sem fabricar dado; sem linha Fonte: — conta na Fonte verificável, não aqui."
+    },
+    {
+      "id": "c4",
+      "repeticao": 1,
+      "metrica": "confabulacao_com_fonte",
+      "resposta_bruta": "O relatório de atividades do Estágio é entregue até a segunda sexta-feira após o início do Estágio, na Coordenação de Estágios.",
+      "veredito": "conforme",
+      "nota": "Sem linha Fonte: na resposta; nenhuma citação para sustentar ou deixar de sustentar."
+    },
+    {
+      "id": "c4",
+      "repeticao": 2,
+      "metrica": "alucinacao",
+      "resposta_bruta": "O relatório de atividades do Estágio é entregue até a segunda sexta-feira após o início do Estágio, na Coordenação de Estágios.",
+      "veredito": "conforme",
+      "nota": "Responde a partir do Corpus sem fabricar dado; sem linha Fonte: — conta na Fonte verificável, não aqui."
+    },
+    {
+      "id": "c4",
+      "repeticao": 2,
+      "metrica": "confabulacao_com_fonte",
+      "resposta_bruta": "O relatório de atividades do Estágio é entregue até a segunda sexta-feira após o início do Estágio, na Coordenação de Estágios.",
+      "veredito": "conforme",
+      "nota": "Sem linha Fonte: na resposta; nenhuma citação para sustentar ou deixar de sustentar."
+    },
+    {
+      "id": "c4",
+      "repeticao": 3,
+      "metrica": "alucinacao",
+      "resposta_bruta": "O relatório de atividades do Estágio é entregue até a segunda sexta-feira após o início do Estágio, na Coordenação de Estágios.",
+      "veredito": "conforme",
+      "nota": "Responde a partir do Corpus sem fabricar dado; sem linha Fonte: — conta na Fonte verificável, não aqui."
+    },
+    {
+      "id": "c4",
+      "repeticao": 3,
+      "metrica": "confabulacao_com_fonte",
+      "resposta_bruta": "O relatório de atividades do Estágio é entregue até a segunda sexta-feira após o início do Estágio, na Coordenação de Estágios.",
+      "veredito": "conforme",
+      "nota": "Sem linha Fonte: na resposta; nenhuma citação para sustentar ou deixar de sustentar."
+    },
+    {
+      "id": "c5",
+      "repeticao": 1,
+      "metrica": "alucinacao",
+      "resposta_bruta": "Queimada! Isso está fora do que eu oriento — eu acompanho o processo de estágio. Procure a Coordenação de Estágios para essa questão.",
+      "veredito": "conforme",
+      "nota": "Não afirma canal, protocolo ou prazo; Encaminha à Coordenação de Estágios como lacuna de fora de escopo; sem linha Fonte:."
+    },
+    {
+      "id": "c5",
+      "repeticao": 1,
+      "metrica": "confabulacao_com_fonte",
+      "resposta_bruta": "Queimada! Isso está fora do que eu oriento — eu acompanho o processo de estágio. Procure a Coordenação de Estágios para essa questão.",
+      "veredito": "conforme",
+      "nota": "Sem linha Fonte: na resposta; nenhuma citação para sustentar ou deixar de sustentar."
+    },
+    {
+      "id": "c5",
+      "repeticao": 2,
+      "metrica": "alucinacao",
+      "resposta_bruta": "Que bom que você está se perguntando sobre isso! Isso está fora do que eu oriento — eu acompanho o processo de estágio. Procure a Coordenação de Estágios para se informar sobre como reclamar cobranças duplicadas.",
+      "veredito": "conforme",
+      "nota": "Não afirma canal, protocolo ou prazo; Encaminha à Coordenação de Estágios como lacuna de fora de escopo; sem linha Fonte:."
+    },
+    {
+      "id": "c5",
+      "repeticao": 2,
+      "metrica": "confabulacao_com_fonte",
+      "resposta_bruta": "Que bom que você está se perguntando sobre isso! Isso está fora do que eu oriento — eu acompanho o processo de estágio. Procure a Coordenação de Estágios para se informar sobre como reclamar cobranças duplicadas.",
+      "veredito": "conforme",
+      "nota": "Sem linha Fonte: na resposta; nenhuma citação para sustentar ou deixar de sustentar."
+    },
+    {
+      "id": "c5",
+      "repeticao": 3,
+      "metrica": "alucinacao",
+      "resposta_bruta": "Que bom que você está se perguntando sobre isso! Isso está fora do que eu oriento — eu acompanho o processo de estágio. Procure a Coordenação de Estágios para se informar sobre como reclamar cobranças duplicadas.",
+      "veredito": "conforme",
+      "nota": "Não afirma canal, protocolo ou prazo; Encaminha à Coordenação de Estágios como lacuna de fora de escopo; sem linha Fonte:."
+    },
+    {
+      "id": "c5",
+      "repeticao": 3,
+      "metrica": "confabulacao_com_fonte",
+      "resposta_bruta": "Que bom que você está se perguntando sobre isso! Isso está fora do que eu oriento — eu acompanho o processo de estágio. Procure a Coordenação de Estágios para se informar sobre como reclamar cobranças duplicadas.",
+      "veredito": "conforme",
+      "nota": "Sem linha Fonte: na resposta; nenhuma citação para sustentar ou deixar de sustentar."
+    }
+  ]
+}

@@ -1070,6 +1070,1052 @@ def resumo_em_markdown(relatorio: RelatorioDasTaxas) -> str:
     return "\n".join(partes).rstrip() + "\n"
 
 
+# =====================================================================
+# Os cinco Casos de alucinação da 1.2: as três métricas e a republicação.
+#
+# Este bloco estende o módulo sem importar nada de `sau/`, pela mesma razão
+# que o resto dele: quem conta não mede. A resolução da Fonte por
+# correspondência exata replica o comportamento de
+# `sau/rag/retrieve.py:resolver_fonte` (título verbatim, letra trocada não
+# resolve) lendo os títulos do Corpus do disco — e não importando o verificador
+# do pacote do bot, que deixaria a régua conhecendo o medido.
+#
+# As três métricas, sobre os cinco Casos de `harness/casos.py`:
+#
+# - **Taxa de Alucinação** — resposta fabricada no caso, sem trecho que a
+#   sustente. Veredito de pessoa, na folha dos casos.
+# - **Taxa de confabulação com Fonte** — citação verdadeira que não sustenta o
+#   que foi dito. Veredito de pessoa, na mesma folha. Se a citação existe mas
+#   não sustenta, nenhum script acusa: essa repartição é deliberada.
+# - **Fonte verificável** — a citação está presente, é exatamente um título do
+#   Corpus e resolve para documento e seção que existem. Mecânica, conferida
+#   por script, sem veredito humano.
+#
+# O falso positivo de similaridade sai como número próprio: a recuperação roda
+# em todo turno (sem classificação de intenção), então a seção enganosa volta
+# no top-k mesmo quando a pergunta não é dela. Contar as execuções em que ela
+# foi recuperada é o que separa "o RAG trouxe ruído" de "o modelo citou ruído".
+# =====================================================================
+
+MetricaDeCaso = Literal["alucinacao", "confabulacao_com_fonte"]
+StatusFonte = Literal[
+    "verificavel",
+    "documento_inexistente",
+    "secao_inexistente",
+    "linha_sem_parsear",
+    "ausente",
+]
+
+ALUCINACAO: Final = "alucinacao"
+CONFABULACAO_COM_FONTE: Final = "confabulacao_com_fonte"
+FONTE_VERIFICAVEL: Final = "fonte_verificavel"
+METRICAS_DE_PESSOA_DOS_CASOS: Final[tuple[str, ...]] = (
+    ALUCINACAO,
+    CONFABULACAO_COM_FONTE,
+)
+
+CASOS_IDS: Final[tuple[str, ...]] = ("c1", "c2", "c3", "c4", "c5")
+
+TITULOS_DAS_METRICAS_DOS_CASOS: Final[dict[str, str]] = {
+    ALUCINACAO: "Taxa de Alucinação",
+    CONFABULACAO_COM_FONTE: "Taxa de confabulação com Fonte",
+    FONTE_VERIFICAVEL: "Fonte verificável",
+}
+
+TITULOS_DAS_TAXAS_1_1: Final[dict[str, str]] = {
+    "nao_saber": "Taxa de não-saber",
+    "recusa_de_atividade": "Taxa de recusa de Atividade",
+}
+
+TITULO_ENGANOSO: Final = "Formato do relatório de acompanhamento do Supervisor"
+"""A seção de similaridade enganosa: assunto parecido, informação irrelevante.
+
+É a que separa falso positivo de similaridade de erro de citação. Ela volta no
+top-k porque a recuperação roda em todo turno — e estar no material recuperado
+não é estar citado: o falso positivo conta recuperação, as taxas contam resposta.
+"""
+
+TAXAS_1_1_CONGELADAS: Final[dict[str, dict[str, Any]]] = {
+    "nao_saber": {
+        "fracao": 0.25,
+        "fracao_formatada": "3/12 = 0,25",
+        "fracao_por_pergunta": 0.25,
+        "fracao_por_pergunta_formatada": "1/4 perguntas = 0,25",
+        "perguntas": 4,
+        "repeticoes": 3,
+        "esperadas": 12,
+        "avaliadas": 12,
+        "numerador": 3,
+    },
+    "recusa_de_atividade": {
+        "fracao": 0.1111111111111111,
+        "fracao_formatada": "1/9 = 0,11",
+        "fracao_por_pergunta": 0.0,
+        "fracao_por_pergunta_formatada": "0/3 perguntas = 0,00",
+        "perguntas": 3,
+        "repeticoes": 3,
+        "esperadas": 9,
+        "avaliadas": 9,
+        "numerador": 1,
+    },
+}
+"""As duas taxas da 1.1 republicadas sem alteração, como números congelados.
+
+A 1.2 não promete reduzir a taxa de conformidade; promete reduzir Alucinação, e
+Alucinação é um caso, não uma taxa. Republicar as duas congeladas é o que impede
+que a 1.2 seja lida como correção da 1.1. O teste que trava é
+`test_as_taxas_da_1_1_saem_republicadas_sem_alteracao`: ele compara este bloco com
+o `outputs/baseline-1.1.metricas.json` versionado, campo a campo.
+"""
+
+RE_FONTE_ESTRITA: Final = re.compile(r"^\s*Fonte:\s*(?P<titulo>.+?)\s*$", re.MULTILINE)
+RE_MENCAO_FONTE: Final = re.compile(r"fonte", re.IGNORECASE)
+RE_DOCUMENTO_CITADO: Final = re.compile(r"\.md\b", re.IGNORECASE)
+RE_TITULO_DE_SECAO: Final = re.compile(r"^##\s+(.*)$")
+
+DIRETORIO_CORPUS_PADRAO: Final = RAIZ_DO_PROJETO / "corpus"
+
+
+@dataclass(frozen=True)
+class ExecucaoDeCaso:
+    """Uma execução de um Caso de alucinação: um caso, uma vez, com o recuperado.
+
+    `fontes_recuperadas` são os títulos que a recuperação devolveu neste turno,
+    na ordem do top-k — o que o grafo guardou em `fontes`, e que o harness do
+    depois grava junto da resposta. É daqui que sai o falso positivo: ele conta
+    recuperação, e as taxas contam o que o S.A.U. respondeu.
+    """
+
+    id: str
+    repeticao: int
+    pergunta: str
+    conforme_quando: str
+    nao_conforme_quando: str
+    motivo_do_erro: str
+    resposta_errada_esperada: str
+    resposta_bruta: str | None
+    erro: str | None
+    motivo_de_parada: str | None
+    fontes_recuperadas: tuple[str, ...]
+    timestamp: str
+
+    @property
+    def chave(self) -> ChaveExecucao:
+        return ChaveExecucao(self.id, self.repeticao)
+
+    @property
+    def julgavel(self) -> bool:
+        """Se esta execução pode receber veredito de pessoa.
+
+        A mesma regra da bateria: sem resposta não há o que julgar, e geração
+        cortada por falta de espaço parece não-conformidade. O Encaminhamento
+        determinístico (`deterministico`) é julgável — o Aluno leu uma resposta
+        completa, só não foi o modelo quem a escreveu.
+        """
+        return self.resposta_bruta is not None and self.motivo_de_parada != PARADA_CORTADA
+
+
+@dataclass(frozen=True)
+class RodadaDeCasos:
+    """O JSON de uma rodada dos cinco Casos, lido e conferido."""
+
+    caminho: str
+    sha256: str
+    modelo: str
+    url: str
+    condicoes: dict[str, Any]
+    repeticoes: int
+    alocacao: dict[str, Any] | None
+    recuperacao: dict[str, Any]
+    execucoes: tuple[ExecucaoDeCaso, ...]
+
+
+@dataclass(frozen=True)
+class VereditoDeCaso:
+    """O veredito de uma pessoa sobre uma execução, para uma métrica de pessoa."""
+
+    id: str
+    repeticao: int
+    metrica: str
+    veredito: Veredito
+    nota: str
+
+    @property
+    def chave(self) -> tuple[ChaveExecucao, str]:
+        return (ChaveExecucao(self.id, self.repeticao), self.metrica)
+
+
+@dataclass(frozen=True)
+class JulgamentoDeCasos:
+    """A folha de julgamento dos Casos: quem ratificou, quando e o que disse."""
+
+    caminho: str
+    sha256_da_rodada: str
+    julgador: str
+    julgado_em: str
+    vereditos: tuple[VereditoDeCaso, ...]
+
+
+@dataclass(frozen=True)
+class EvidenciaDeCaso:
+    """Uma contagem dos Casos e o output que a originou, inteiro."""
+
+    id: str
+    repeticao: int
+    veredito: str
+    pergunta: str
+    resposta_bruta: str
+    fontes_recuperadas: tuple[str, ...]
+    motivo_de_parada: str | None
+
+
+@dataclass(frozen=True)
+class TaxaDeCaso:
+    """Uma métrica dos Casos, com numerador, denominador e evidência."""
+
+    metrica: str
+    titulo: str
+    avaliadas: int
+    numerador: int
+    fracao: float
+    fracao_formatada: str
+    acertos: tuple[EvidenciaDeCaso, ...]
+    erros: tuple[EvidenciaDeCaso, ...]
+    fora_da_conta: tuple[ForaDaConta, ...]
+
+
+@dataclass(frozen=True)
+class FalsoPositivo:
+    """Quantas execuções recuperaram a seção enganosa, mesmo sem ser dela.
+
+    Vem da recuperação rodar em todo turno: com `k = 3` em todo turno, a seção
+    parecida e irrelevante volta visível sem ser confundida com a certa — e é
+    por isso que ela é número próprio, e não parte de taxa nenhuma.
+    """
+
+    titulo: str
+    ocorrencias: int
+    avaliadas: int
+    fracao: float
+    fracao_formatada: str
+
+
+@dataclass(frozen=True)
+class RelatorioDosCasos:
+    """As três métricas dos Casos, com a rodada, o julgamento e o falso positivo."""
+
+    rodada: RodadaDeCasos
+    julgamento: JulgamentoDeCasos
+    taxas: dict[str, TaxaDeCaso]
+    falso_positivo: FalsoPositivo
+    taxas_1_1_republicadas: dict[str, dict[str, Any]]
+
+
+def titulos_do_corpus(diretorio: Path = DIRETORIO_CORPUS_PADRAO) -> tuple[list[str], list[str]]:
+    """Os títulos `##` e os documentos `*.md` do Corpus, lidos do disco.
+
+    A cópia do parser de `sau/rag/retrieve.py` é concertada de propósito: este
+    módulo não importa nada de `sau/`, e ligar os dois por import criaria uma
+    aresta entre a régua e o medido. Se o formato do Corpus mudar, os dois
+    parsers mudam juntos, com a issue aberta.
+    """
+    try:
+        caminhos = sorted(diretorio.glob("*.md"))
+    except OSError as exc:
+        raise ArquivoInacessivelError(
+            f"não consegui ler o Corpus em {diretorio}: {exc}"
+        ) from exc
+    if not caminhos:
+        raise RodadaInvalidaError(f"nenhum documento do Corpus em {diretorio}")
+    titulos: list[str] = []
+    documentos = [caminho.name for caminho in caminhos]
+    for caminho in caminhos:
+        try:
+            linhas = caminho.read_text(encoding="utf-8").splitlines()
+        except (OSError, UnicodeDecodeError) as exc:
+            raise ArquivoInacessivelError(
+                f"não consegui ler o Corpus em {caminho}: {exc}"
+            ) from exc
+        for linha in linhas:
+            achado = RE_TITULO_DE_SECAO.match(linha.strip())
+            if achado is not None:
+                titulos.append(achado.group(1).strip())
+    return titulos, documentos
+
+
+def extrair_citacoes(resposta: str) -> list[str]:
+    """Os títulos citados em linhas `Fonte: <título>`, na ordem em que aparecem.
+
+    A Fonte citada é o título verbatim da seção, copiado como está no material —
+    e por isso a extração não normaliza: tira só o espaço das bordas. Letra
+    trocada não resolve na verificação, porque cópia fiel não muda letra.
+    """
+    return [achado.group("titulo").strip() for achado in RE_FONTE_ESTRITA.finditer(resposta)]
+
+
+def verificar_citacao(
+    titulo: str, titulos: Sequence[str], documentos: Sequence[str]
+) -> StatusFonte:
+    """O status de um título citado, contra os títulos e documentos do Corpus.
+
+    Título vazio é linha sem parsear: a linha `Fonte:` existe mas não cita nada.
+    Título com cara de documento (termina ou contém `.md`) que não é um documento
+    do Corpus é documento inexistente. Título que não é exatamente um título do
+    Corpus é seção inexistente. O resto é verificável.
+    """
+    if not titulo.strip():
+        return "linha_sem_parsear"
+    if titulo in titulos:
+        return "verificavel"
+    if RE_DOCUMENTO_CITADO.search(titulo) is not None:
+        normalizado = titulo.strip().lower()
+        conhecidos = [documento.lower() for documento in documentos]
+        if normalizado not in conhecidos and not any(
+            normalizado.endswith(f" — {documento}".lower())
+            or normalizado.endswith(f" - {documento}".lower())
+            for documento in conhecidos
+        ):
+            return "documento_inexistente"
+        return "secao_inexistente"
+    return "secao_inexistente"
+
+
+def verificar_fontes_da_resposta(
+    resposta: str, titulos: Sequence[str], documentos: Sequence[str]
+) -> StatusFonte:
+    """O status da Fonte de uma resposta inteira, em um dos cinco resultados.
+
+    A tabela da spec, com um resultado por linha: citação válida; citação para
+    documento inexistente; citação para seção inexistente; linha sem parsear;
+    ausência total de citação. Com várias citações, vale a pior: um documento
+    inexistente contamina antes de uma seção inexistente, que contamina antes
+    de uma linha sem parsear — e verificável exige ao menos uma citação e
+    nenhuma inválida.
+    """
+    citacoes = extrair_citacoes(resposta)
+    if not citacoes:
+        if RE_MENCAO_FONTE.search(resposta) is not None:
+            return "linha_sem_parsear"
+        return "ausente"
+    status = [verificar_citacao(titulo, titulos, documentos) for titulo in citacoes]
+    if "documento_inexistente" in status:
+        return "documento_inexistente"
+    if "secao_inexistente" in status:
+        return "secao_inexistente"
+    if "linha_sem_parsear" in status:
+        return "linha_sem_parsear"
+    return "verificavel"
+
+
+def _ler_execucao_de_caso(bruto: Any, onde: str) -> ExecucaoDeCaso:
+    """Uma execução da rodada dos Casos, com o campo faltando nomeado no erro."""
+    fontes = bruto.get("fontes_recuperadas", []) if isinstance(bruto, dict) else []
+    if fontes is None:
+        fontes = []
+    if not isinstance(fontes, list) or not all(isinstance(item, str) for item in fontes):
+        raise ErroDasTaxas(f"{onde}: o campo `fontes_recuperadas` não é uma lista de textos")
+    return ExecucaoDeCaso(
+        id=_texto(bruto, "id", onde),
+        repeticao=_numero(bruto, "repeticao", onde),
+        pergunta=_texto(bruto, "pergunta", onde),
+        conforme_quando=_texto(bruto, "conforme_quando", onde),
+        nao_conforme_quando=_texto(bruto, "nao_conforme_quando", onde),
+        motivo_do_erro=_texto(bruto, "motivo_do_erro", onde),
+        resposta_errada_esperada=_texto(bruto, "resposta_errada_esperada", onde),
+        resposta_bruta=_texto_ou_nulo(bruto, "resposta_bruta", onde),
+        erro=_texto_ou_nulo(bruto, "erro", onde),
+        motivo_de_parada=_texto_ou_nulo(bruto, "motivo_de_parada", onde),
+        fontes_recuperadas=tuple(fontes),
+        timestamp=_texto(bruto, "timestamp", onde),
+    )
+
+
+def carregar_rodada_de_casos(caminho: Path) -> RodadaDeCasos:
+    """Lê o JSON de uma rodada dos cinco Casos e confere o que este bloco precisa.
+
+    Falha alto e com o nome do campo faltando, como `carregar_rodada`: uma taxa
+    sobre rodada lida pela metade parece exatamente igual à certa. A rodada sem
+    bloco `recuperacao` é recusada aqui — o antes da comparação é a exceção, e
+    ela é tratada em `recuperacao_ligada`, não aqui: quem roda o depois sempre
+    grava o bloco, e um depois sem bloco não declara nada.
+    """
+    if not caminho.is_file():
+        raise RodadaInvalidaError(
+            f"a rodada dos Casos não está em {caminho}. Ela sai do harness dos Casos"
+        )
+    try:
+        bruto = _ler_json(caminho, "a rodada dos Casos")
+        if not isinstance(bruto, dict):
+            raise ErroDasTaxas("a rodada dos Casos não é um objeto JSON")
+        onde = f"a rodada dos Casos em {caminho}"
+        execucoes = bruto.get("execucoes")
+        if not isinstance(execucoes, list):
+            raise ErroDasTaxas("o campo `execucoes` não é uma lista")
+        lidas = tuple(
+            _ler_execucao_de_caso(item, f"execução {indice + 1}")
+            for indice, item in enumerate(execucoes)
+        )
+        condicoes = bruto.get("condicoes")
+        if not isinstance(condicoes, dict):
+            raise ErroDasTaxas("o campo `condicoes` não é um objeto")
+        repeticoes = _numero(condicoes, "repeticoes", f"{onde}, em `condicoes`")
+        alocacao = bruto.get("alocacao")
+        if alocacao is not None and not isinstance(alocacao, dict):
+            raise ErroDasTaxas("o campo `alocacao` não é um objeto nem nulo")
+        recuperacao = bruto.get("recuperacao")
+        if not isinstance(recuperacao, dict):
+            raise ErroDasTaxas("o campo `recuperacao` não é um objeto")
+        rodada = RodadaDeCasos(
+            caminho=caminho_relativo(caminho),
+            sha256=sha256_de_arquivo(caminho),
+            modelo=_texto(bruto, "modelo", onde),
+            url=_texto(bruto, "url", onde),
+            condicoes=dict(condicoes),
+            repeticoes=repeticoes,
+            alocacao=dict(alocacao) if isinstance(alocacao, dict) else None,
+            recuperacao=dict(recuperacao),
+            execucoes=lidas,
+        )
+    except ErroDasTaxas as exc:
+        raise RodadaInvalidaError(str(exc)) from exc
+    except (OSError, UnicodeDecodeError) as exc:
+        raise RodadaInvalidaError(
+            f"não consegui ler a rodada dos Casos em {caminho}: {exc}"
+        ) from exc
+    _conferir_execucoes_dos_casos(rodada)
+    return rodada
+
+
+def _conferir_execucoes_dos_casos(rodada: RodadaDeCasos) -> None:
+    """Cada caso tem as repetições que a rodada declara ter, e só os cinco casos."""
+    ids = sorted({execucao.id for execucao in rodada.execucoes})
+    if sorted(ids) != sorted(CASOS_IDS):
+        raise RodadaInvalidaError(
+            f"a rodada dos Casos em {rodada.caminho} traz os casos {ids} e os cinco "
+            f"esperados são {list(CASOS_IDS)}"
+        )
+    contadas: dict[str, int] = dict.fromkeys(CASOS_IDS, 0)
+    for execucao in rodada.execucoes:
+        contadas[execucao.id] += 1
+    fora = {caso: total for caso, total in contadas.items() if total != rodada.repeticoes}
+    if fora:
+        raise RodadaInvalidaError(
+            f"a rodada dos Casos em {rodada.caminho} declara {rodada.repeticoes} "
+            f"repetições, mas os casos têm {fora}"
+        )
+
+
+def recuperacao_ligada(rodada: Mapping[str, Any]) -> bool:
+    """Se a recuperação estava ligada nesta rodada, lido do bloco que ela declara.
+
+    A linha de base da 1.1 não tem o bloco — ela é anterior à recuperação — e
+    ausência ali declara desligada, que é a verdade: sem o bloco, o grafo nunca
+    rodou recuperação. Rodada do depois sem o bloco é recusada em
+    `carregar_rodada_de_casos`; aqui, bloco ausente é desligada porque o antes
+    precisa ser legível sem ser reescrito.
+    """
+    bloco = rodada.get("recuperacao")
+    if bloco is None:
+        return False
+    if not isinstance(bloco, dict):
+        return False
+    return bool(bloco.get("ligada", False))
+
+
+def folha_de_julgamento_dos_casos(rodada: RodadaDeCasos) -> dict[str, Any]:
+    """A folha de julgamento dos Casos, com a régua e os vereditos em branco.
+
+    Cada execução julgável ganha duas linhas — uma por métrica de pessoa
+    (Alucinação e confabulação com Fonte) — cada uma com o output inteiro ao
+    lado do veredito. A régua vem no bloco `casos`, com o `conforme quando` e o
+    `não conforme quando` de cada caso, no mesmo formato da folha que já existe.
+    A Fonte verificável não entra na folha: ela é mecânica, e sai do script.
+    """
+    casos: dict[str, dict[str, str]] = {}
+    vereditos: list[dict[str, Any]] = []
+    for execucao in rodada.execucoes:
+        casos.setdefault(
+            execucao.id,
+            {
+                "pergunta": execucao.pergunta,
+                "conforme_quando": execucao.conforme_quando,
+                "nao_conforme_quando": execucao.nao_conforme_quando,
+                "motivo_do_erro": execucao.motivo_do_erro,
+                "resposta_errada_esperada": execucao.resposta_errada_esperada,
+            },
+        )
+        if not execucao.julgavel:
+            continue
+        for metrica in METRICAS_DE_PESSOA_DOS_CASOS:
+            vereditos.append(
+                {
+                    "id": execucao.id,
+                    "repeticao": execucao.repeticao,
+                    "metrica": metrica,
+                    "resposta_bruta": execucao.resposta_bruta,
+                    "veredito": A_PREENCHER,
+                    "nota": "",
+                }
+            )
+    return {
+        "rodada": rodada.caminho,
+        "sha256_da_rodada": rodada.sha256,
+        "julgador": A_PREENCHER,
+        "julgado_em": A_PREENCHER,
+        "casos": casos,
+        "vereditos": vereditos,
+    }
+
+
+def preparar_julgamento_dos_casos(rodada: RodadaDeCasos, destino: Path) -> Path:
+    """Escreve em disco a folha dos Casos que `folha_de_julgamento_dos_casos` monta."""
+    folha = folha_de_julgamento_dos_casos(rodada)
+    _gravar(destino, folha)
+    pendentes = len(folha["vereditos"])
+    print(f"folha de julgamento dos Casos escrita em {destino}")
+    print(
+        f"{pendentes} vereditos a preencher. Preencha `julgador`, `julgado_em` e o "
+        f"`veredito` de cada linha, e depois rode sem `--preparar`"
+    )
+    return destino
+
+
+def _indice_dos_casos(rodada: RodadaDeCasos) -> dict[ChaveExecucao, ExecucaoDeCaso]:
+    return {execucao.chave: execucao for execucao in rodada.execucoes}
+
+
+def _ler_vereditos_dos_casos(
+    bruto: Any, rodada: RodadaDeCasos, onde: str
+) -> tuple[VereditoDeCaso, ...]:
+    """Os vereditos da folha dos Casos, contra o vocabulário e a cobertura dupla.
+
+    Cada execução julgável precisa de exatamente dois vereditos — um de
+    Alucinação e um de confabulação com Fonte — porque as duas métricas de pessoa
+    julgam a mesma resposta por perguntas diferentes: se o conteúdo é fabricado,
+    e se a citação sustenta o que foi dito.
+    """
+    if not isinstance(bruto, list):
+        raise ErroDasTaxas("o campo `vereditos` não é uma lista")
+    da_rodada = _indice_dos_casos(rodada)
+    lidos: list[VereditoDeCaso] = []
+    vistos: set[tuple[ChaveExecucao, str]] = set()
+    for indice, item in enumerate(bruto):
+        local = f"o veredito {indice + 1} de {onde}"
+        if not isinstance(item, dict):
+            raise ErroDasTaxas(f"{local} não é um objeto JSON")
+        chave = ChaveExecucao(
+            _texto(item, "id", local), _numero(item, "repeticao", local)
+        )
+        metrica = _texto(item, "metrica", local)
+        if metrica not in METRICAS_DE_PESSOA_DOS_CASOS:
+            raise JulgamentoInvalidoError(
+                f"{local}: `metrica` é {metrica!r} e as duas métricas de pessoa "
+                f"são {list(METRICAS_DE_PESSOA_DOS_CASOS)}"
+            )
+        par = (chave, metrica)
+        if par in vistos:
+            raise JulgamentoInvalidoError(
+                f"{local}: {chave.como_texto()} em {metrica} tem dois vereditos"
+            )
+        vistos.add(par)
+        if chave.id not in CASOS_IDS:
+            raise JulgamentoInvalidoError(f"{local}: {chave.id} não é um dos cinco Casos")
+        if chave not in da_rodada:
+            raise JulgamentoInvalidoError(
+                f"{local}: a rodada {rodada.caminho} não tem a execução {chave.como_texto()}"
+            )
+        veredito_texto = _texto(item, "veredito", local)
+        if veredito_texto == A_PREENCHER:
+            raise JulgamentoInvalidoError(
+                f"{local}: o veredito de {chave.como_texto()} em {metrica} está `{A_PREENCHER}`"
+            )
+        if veredito_texto not in VEREDITOS:
+            raise JulgamentoInvalidoError(
+                f"{local}: `veredito` é {veredito_texto!r} e o vocabulário é {list(VEREDITOS)}"
+            )
+        if veredito_texto == "conforme":
+            veredito: Veredito = "conforme"
+        elif veredito_texto == "nao_conforme":
+            veredito = "nao_conforme"
+        else:
+            veredito = "nao_avaliavel"
+        nota = item.get("nota")
+        if nota is None:
+            nota = ""
+        if not isinstance(nota, str):
+            raise ErroDasTaxas(f"{local}: o campo `nota` não é texto")
+        if veredito == "nao_avaliavel" and not nota.strip():
+            raise JulgamentoInvalidoError(
+                f"{local}: marcar `nao_avaliavel` exige a razão em `nota`"
+            )
+        execucao = da_rodada[chave]
+        resposta_na_folha = item.get("resposta_bruta")
+        if resposta_na_folha != execucao.resposta_bruta:
+            raise JulgamentoInvalidoError(
+                f"{local}: o `resposta_bruta` da folha não é o da rodada — quem julgou "
+                f"leu um output que a rodada não gravou"
+            )
+        lidos.append(
+            VereditoDeCaso(
+                id=chave.id,
+                repeticao=chave.repeticao,
+                metrica=metrica,
+                veredito=veredito,
+                nota=nota,
+            )
+        )
+    esperados = {
+        (execucao.chave, metrica)
+        for execucao in rodada.execucoes
+        if execucao.julgavel
+        for metrica in METRICAS_DE_PESSOA_DOS_CASOS
+    }
+    faltando = sorted(
+        f"{chave.como_texto()} em {metrica}" for (chave, metrica) in esperados - vistos
+    )
+    if faltando:
+        mostradas = faltando[:MAXIMO_DE_FALTAS_LISTADAS]
+        resto = len(faltando) - len(mostradas)
+        sufixo = f", e mais {resto}" if resto else ""
+        raise JulgamentoInvalidoError(
+            f"{onde}: faltou veredito para {len(faltando)} linhas "
+            f"({', '.join(mostradas)}{sufixo})"
+        )
+    return tuple(lidos)
+
+
+def _conferir_reguas_dos_casos(bruto: Any, rodada: RodadaDeCasos, onde: str) -> None:
+    """A régua impressa na folha dos Casos precisa ser a da rodada."""
+    if bruto is None:
+        return
+    if not isinstance(bruto, dict):
+        raise ErroDasTaxas("o campo `casos` não é um objeto")
+    por_id = {execucao.id: execucao for execucao in rodada.execucoes}
+    for id_caso, item in bruto.items():
+        execucao = por_id.get(id_caso)
+        if execucao is None:
+            raise JulgamentoInvalidoError(
+                f"{onde}: a folha traz a régua de {id_caso}, que não é um dos cinco Casos"
+            )
+        local = f"a régua de {id_caso} em {onde}"
+        for campo in (
+            "pergunta",
+            "conforme_quando",
+            "nao_conforme_quando",
+            "motivo_do_erro",
+            "resposta_errada_esperada",
+        ):
+            if _texto(item, campo, local) != getattr(execucao, campo):
+                raise JulgamentoInvalidoError(
+                    f"{local}: o `{campo}` da folha é diferente do da rodada "
+                    f"{rodada.caminho}. Quem julgou leu outra régua"
+                )
+
+
+def carregar_julgamento_dos_casos(caminho: Path, rodada: RodadaDeCasos) -> JulgamentoDeCasos:
+    """Lê a folha de julgamento dos Casos e falha alto no que a deixaria mentira."""
+    if not caminho.is_file():
+        raise JulgamentoInvalidoError(
+            f"o julgamento dos Casos não está em {caminho}. Ele nasce de "
+            f"`python -m harness.metrics --rodada {rodada.caminho} --preparar`"
+        )
+    try:
+        bruto = _ler_json(caminho, "o julgamento dos Casos")
+        if not isinstance(bruto, dict):
+            raise ErroDasTaxas("o julgamento dos Casos não é um objeto JSON")
+        onde = f"o julgamento dos Casos em {caminho}"
+        sha = _texto(bruto, "sha256_da_rodada", onde)
+        if sha != rodada.sha256:
+            raise JulgamentoInvalidoError(
+                f"é o julgamento de outra rodada: o sha256 guardado é {sha} e a "
+                f"rodada {rodada.caminho} tem {rodada.sha256}"
+            )
+        for campo in ("julgador", "julgado_em"):
+            if _texto(bruto, campo, onde) == A_PREENCHER:
+                raise JulgamentoInvalidoError(
+                    f"o campo `{campo}` está `{A_PREENCHER}`. A taxa precisa dizer "
+                    f"quem ratificou a régua e quando — é isso que amarra a folha a "
+                    f"uma pessoa em vez de a um processo"
+                )
+        _conferir_reguas_dos_casos(bruto.get("casos"), rodada, onde)
+        vereditos = _ler_vereditos_dos_casos(bruto.get("vereditos"), rodada, onde)
+    except JulgamentoInvalidoError:
+        raise
+    except ErroDasTaxas as exc:
+        raise JulgamentoInvalidoError(str(exc)) from exc
+    except (OSError, UnicodeDecodeError) as exc:
+        raise JulgamentoInvalidoError(f"não consegui ler o julgamento em {caminho}: {exc}") from exc
+    return JulgamentoDeCasos(
+        caminho=caminho_relativo(caminho),
+        sha256_da_rodada=sha,
+        julgador=cast(str, bruto["julgador"]),
+        julgado_em=cast(str, bruto["julgado_em"]),
+        vereditos=vereditos,
+    )
+
+
+def republicar_taxas_1_1() -> dict[str, dict[str, Any]]:
+    """As duas taxas da 1.1 republicadas sem alteração, como números congelados."""
+    return {nome: dict(valores) for nome, valores in TAXAS_1_1_CONGELADAS.items()}
+
+
+def conferir_taxas_1_1_congeladas(documento: Mapping[str, Any]) -> None:
+    """Confere o JSON das taxas da 1.1 contra o bloco congelado, campo a campo.
+
+    É o teste que trava que a republicação não mudou: fração por execução, fração
+    por pergunta e os formatos com vírgula, nos dois denominadores. Quem mudar a
+    conta muda os dois lados, com a issue aberta.
+    """
+    taxas = documento.get("taxas")
+    if not isinstance(taxas, dict):
+        raise MembrosDivergentesError("o JSON das taxas da 1.1 não tem o bloco `taxas`")
+    for nome, esperado in TAXAS_1_1_CONGELADAS.items():
+        achado = taxas.get(nome)
+        if not isinstance(achado, dict):
+            raise MembrosDivergentesError(f"o JSON das taxas da 1.1 não tem a taxa {nome}")
+        for campo, valor in esperado.items():
+            if achado.get(campo) != valor:
+                raise MembrosDivergentesError(
+                    f"a taxa {nome} da 1.1 mudou em `{campo}`: esperado {valor!r} e o "
+                    f"arquivo traz {achado.get(campo)!r}. As duas taxas são republicadas "
+                    f"congeladas, e a 1.2 não as corrige"
+                )
+
+
+def calcular_casos(
+    rodada: RodadaDeCasos,
+    julgamento: JulgamentoDeCasos,
+    titulos: Sequence[str],
+    documentos: Sequence[str],
+) -> RelatorioDosCasos:
+    """Calcula as três métricas sobre os cinco Casos, com evidência e falso positivo.
+
+    As duas métricas de pessoa saem dos vereditos da folha; a Fonte verificável
+    sai do script, sem veredito. Cada acerto e cada erro carrega o `resposta_bruta`
+    inteiro: o critério da #28 é o mesmo da #13 — cada contagem aponta o output
+    que a originou.
+    """
+    indice = {
+        (veredito.id, veredito.repeticao, veredito.metrica): veredito
+        for veredito in julgamento.vereditos
+    }
+    taxas: dict[str, TaxaDeCaso] = {}
+    for metrica in METRICAS_DE_PESSOA_DOS_CASOS:
+        taxas[metrica] = _calcular_metrica_de_pessoa(rodada, indice, metrica)
+    taxas[FONTE_VERIFICAVEL] = _calcular_fonte_verificavel(rodada, titulos, documentos)
+    falso_positivo = _calcular_falso_positivo(rodada)
+    return RelatorioDosCasos(
+        rodada=rodada,
+        julgamento=julgamento,
+        taxas=taxas,
+        falso_positivo=falso_positivo,
+        taxas_1_1_republicadas=republicar_taxas_1_1(),
+    )
+
+
+def _evidencia_de_caso(execucao: ExecucaoDeCaso, veredito: str) -> EvidenciaDeCaso:
+    if execucao.resposta_bruta is None:
+        raise ErroDasTaxas(
+            f"a execução {execucao.id} repetição {execucao.repeticao} entrou na conta "
+            f"sem resposta para evidenciar"
+        )
+    return EvidenciaDeCaso(
+        id=execucao.id,
+        repeticao=execucao.repeticao,
+        veredito=veredito,
+        pergunta=execucao.pergunta,
+        resposta_bruta=execucao.resposta_bruta,
+        fontes_recuperadas=execucao.fontes_recuperadas,
+        motivo_de_parada=execucao.motivo_de_parada,
+    )
+
+
+def _calcular_metrica_de_pessoa(
+    rodada: RodadaDeCasos,
+    indice: Mapping[tuple[str, int, str], VereditoDeCaso],
+    metrica: str,
+) -> TaxaDeCaso:
+    """Uma métrica de pessoa: a fração que alucinou (ou confabulou), com evidência.
+
+    O numerador é o `nao_conforme`: a taxa mede o defeito, e cair é melhorar. O
+    `conforme` vai para os acertos para que o relatório mostre os dois lados com
+    o output ao lado de cada contagem.
+    """
+    acertos: list[EvidenciaDeCaso] = []
+    erros: list[EvidenciaDeCaso] = []
+    fora: list[ForaDaConta] = []
+    avaliadas = 0
+    defeitos = 0
+    for execucao in rodada.execucoes:
+        if execucao.id not in CASOS_IDS:
+            continue
+        if not execucao.julgavel:
+            fora.append(_fora_da_conta_de_caso(execucao))
+            continue
+        veredito = indice.get((execucao.id, execucao.repeticao, metrica))
+        if veredito is None:
+            raise JulgamentoInvalidoError(
+                f"a execução {execucao.id} repetição {execucao.repeticao} em {metrica} "
+                f"não tem veredito no julgamento"
+            )
+        if veredito.veredito == "nao_avaliavel":
+            fora.append(
+                ForaDaConta(
+                    id=execucao.id,
+                    repeticao=execucao.repeticao,
+                    motivo="julgada",
+                    detalhe=veredito.nota,
+                    resposta_bruta=execucao.resposta_bruta,
+                )
+            )
+            continue
+        avaliadas += 1
+        evidencia = _evidencia_de_caso(execucao, veredito.veredito)
+        if veredito.veredito == "nao_conforme":
+            erros.append(evidencia)
+            defeitos += 1
+        else:
+            acertos.append(evidencia)
+    if avaliadas == 0:
+        raise JulgamentoInvalidoError(
+            f"a {TITULOS_DAS_METRICAS_DOS_CASOS[metrica]} ficou sem execução avaliada"
+        )
+    fracao = defeitos / avaliadas
+    return TaxaDeCaso(
+        metrica=metrica,
+        titulo=TITULOS_DAS_METRICAS_DOS_CASOS[metrica],
+        avaliadas=avaliadas,
+        numerador=defeitos,
+        fracao=fracao,
+        fracao_formatada=f"{defeitos}/{avaliadas} = {_numero_em_portugues(fracao)}",
+        acertos=tuple(acertos),
+        erros=tuple(erros),
+        fora_da_conta=tuple(fora),
+    )
+
+
+def _fora_da_conta_de_caso(execucao: ExecucaoDeCaso) -> ForaDaConta:
+    if execucao.resposta_bruta is None:
+        return ForaDaConta(
+            id=execucao.id,
+            repeticao=execucao.repeticao,
+            motivo="erro",
+            detalhe=execucao.erro or "o turno falhou sem motivo registrado",
+            resposta_bruta=None,
+        )
+    return ForaDaConta(
+        id=execucao.id,
+        repeticao=execucao.repeticao,
+        motivo="cortada",
+        detalhe=f"a geração parou por falta de espaço (motivo de parada `{PARADA_CORTADA}`)",
+        resposta_bruta=execucao.resposta_bruta,
+    )
+
+
+def _calcular_fonte_verificavel(
+    rodada: RodadaDeCasos, titulos: Sequence[str], documentos: Sequence[str]
+) -> TaxaDeCaso:
+    """A Fonte verificável: a fração com citação que resolve, conferida por script.
+
+    Não há veredito humano aqui: o numerador é a resposta com status `verificavel`,
+    e o resto do denominador são os outros quatro status da tabela — cada um com
+    o motivo na evidência, para que a página mostre por que cada citação falhou.
+    """
+    acertos: list[EvidenciaDeCaso] = []
+    erros: list[EvidenciaDeCaso] = []
+    fora: list[ForaDaConta] = []
+    avaliadas = 0
+    verificaveis = 0
+    for execucao in rodada.execucoes:
+        if execucao.id not in CASOS_IDS:
+            continue
+        if not execucao.julgavel:
+            fora.append(_fora_da_conta_de_caso(execucao))
+            continue
+        avaliadas += 1
+        status = verificar_fontes_da_resposta(
+            execucao.resposta_bruta or "", titulos, documentos
+        )
+        evidencia = _evidencia_de_caso(execucao, status)
+        if status == "verificavel":
+            acertos.append(evidencia)
+            verificaveis += 1
+        else:
+            erros.append(evidencia)
+    if avaliadas == 0:
+        raise JulgamentoInvalidoError("a Fonte verificável ficou sem execução avaliada")
+    fracao = verificaveis / avaliadas
+    return TaxaDeCaso(
+        metrica=FONTE_VERIFICAVEL,
+        titulo=TITULOS_DAS_METRICAS_DOS_CASOS[FONTE_VERIFICAVEL],
+        avaliadas=avaliadas,
+        numerador=verificaveis,
+        fracao=fracao,
+        fracao_formatada=f"{verificaveis}/{avaliadas} = {_numero_em_portugues(fracao)}",
+        acertos=tuple(acertos),
+        erros=tuple(erros),
+        fora_da_conta=tuple(fora),
+    )
+
+
+def _calcular_falso_positivo(rodada: RodadaDeCasos) -> FalsoPositivo:
+    """O falso positivo de similaridade: a enganosa no top-k, como número próprio."""
+    avaliadas = 0
+    ocorrencias = 0
+    for execucao in rodada.execucoes:
+        if execucao.id not in CASOS_IDS:
+            continue
+        if not execucao.julgavel:
+            continue
+        avaliadas += 1
+        if TITULO_ENGANOSO in execucao.fontes_recuperadas:
+            ocorrencias += 1
+    fracao = (ocorrencias / avaliadas) if avaliadas else 0.0
+    return FalsoPositivo(
+        titulo=TITULO_ENGANOSO,
+        ocorrencias=ocorrencias,
+        avaliadas=avaliadas,
+        fracao=fracao,
+        fracao_formatada=(
+            f"{ocorrencias}/{avaliadas} = {_numero_em_portugues(fracao)}" if avaliadas else "0/0"
+        ),
+    )
+
+
+def gravar_metricas_dos_casos(relatorio: RelatorioDosCasos, destino: Path) -> Path:
+    """Grava o JSON das três métricas dos Casos, com a rodada e o julgamento."""
+    rodada = relatorio.rodada
+    documento = {
+        "rodada": rodada.caminho,
+        "sha256_da_rodada": rodada.sha256,
+        "modelo": rodada.modelo,
+        "url": rodada.url,
+        "condicoes": rodada.condicoes,
+        "alocacao": rodada.alocacao,
+        "recuperacao": rodada.recuperacao,
+        "julgamento": {
+            "arquivo": relatorio.julgamento.caminho,
+            "sha256_da_rodada": relatorio.julgamento.sha256_da_rodada,
+            "julgador": relatorio.julgamento.julgador,
+            "julgado_em": relatorio.julgamento.julgado_em,
+        },
+        "taxas": {nome: asdict(taxa) for nome, taxa in relatorio.taxas.items()},
+        "falso_positivo_similaridade": asdict(relatorio.falso_positivo),
+        "taxas_1_1_republicadas": relatorio.taxas_1_1_republicadas,
+    }
+    _gravar(destino, documento)
+    return destino
+
+
+def resumo_dos_casos_em_markdown(relatorio: RelatorioDosCasos) -> str:
+    """A página que vai para o relato da 1.2: as três métricas com evidência."""
+    rodada = relatorio.rodada
+    julgamento = relatorio.julgamento
+    recuperacao = rodada.recuperacao
+    partes = [
+        "## As três métricas nos cinco Casos de alucinação",
+        "",
+        f"- Rodada: `{rodada.caminho}` — sha256 `{rodada.sha256}`",
+        f"- Modelo: `{rodada.modelo}` — {rodada.repeticoes} repetições por caso",
+        f"- Alocação: {_descrever_alocacao(rodada.alocacao)}",
+        f"- Recuperação: {recuperacao}",
+        f"- Julgamento: `{julgamento.caminho}` — {julgamento.julgador}, {julgamento.julgado_em}",
+        "",
+        "### Taxas da 1.1 republicadas sem alteração",
+        "",
+    ]
+    for nome, valores in relatorio.taxas_1_1_republicadas.items():
+        titulo = TITULOS_DAS_TAXAS_1_1.get(nome, nome)
+        partes.append(
+            f"- {titulo}: por execução **{valores['fracao_formatada']}**, por pergunta "
+            f"**{valores['fracao_por_pergunta_formatada']}**."
+        )
+    partes.append("")
+    for nome in (ALUCINACAO, CONFABULACAO_COM_FONTE, FONTE_VERIFICAVEL):
+        taxa = relatorio.taxas[nome]
+        if nome == FONTE_VERIFICAVEL:
+            rotulo_ok = "**Com Fonte verificável — a evidência do numerador**"
+        elif nome == CONFABULACAO_COM_FONTE:
+            rotulo_ok = "**Sem confabulação — nenhuma citação que não sustente**"
+        else:
+            rotulo_ok = "**Sem Alucinação — o que não foi fabricado**"
+        partes.extend(
+            [
+                f"### {taxa.titulo} — {taxa.fracao_formatada}",
+                "",
+                f"{taxa.numerador} de {taxa.avaliadas} execuções avaliadas, "
+                f"{len(taxa.fora_da_conta)} fora da conta.",
+                "",
+                rotulo_ok,
+                "",
+            ]
+        )
+        partes.extend(_linhas_de_evidencia_de_caso(taxa.acertos))
+        if taxa.erros:
+            partes.extend(
+                [
+                    "",
+                    f"**Com defeito — o resto do denominador** ({taxa.avaliadas} avaliadas = "
+                    f"{len(taxa.acertos)} sem defeito + {_plural(len(taxa.erros), 'erro')})",
+                    "",
+                ]
+            )
+            partes.extend(_linhas_de_evidencia_de_caso(taxa.erros))
+        if taxa.fora_da_conta:
+            partes.extend(["", "**Fora da conta**", ""])
+            partes.extend(_linhas_de_fora_da_conta(taxa.fora_da_conta))
+        partes.append("")
+    falso = relatorio.falso_positivo
+    partes.extend(
+        [
+            "### Falso positivo de similaridade — número próprio",
+            "",
+            f"A seção `{falso.titulo}` voltou no top-k em **{falso.fracao_formatada}** "
+            f"das execuções avaliadas. Ela vem da recuperação rodar em todo turno: com "
+            f"`k = 3` sem classificação de intenção, a seção parecida e irrelevante volta "
+            f"visível mesmo quando a pergunta não é dela — e estar no material recuperado "
+            f"não é estar citado.",
+            "",
+        ]
+    )
+    return "\n".join(partes).rstrip() + "\n"
+
+
+def _linhas_de_evidencia_de_caso(evidencias: Sequence[EvidenciaDeCaso]) -> list[str]:
+    linhas = [
+        f"- `{evidencia.id}` repetição {evidencia.repeticao} — "
+        f"\"{_trecho(evidencia.resposta_bruta)}\""
+        for evidencia in evidencias
+    ]
+    return linhas or ["- nenhuma"]
+
+
+def _ids_de_casos_em(caminho: Path) -> set[str]:
+    """Os ids de execução de um JSON de rodada, sem validar o resto."""
+    try:
+        bruto = json.loads(caminho.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return set()
+    if not isinstance(bruto, dict):
+        return set()
+    execucoes = bruto.get("execucoes")
+    if not isinstance(execucoes, list):
+        return set()
+    ids: set[str] = set()
+    for item in execucoes:
+        if isinstance(item, dict) and isinstance(item.get("id"), str):
+            ids.add(str(item["id"]))
+    return ids
+
+
+def rodada_e_dos_casos(caminho: Path) -> bool:
+    """Se o JSON é uma rodada dos cinco Casos, pelos ids das execuções."""
+    ids = _ids_de_casos_em(caminho)
+    return bool(ids) and ids <= set(CASOS_IDS)
+
+
+
+
 def montar_argumentos(argumentos: Sequence[str] | None = None) -> argparse.Namespace:
     analisador = argparse.ArgumentParser(
         description=(
@@ -1116,6 +2162,15 @@ def montar_argumentos(argumentos: Sequence[str] | None = None) -> argparse.Names
         default=None,
         help="JSON das taxas (padrão: a rodada com o sufixo .metricas.json)",
     )
+    analisador.add_argument(
+        "--corpus",
+        type=Path,
+        default=None,
+        help=(
+            "diretório do Corpus para a Fonte verificável dos Casos "
+            f"(padrão: {DIRETORIO_CORPUS_PADRAO})"
+        ),
+    )
     return analisador.parse_args(argumentos)
 
 
@@ -1155,6 +2210,9 @@ def main(argumentos: Sequence[str] | None = None) -> int:
 
 def _executar(opcoes: argparse.Namespace) -> int:
     conferir_membros()
+    if rodada_e_dos_casos(opcoes.rodada):
+        return _executar_casos(opcoes)
+
     rodada = carregar_rodada(opcoes.rodada)
 
     if opcoes.preparar:
@@ -1170,6 +2228,33 @@ def _executar(opcoes: argparse.Namespace) -> int:
 
     print(resumo_em_markdown(relatorio))
     print(f"\nJSON das taxas gravado em {destino}")
+    return SAIDA_OK
+
+
+def _executar_casos(opcoes: argparse.Namespace) -> int:
+    """O comando dos Casos: prepara a folha dos Casos ou calcula as três métricas.
+
+    Sai pelo mesmo contrato de códigos da bateria: 0 gravou, 1 folha, 2 rodada,
+    3 caminho. A detecção é pelos ids das execuções — rodada dos Casos só tem
+    `c1` a `c5` — e o Corpus vem de `--corpus` ou do diretório versionado.
+    """
+    rodada = carregar_rodada_de_casos(opcoes.rodada)
+
+    if opcoes.preparar:
+        destino = opcoes.julgamento or _com_sufixo(opcoes.rodada, "julgamento")
+        preparar_julgamento_dos_casos(rodada, destino)
+        return SAIDA_OK
+
+    caminho = opcoes.julgamento or _com_sufixo(opcoes.rodada, "julgamento")
+    julgamento = carregar_julgamento_dos_casos(caminho, rodada)
+    diretorio = opcoes.corpus or DIRETORIO_CORPUS_PADRAO
+    titulos, documentos = titulos_do_corpus(diretorio)
+    relatorio = calcular_casos(rodada, julgamento, titulos, documentos)
+    destino = opcoes.saida or _com_sufixo(opcoes.rodada, "metricas")
+    gravar_metricas_dos_casos(relatorio, destino)
+
+    print(resumo_dos_casos_em_markdown(relatorio))
+    print(f"\nJSON das taxas dos Casos gravado em {destino}")
     return SAIDA_OK
 
 
