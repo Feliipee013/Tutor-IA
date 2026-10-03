@@ -112,6 +112,18 @@ contratos, seguro. Inclui o prazo de uma entrega: perguntar quando um documento 
 não é pedir a Atividade.
 _Evite_: dúvida comum, pergunta recorrente, FAQ
 
+**Corpus**:
+Conjunto de documentos sobre o processo de Estágio que sustenta a resposta do S.A.U.
+a uma Pergunta Frequente, em vez de ele responder do próprio conhecimento. É autorado
+pela equipe e portanto **declaradamente sintético**: cobre o processo, não o conteúdo de
+uma disciplina.
+_Evite_: base de conhecimento, base vetorial, banco de dados, documentação
+
+**Fonte**:
+O documento e a seção do Corpus que sustentam a resposta do S.A.U. É o que o Aluno
+consegue conferir sozinho, e por isso toda resposta baseada no Corpus a cita.
+_Evite_: referência, citação, link, referência bibliográfica
+
 **Atividade**:
 Etapa ou ação do processo de Estágio sobre a qual o Aluno pergunta. O S.A.U.
 orienta a Atividade passo a passo; não a faz pelo Aluno.

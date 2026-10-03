@@ -1,9 +1,9 @@
 """Nós do grafo de resposta do turno do S.A.U.
 
 Um nó, por enquanto: `responder` leva a mensagem do Aluno ao modelo e devolve o
-texto. O grafo tem um único caminho (issue #8) — a classificação de intenção, a
-recuperação da 1.2 e o encaminhamento entram como nós e arestas novos aqui
-dentro, não como serviço à parte.
+texto. O grafo tem um único caminho (issue #8), e a recuperação da 1.2 é o **único**
+nó que ele ganha — ela roda em todo turno, sem classificação de intenção e sem
+aresta condicional ([ADR-0008](../../docs/adr/0008-recuperacao-sem-classificacao-de-intencao.md)).
 
 O prompt do turno vem de `sau.persona.montar_prompt`, e a costura é de
 propósito isolada: a persona do S.A.U. (issue #10) entra por esta função, e o

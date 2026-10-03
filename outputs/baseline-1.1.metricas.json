@@ -19,7 +19,7 @@
   "julgamento": {
     "arquivo": "outputs/baseline-1.1.julgamento.json",
     "sha256_da_rodada": "5ec05d2b0115c407fbc485c211a0e49759f60cba6e18c90f24631a2e8e9effa2",
-    "julgador": "agente Claude (sessão opencode), a pedido de kcronnossz — não é julgamento humano",
+    "julgador": "kcronnossz (ratificador; veredito redigido por agente — Claude, sessão opencode)",
     "julgado_em": "2026-10-03"
   },
   "taxas": {

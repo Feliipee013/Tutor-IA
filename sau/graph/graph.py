@@ -1,15 +1,17 @@
 """Grafo LangGraph do turno de resposta do S.A.U.
 
-O grafo é a espinha do projeto: a classificação da intenção e as rotas da 1.2
-entram aqui dentro, como nós e arestas novos. A #8 monta o menor grafo que prova
-o caminho ponta a ponta — um único nó, `responder`:
+O grafo é a espinha do projeto: a recuperação da 1.2 entra aqui dentro, como um nó
+novo e sem aresta condicional — ela roda em todo turno, e não há classificação de
+intenção ([ADR-0008](../../docs/adr/0008-recuperacao-sem-classificacao-de-intencao.md)).
+A #8 monta o menor grafo que prova o caminho ponta a ponta — um único nó,
+`responder`:
 
     START → responder → END
 
 A entrada e a saída do grafo ficam logadas, que é o critério da #8 e o que deixa
 a resposta rastreável quando alguém depura uma conversa. As regras de
-comportamento (#10) e a rota de recuperação (1.2/P5) acrescentam nós e arestas a
-partir daqui.
+comportamento (#10) e a recuperação (1.2/P4) acrescentam o próximo nó a partir
+daqui.
 
 Desde a #9 o turno recebe o `historico` da conversa, que o `webhook` leu do registro
 (`sau/graph/state.py`) e passou pronto. O grafo **não** lê nem grava estado: é o que

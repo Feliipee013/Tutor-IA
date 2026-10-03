@@ -47,7 +47,10 @@ agente Implementar localizar o ponto de impacto sem varrer o repositório inteir
 | `docs/adr/` | decisões de arquitetura, com o que foi descartado e por quê | sim |
 | `docs/adr/0004-vram-por-maquina.md` | a VRAM é declarada por máquina: o contrato, como descobrir o valor e o que fazer sem GPU dedicada — **issue #7** | sim |
 | `docs/adr/0005-estado-da-conversa.md` | o estado da conversa vive num arquivo, isolado por `chat_id`, com TTL e ordem FIFO por conversa — **issue #9** | sim |
-| `docs/adr/0006-denominador-das-taxas.md` | as duas taxas da 1.1 saem por execução e por pergunta, e as duas são publicadas: o denominador de cada uma, e quando uma Pergunta-teste conta como acerto — **issue #13** | sim |
+| `docs/adr/0006-denominador-das-taxas.md` | as duas taxas da 1.1 saem por execução e por pergunta, e as duas são publicadas: o denominador de cada uma, e quando uma Pergunta-teste conta como acerto. Emenda: o veredito é responsabilidade de uma pessoa, pode ser redigido por um agente, e a folha nomeia **quem ratificou** — **issue #13** | sim |
+| `docs/adr/0007-corpus-derivado-do-instrumento.md` | o Corpus tem três documentos, derivados das Perguntas-teste que o alcançam, e não das categorias do escopo. Seguro de Acidentes Pessoais fica de fora | sim |
+| `docs/adr/0008-recuperacao-sem-classificacao-de-intencao.md` | a recuperação entra como **nó único, em todo turno**, sem classificação de intenção nem roteamento; a topologia de três rotas que a 1.1.2 desenhava foi abandonada | sim |
+| `docs/adr/0009-exemplo-de-encaminhamento-na-persona.md` | a persona ganha **um** exemplo de Encaminhamento completo, porque a linha de base mostra o modelo encerrando em 5 tokens. Reverte `10d9c56` e `3400b32` | sim |
 | `docs/sprints/` | plano legível da 1.1 e da 1.2 | sim |
 | `docs/medicao-modelo/` | a sondagem, o script de medição e a saída de cada máquina — **issue #3** | sim |
 | `docs/tempo-primeira-resposta.md` | o tempo de primeira resposta na GTX 1650 do ADR-0002, com as condições e a nota dos números antigos da RX 7600 — **issue #7** | sim |
@@ -75,38 +78,43 @@ Pergunta-teste medida contra modelo nenhum não compara nada.
 
 ## `sau/` — o pacote do bot
 
-Nome do pacote é decisão fechada junto com a #4. O grafo é a espinha do projeto:
-classificação da intenção, e a 1.2 entra como rota nova **dentro** desse mesmo
-grafo, não como serviço à parte.
+Nome do pacote é decisão fechada junto com a #4. O grafo é a espinha do projeto: a
+recuperação da 1.2 entra como **um nó a mais dentro** desse mesmo grafo, sem
+classificação de intenção e sem aresta condicional
+([ADR-0008](./adr/0008-recuperacao-sem-classificacao-de-intencao.md)).
 
 | Caminho | O que faz | Ticket | Existe |
 | `sau/config.py` | lê do ambiente o que a #4 precisa: modelo, timeout, porta, a URL base do Ollama no host e a VRAM total da máquina; o que a #5 precisa: as duas credenciais do Telegram, a porta do webhook e a URL da API; e o que a #9 precisa: o caminho do arquivo de conversas e o TTL em minutos. A #8 não acrescenta campo novo — o `webhook` passa a ler o mesmo `OLLAMA_*` que o `bot` já lia. Desde a #11 também o `INFERENCIA_K` e o `INFERENCIA_FILA_TETO`, o `k` do semáforo e o teto da fila, com a mesma validação de inteiro positivo do TTL. A temperatura ainda não é lida — chega no ticket que for escrevê-la, e a linha cresce aqui quando ele existir | #4, #5, #8, #9, #11 | sim |
 | `sau/prereqs.py` | checagem rigorosa de pré-requisitos (conectividade, modelo e GPU no host) | #4 | sim |
 | `sau/main.py` | entrypoint do serviço com logs estruturados e health server. O prefixo da linha é `[SAU]`, do S.A.U.; o serviço que emitiu a linha é identificado pelo nome do módulo nela mesma (`sau.main` contra `sau.telegram.webhook`), e não pelo prefixo | #4 | sim |
-| `sau/persona.py` | o prompt versionado do S.A.U., com todas as regras de comportamento, e a composição do prompt do turno: desde a #10 é quem monta as regras com a mensagem do Aluno, e desde a #9 é quem junta o histórico da conversa e cerca o texto do Aluno entre marcadores | #9, #10 | sim |
+| `sau/persona.py` | o prompt versionado do S.A.U., com todas as regras de comportamento, e a composição do prompt do turno: desde a #10 é quem monta as regras com a mensagem do Aluno, e desde a #9 é quem junta o histórico da conversa e cerca o texto do Aluno entre marcadores. A 1.2 soma **um** exemplo de Encaminhamento completo ([ADR-0009](./adr/0009-exemplo-de-encaminhamento-na-persona.md)), e `tests/test_persona.py:503` muda de critério junto | #9, #10, P6 | sim |
 | `sau/telegram/webhook.py` | handler do webhook: registro do update bruto, conferência do `secret_token` e acuse de recibo fixo ao Aluno antes de qualquer inferência. Desde a #8 é também quem dispara o turno (em thread, fora do request) e quem vira a falha do modelo em mensagem amigável. Desde a #9 é quem monta o registro de conversas e quem roda o turno dentro da fila FIFO da conversa do Aluno. Desde a #11 é quem adquire o semáforo **dentro** dessa fila — o que torna "um Aluno nunca tem dois turnos" estrutural — e quem escreve as três mensagens do turno: acuse, posição na fila com a estimativa, e a recusa educada quando a fila passa do teto | #5, #8, #9, #11 | sim |
 | `sau/telegram/__main__.py` | entrypoint do serviço `webhook`, para o log sair com o nome do módulo e não `__main__` | #5 | sim |
 | `sau/inference/ollama.py` | cliente do Ollama, que roda **no host** e é alcançado por `host.docker.internal:11434` ([ADR-0002](./adr/0002-topologia-do-ollama.md)). Desde a #8 é usado pelos dois serviços: o `bot` na checagem e na fumaça, o `webhook` no turno | #7, #8 | sim |
 | `sau/inference/fumaca.py` | prova de fumaça: roda as checagens, pede uma geração e mostra o tempo de cada etapa | #7 | sim |
 | `sau/inference/semaphore.py` | a fila de senha e o `k` de vagas em frente à inferência: entrega a `PosicaoNaFila` por callback e levanta `FilaCheiaError` acima do teto. Não conhece o Telegram — quem escreve para o Aluno é o `webhook`. O `relogio` é injetável para a estimativa poder ser testada sem esperar | #11 | sim |
 | `sau/graph/state.py` | o estado da conversa, isolado por Aluno: o registro em arquivo, o TTL que apaga a conversa ociosa e a fila FIFO por `chat_id` | #9 | sim |
-| `sau/graph/graph.py` | monta o grafo LangGraph do turno. Nasceu com um caminho só (`START → responder → END`) e os nós de classificação, recuperação e encaminhamento entram aqui. Desde a #9 `executar_turno` recebe o histórico da conversa do Aluno | #8, #9 | sim |
-| `sau/graph/nodes.py` | os nós do grafo. A #8 criou o `responder` e o `montar_prompt`, a costura onde a #10 injeta a persona; classificar intenção, recuperar e encaminhar são os nós seguintes. Desde a #9 o `montar_prompt` recebe as últimas mensagens do Aluno para que ele não precise repetir a pergunta a cada turno, e desde a #10 ele é o `montar_prompt` de `sau/persona.py`, reexportado aqui: quem monta o prompt mora no módulo da persona, e este só entrega o estado do turno a ele | #8, #9, #10, P5 | sim |
-| `sau/rag/embed.py` | embeddings locais via Ollama e indexação do corpus | P3 | não |
-| `sau/rag/retrieve.py` | busca os `k` chunks mais próximos, com a Fonte | P4 | não |
+| `sau/graph/graph.py` | monta o grafo LangGraph do turno. Nasceu com um caminho só (`START → responder → END`) e a recuperação da 1.2 entra aqui como o **único** nó novo, sem aresta condicional. Desde a #9 `executar_turno` recebe o histórico da conversa do Aluno. O texto do Encaminhamento determinístico mora **aqui**, e não na persona, para que o `sha256_do_prompt` continue reportando a persona e não a topologia | #8, #9, P4 | sim |
+| `sau/graph/nodes.py` | os nós do grafo. A #8 criou o `responder` e o `montar_prompt`, a costura onde a #10 injeta a persona; a recuperação é o único nó que a 1.2 soma. Desde a #9 o `montar_prompt` recebe as últimas mensagens do Aluno para que ele não precise repetir a pergunta a cada turno, e desde a #10 ele é o `montar_prompt` de `sau/persona.py`, reexportado aqui: quem monta o prompt mora no módulo da persona, e este só entrega o estado do turno a ele | #8, #9, #10, P4 | sim |
+| `sau/rag/embed.py` | embeddings locais via Ollama e indexação do Corpus. O modelo de embedding é **medido** aqui, com `ollama ps`, contra o orçamento de VRAM do ADR-0003 — não é escolhido antes | P2 | não |
+| `sau/rag/retrieve.py` | busca os `k` trechos mais próximos, com a Fonte. `k` é 3 porque `num_ctx` é 4096 e não é tocado: três trechos curtos é o que cabe antes de a conversa perder contexto | P3 | não |
 
 ## Conteúdo do time
 
 | Caminho | O que é | Ticket | Existe |
 | --- | --- | --- | --- |
 | `perguntas-teste/` | as 10 Perguntas-teste, com o comportamento esperado de cada uma | #6 | sim |
-| `corpus/` | os quatro documentos autorados, um por categoria, com as contradições plantadas | P1 | não |
-| `outputs/` | evidência bruta do harness: as rodadas são rascunho ignorado, as linhas de base entram no repositório. Desde a #13 a mesma exceção preserva os três artefatos da linha de base juntos: a rodada, o julgamento e o JSON das taxas | #12, #13 | não |
+| `corpus/` | os **três** documentos autorados, um por aglomerado que as Perguntas-teste alcançam, com as contradições plantadas cada uma nomeando o caso que ataca — [ADR-0007](./adr/0007-corpus-derivado-do-instrumento.md) | P1 | não |
+| `outputs/` | evidência bruta do harness: as rodadas são rascunho ignorado, as linhas de base entram no repositório. Desde a #13 a mesma exceção preserva os três artefatos da linha de base juntos: a rodada, o julgamento e o JSON das taxas | #12, #13 | sim |
 | `tests/` | suíte `pytest`, com `test_config.py` e `test_prereqs.py` da #4, `test_webhook.py` da #5 (o caminho do turno da #8, o isolamento por Aluno da #9, a sentinela que afasta a persona da conversa, que ele precisa desde que a persona entra em todo prompt na #10, e a fila e o semáforo da #11), `test_graph.py` da #8, `test_state.py` e `test_semaphore.py` da #9 e da #11, `test_ollama.py` e `test_fumaca.py` da #7, `test_persona.py` da #10, `test_harness.py` da #12 e `test_metrics.py` da #13 | #4, #5, #7, #8, #9, #10, #11, #12, #13 | sim |
 
 O `corpus/` é quebrado em unidades de recuperação pela própria equipe: cada
-`##` dentro de um documento responde a uma Pergunta Frequente, então **o chunk é
-a seção** e o chunking vira uma escolha da equipe, não uma heurística.
+`##` dentro de um documento responde a uma Pergunta Frequente, então **o trecho
+recuperado é a seção** e o chunking vira uma escolha da equipe, não uma heurística.
+As seções são **curtas de propósito**: `num_ctx` é 4096 e não é tocado
+(`sau/inference/ollama.py:34`, `scripts/preparar-host.sh:40`,
+`tests/test_fumaca.py:1029`), e com uma persona de 852 tokens cada trecho
+recuperado custa contexto que a conversa não tem.
 
 ## `harness/`
 
@@ -114,14 +122,13 @@ a seção** e o chunking vira uma escolha da equipe, não uma heurística.
 | --- | --- | --- | --- |
 | `harness/run.py` | roda as 10 Perguntas-teste, 3 repetições cada, e grava os outputs brutos com as condições da medição | #12 | sim |
 | `harness/metrics.py` | taxa de não-saber e taxa de recusa de Atividade, com a folha de julgamento humano e a evidência de cada contagem. Os dois nomes são do instrumento, amarrados às linhas `conta na métrica do #13` de `perguntas-teste/perguntas-teste.md` | #13 | sim |
-| `harness/casos.py` | os cinco casos de alucinação, com o motivo do erro de cada um | P2 | não |
+| `harness/casos.py` | os cinco Casos de alucinação, com o motivo do erro de cada um e o output real que cada um origina. É onde o caminho B mora: a 1.2 mede sobre estes cinco casos, e não sobre a bateria de 30 execuções | P1 | não |
 
 O harness é a régua das duas sprints: a 1.2 roda **o mesmo** harness sobre
 **os mesmos** casos, e é por isso que ele precisa ser reexecutável sem refazer
 a implementação.
 
-A evidência que ele grava vai para `outputs/`, e a pasta só passa a existir na
-primeira rodada: `harness/run.py` cria na hora. As rodadas são ignoradas pelo
+A evidência que ele grava vai para `outputs/`. As rodadas são ignoradas pelo
 git porque são resultado descartável, com uma exceção — `outputs/baseline-*.json`
 entra, e é o que permite comparar a 1.2 com a 1.1 em vez de afirmar que a
 comparação foi feita. Desde a #13 a exceção cobre os três artefatos da linha de
@@ -131,11 +138,14 @@ depois, lendo do próprio arquivo o modelo, a alocação e o `sha256` do prompt:
 esses campos que separam "o RAG mudou" de "a persona ou a máquina mudou".
 
 O `harness/metrics.py` é a metade do harness que **não** mede o modelo: ele
-transforma o julgamento humano da folha em número com evidência, e por isso não
-fala com o Ollama nem importa nada de `sau/`. O veredito é de uma pessoa
-(decisão da #6) — `metrics.py` escreve a folha com o output de cada execução na
-linha a julgar e o `conforme quando` de cada Pergunta-teste no bloco
-`perguntas`, e quem decide é quem lê.
+transforma o julgamento da folha em número com evidência, e por isso não fala com
+o Ollama nem importa nada de `sau/`. O veredito é **responsabilidade de uma
+pessoa** (decisão da #6) e pode ser redigido por um agente — nesse caso o campo
+`julgador` nomeia **quem ratificou**, e é isso que amarra a folha a uma pessoa em
+vez de a um processo ([emenda do
+ADR-0006](./adr/0006-denominador-das-taxas.md)). `metrics.py` escreve a folha com
+o output de cada execução na linha a julgar e o `conforme quando` de cada
+Pergunta-teste no bloco `perguntas`, e quem decide é quem lê.
 
 O `harness/run.py` também é o único lugar do repositório que **mede**: ele trava
 `temperature 0`, uma `seed` fixa e `num_predict 256`, e registra o que usou.

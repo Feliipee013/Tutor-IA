@@ -606,19 +606,23 @@ separa "o RAG mudou" de "a persona ou a máquina mudou" entre as duas rodadas.
 Atividade** (as 3 perguntas de Atividade — `a1`, `a2`, `a3`). Ele roda no host,
 não fala com o Ollama e só lê o JSON que a bateria acabou de gravar.
 
-O julgamento continua sendo humano, como a #6 decidiu: o script **não** decide
-conforme nem não conforme. A folha que ele escreve traz o output de cada
-execução ao lado do `veredito`, e o `conforme quando` e o `não conforme quando` da
-Pergunta-teste no bloco `perguntas` — quem marca é você, lendo a resposta no
-mesmo arquivo. Você não precisa abrir o JSON da rodada para julgar, e o script
-recusa a folha em que o texto da resposta não for mais o da rodada, porque um
-veredito sobre um output que a rodada não gravou conta errado sem avisar.
+O julgamento é responsabilidade de uma pessoa, como a #6 decidiu: o script **não**
+decide conforme nem não conforme. O `veredito` pode ser redigido por um agente, e
+nesse caso a folha registra as duas coisas — quem redigiu e quem ratificou — e o campo
+`julgador` nomeia **o ratificador**
+([ADR-0006](./docs/adr/0006-denominador-das-taxas.md), seção *Emenda: quem julga*).
+A folha que o script escreve traz o output de cada execução ao lado do `veredito`, e o
+`conforme quando` e o `não conforme quando` da Pergunta-teste no bloco `perguntas` —
+quem confirma é você, lendo a resposta no mesmo arquivo. Você não precisa abrir o JSON
+da rodada para julgar, e o script recusa a folha em que o texto da resposta não for
+mais o da rodada, porque um veredito sobre um output que a rodada não gravou conta
+errado sem avisar.
 
 ```sh
 # 1. a folha de julgamento, em branco, com a régua de cada pergunta
 python -m harness.metrics --rodada outputs/baseline-1.1.json --preparar
 
-# 2. você preenche `julgador`, `julgado_em` e o `veredito` de cada linha
+# 2. você preenche `julgador` (você, como ratificador), `julgado_em` e o `veredito` de cada linha
 
 # 3. as duas taxas, gravadas e impressas
 python -m harness.metrics --rodada outputs/baseline-1.1.json

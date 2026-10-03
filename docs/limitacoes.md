@@ -19,8 +19,9 @@ Aluno nunca tem dois turnos concorrendo — e quando a fila passa do teto, o
 Aluno recebe recusa educada com a posição e a estimativa.
 
 O turno é o grafo LangGraph (`sau/graph/graph.py`), hoje num caminho só
-(`START → responder → END`); classificação da intenção, recuperação e
-Encaminhamento entram como nós desse mesmo grafo. O prompt é montado por
+(`START → responder → END`); a recuperação da 1.2 entra como nó desse mesmo
+grafo, **sem classificação de intenção** ([ADR-0008](./adr/0008-recuperacao-sem-classificacao-de-intencao.md)).
+O prompt é montado por
 `sau/persona.py`: as regras da persona primeiro (prefixo fixo, que o
 Ollama mantém em cache), depois o histórico recente (até 6 mensagens) e a
 mensagem atual cercada por marcadores, com o texto do Aluno introduzido por `Aluno:`. A inferência roda no Ollama **no host**
@@ -195,9 +196,9 @@ proíbe.
 > Perguntado: "Comecei o estágio essa semana. Onde eu encontro o modelo do relatório de atividades?"
 
 Resposta nas 3 repetições: `Encaminhamento`. **Deslize de régua.** Não
-afirma caminho ("AVA, aba Documentos" seria Alucinação nesta sprint mesmo
-se estivesse certo — e não apareceu), mas Encaminha sem perguntar o que o
-Aluno procura, que é o "não conforme quando" da `p3`.
+afirma caminho ("no sistema da Instituição, pasta Documentação" seria Alucinação
+nesta sprint mesmo se estivesse certo — e não apareceu), mas Encaminha sem perguntar o
+que o Aluno procura, que é o "não conforme quando" da `p3`.
 
 ### `p4` — Pergunta Frequente, protocolo de assinatura (fora das taxas)
 
@@ -227,25 +228,34 @@ foi fabricado — as iscas de telefone, remédio, canal, data, formato,
 caminho e número **não aparecem em nenhum output** — mas a forma do
 plantão (nomear o destino, perguntar antes de concluir, falar como quem
 orienta) não se sustentou. É o retrato honesto da 1.1: o modelo obedece o
-"não invente" e desobedece o "como Encaminhar".
+"não invente" e desobedece o "como Encaminhar". O "como Encaminhar" é o
+que o [ADR-0009](./adr/0009-exemplo-de-encaminhamento-na-persona.md) ataca
+com um exemplo único, e o "não invente" é o que a 1.2 tenta substituir por
+resposta ancorada em Fonte.
 
 ## Limitações metodológicas, declaradas
 
 - **Material sintético.** As Perguntas-teste e o material são sintéticos, criados pela equipe. Elas exercitam comportamento; não são o tráfego de
   um Aluno real, e as taxas medem o S.A.U. contra elas, não contra a
-  realidade. A circularidade existe — a equipe escreve o corpus e escreve
+  realidade. A circularidade existe — a equipe escreve o Corpus e escreve
   as perguntas — e é contornável se declarada: o RAG da 1.2 é medido sobre
-  casos adversariais, não sobre o que o corpus contém por acaso.
-- **Conteúdo factual entra na 1.2.** O conteúdo factual do curso entra na 1.2, após a visita técnica. As Perguntas-teste da 1.1 não têm corpus, o
+  casos adversariais, não sobre o que o Corpus contém por acaso.
+- **Conteúdo factual entra na 1.2, com Corpus autorado.** O Corpus da 1.2 é
+  **autorado pela equipe, antes da visita técnica**, e é material sintético por
+  definição ([ADR-0007](./adr/0007-corpus-derivado-do-instrumento.md)); a visita
+  técnica entra depois como validação, trocando o Corpus sintético pelo real sobre o
+  mesmo harness. As Perguntas-teste da 1.1 não têm Corpus, o
   S.A.U. não tem o que responder sobre conteúdo, e afirmar caminho de
   documento é Alucinação nesta sprint mesmo quando a frase estiver certa.
   A verificação do que ele afirma, com Fonte, é da 1.2.
-- **O julgamento desta linha de base não é humano.** A folha registra
-  `julgador: agente Claude (sessão opencode), a pedido de kcronnossz — não
-  é julgamento humano`. O `harness/metrics.py` e o relato partem do
-  princípio de veredito humano (decisão da #6); esta rodada não cumpre
-  esse princípio. Rejulgar por pessoa é trabalho fora deste documento — se
-  a banca exigir rejulgamento humano, vira novo ticket.
+- **O julgamento desta linha de base foi ratificado por uma pessoa.** A folha registra
+  `julgador: kcronnossz (ratificador; veredito redigido por agente — Claude, sessão
+  opencode)`. O `veredito` foi redigido por um agente e conferido na íntegra por
+  `kcronnossz`, que o aprovou; pela
+  [emenda do ADR-0006](./adr/0006-denominador-das-taxas.md) o campo nomeia **o
+  ratificador**, e é isso que amarra a folha a uma pessoa em vez de a um processo.
+  Rejulgamento integral por outra pessoa continua sendo trabalho fora deste
+  documento — se a banca exigir, vira novo ticket.
 - **Uma máquina só.** Os números são de uma máquina, com modelo
   `qwen2.5:3b` e alocação declarados acima. O ADR-0003 já mostrou que o
   mesmo seed dá respostas diferentes em máquinas diferentes (o telefone de

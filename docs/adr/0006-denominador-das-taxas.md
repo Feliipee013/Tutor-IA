@@ -132,6 +132,28 @@ mesmo defeito que tirar a execução cortada da conta por execução.
   `proposed`. Quem decide `accepted` é a review de quem lê o diff, e não o autor do
   ADR que escreveu o próprio critério de aceitação.
 
+## Emenda: quem julga, e o que a folha registra
+
+O veredito é **responsabilidade de uma pessoa**. Ele pode ser **redigido por um
+agente**, e nesse caso a folha registra as duas coisas: quem redigiu e **quem
+ratificou, e em que dia**. O campo `julgador` nomeia o ratificador.
+
+Isso corrige uma divergência que existia no repositório. O
+[`SETUP.md`](../../SETUP.md) dizia que "o julgamento continua sendo humano", e a
+folha da linha de base dizia "não é julgamento humano". As duas frases estavam
+certas em cima de fatos diferentes e erradas sobre o mesmo campo: o veredito da
+linha de base foi **redigido por um agente e conferido por uma pessoa**, que o
+aprovou.
+
+A distinção importa porque é o que torna a folha auditável. "Humano" sozinho
+esconde que houve redação automática; "não é humano" sozinho descarta a ratificação
+e faz o número parecer menos confiável do que é. O que o número precisa é que
+alguém tenha lido cada output e concordado — e isso aconteceu.
+
+Quem ratifica assume o veredito como se o tivesse escrito. E o campo `julgador` passa
+a ser lido pelo nome, porque é a única coisa que amarra a folha a uma pessoa em vez
+de a um processo.
+
 ## Referências
 
 - [`docs/adr/0003-modelo-do-ollama.md`](./0003-modelo-do-ollama.md) - a repetição, o
