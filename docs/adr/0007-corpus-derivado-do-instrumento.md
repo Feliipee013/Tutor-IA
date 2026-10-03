@@ -38,6 +38,24 @@ porque essas quatro perguntas existem.
   real, o Corpus cresce e a decisão é revista — o que é barato, porque nada no código
   depende de quantos documentos existem.
 
+## Emenda: cobertura além do instrumento
+
+O Corpus mínimo cumpriu o papel de bancada, e agora limita a utilidade do
+S.A.U.: o Aluno pergunta por blocos reais do processo — carga horária,
+convênio entre Empresa e Instituição, rescisão e aditivo, relatório parcial
+vs. final, quem assina, Seguro de Acidentes Pessoais — e a resposta "não
+tenho esse dado" para tudo que está fora das quatro seções do instrumento
+deixa de ser medida e passa a ser falta de cobertura.
+
+Por isso o Corpus passa de **três** para **quatro** documentos, com o
+`seguro-de-acidentes-pessoais.md` cobrindo o Seguro, e com seções novas de
+cobertura nos três documentos originais. A regra original continua valendo
+para os defeitos: seção nova de cobertura não leva marcador `<!-- caso -->`
+— defeito plantado sem caso que o alcance continua sendo ruído, e os cinco
+marcadores existentes (`c1`, `c2`, `c4`, `c5`, `c5`) ficam como estão. O que
+muda é só a cobertura: o relatório da 1.2 passa a dizer que o Corpus cobre
+os blocos do processo, e a visita técnica vira ampliação, não fundação.
+
 ## Referências
 
 - [`CONTEXT.md`](../../CONTEXT.md) — o escopo que este Corpus deliberadamente não

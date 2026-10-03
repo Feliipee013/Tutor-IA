@@ -1,9 +1,9 @@
 """Testes do Corpus sobre o processo de Estágio, `corpus/`.
 
-O que se prova aqui é o material que o S.A.U. vai responder: que são três
+O que se prova aqui é o material que o S.A.U. vai responder: que são quatro
 documentos versionados, que cada seção `##` responde a uma Pergunta Frequente,
-que o Seguro de Acidentes Pessoais está ausente por decisão declarada
-(ADR-0007), que todo título de seção é único no Corpus inteiro — com um caso
+que o Seguro de Acidentes Pessoais é coberto no documento próprio por emenda
+do ADR-0007, que todo título de seção é único no Corpus inteiro — com um caso
 repetido de propósito provando que a verificação acusa — e que os quatro
 defeitos plantados existem, cada um nomeando o caso que ataca.
 
@@ -25,7 +25,14 @@ _DOCUMENTOS_ESPERADOS = (
     "prazos.md",
     "documentacao-de-estagio.md",
     "termo-de-compromisso.md",
+    "seguro-de-acidentes-pessoais.md",
 )
+_DOCUMENTOS_SEM_SEGURO = (
+    "prazos.md",
+    "documentacao-de-estagio.md",
+    "termo-de-compromisso.md",
+)
+_SEGURO_DOC = "seguro-de-acidentes-pessoais.md"
 _MARCADOR_CASO = re.compile(r"<!--\s*caso:\s*(c\d+)\s*(?:—\s*(.+?))?\s*-->")
 
 
@@ -41,19 +48,28 @@ def test_corpus_tem_os_tres_documentos_versionados() -> None:
     assert sorted(p.name for p in _CORPUS.glob("*.md")) == sorted(_DOCUMENTOS_ESPERADOS)
 
 
-def test_cada_documento_declara_que_o_seguro_fica_de_fora() -> None:
-    """Seguro ausente por decisão declarada, não por esquecimento: cada cabeçalho diz."""
+def test_cada_documento_cita_o_seguro_e_o_adr() -> None:
+    """O Seguro é decisão declarada em todo cabeçalho: cobertura ou remissão, nunca silêncio."""
     for nome, texto in _texto_dos_documentos().items():
         assert "Seguro de Acidentes Pessoais" in texto, nome
         assert "ADR-0007" in texto, nome
 
 
-def test_nenhuma_secao_cobre_o_seguro() -> None:
-    """O Seguro aparece só no cabeçalho (citação `>`); nenhuma seção o cobre."""
-    for nome, texto in _texto_dos_documentos().items():
+def test_so_o_documento_proprio_cobre_o_seguro() -> None:
+    """O Seguro é seção só no documento próprio; nos outros, só no cabeçalho (`>`)."""
+    for nome in _DOCUMENTOS_SEM_SEGURO:
+        texto = (_CORPUS / nome).read_text(encoding="utf-8")
         for linha in texto.splitlines():
             if "eguro" in linha.lower():
                 assert linha.lstrip().startswith(">"), f"{nome}: {linha}"
+
+
+def test_a_secao_do_seguro_nao_afirma_dado_de_apolice() -> None:
+    """Cobertura é processo, não dado: sem número de apólice ou vigência."""
+    seguro = [s for s in carregar_corpus(_CORPUS) if s.documento == _SEGURO_DOC]
+    assert len(seguro) == 1
+    assert re.search(r"\d{4,}", seguro[0].texto) is None
+    assert "Coordenação de Estágios" in seguro[0].texto
 
 
 def test_cada_documento_tem_secao_respondendo_a_pergunta_frequente() -> None:
@@ -63,7 +79,9 @@ def test_cada_documento_tem_secao_respondendo_a_pergunta_frequente() -> None:
         assert secao.texto, f"seção vazia: {secao.titulo}"
         por_documento[secao.documento] = por_documento.get(secao.documento, 0) + 1
     assert sorted(por_documento) == sorted(_DOCUMENTOS_ESPERADOS)
-    assert all(n >= 2 for n in por_documento.values())
+    minimos = {nome: 2 for nome in _DOCUMENTOS_SEM_SEGURO}
+    minimos[_SEGURO_DOC] = 1
+    assert all(por_documento[nome] >= minimo for nome, minimo in minimos.items())
 
 
 # --- Unicidade dos títulos ---
@@ -72,7 +90,7 @@ def test_cada_documento_tem_secao_respondendo_a_pergunta_frequente() -> None:
 def test_todo_titulo_de_secao_e_unico_no_corpus_inteiro() -> None:
     """É o que permite resolver a Fonte citada por correspondência exata."""
     secoes = carregar_corpus(_CORPUS)
-    assert len(secoes) >= 7
+    assert len(secoes) >= 13
     assert titulos_duplicados(secoes) == []
 
 
@@ -164,5 +182,6 @@ def test_ler_secoes_de_um_documento() -> None:
     assert [s.titulo for s in secoes] == [
         "Prazo de entrega do relatório de atividades",
         "Prazo de devolução do Termo assinado pela Empresa",
+        "Carga horária mínima do Estágio",
     ]
     assert all(s.documento == "prazos.md" for s in secoes)

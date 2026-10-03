@@ -61,12 +61,13 @@ def test_indice_monta_das_secoes_do_corpus(tmp_path: Path) -> None:
 
     indice = montar_indice(corpus, _cliente_falso())
 
-    assert len(indice.secoes) == 7
-    assert len(indice.vetores) == 7
+    assert len(indice.secoes) == 13
+    assert len(indice.vetores) == 13
     assert {s.documento for s in indice.secoes} == {
         "prazos.md",
         "documentacao-de-estagio.md",
         "termo-de-compromisso.md",
+        "seguro-de-acidentes-pessoais.md",
     }
 
 

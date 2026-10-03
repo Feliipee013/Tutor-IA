@@ -2,10 +2,10 @@
 
 > Parte do Corpus do S.A.U. sobre o processo de Estágio: cada seção `##`
 > responde a uma Pergunta Frequente, e o título da seção é a Fonte que o
-> S.A.U. cita. O Seguro de Acidentes Pessoais fica de fora deste Corpus por
-> decisão declarada ([ADR-0007](../docs/adr/0007-corpus-derivado-do-instrumento.md)):
-> nenhuma das dez Perguntas-teste o alcança, e defeito plantado sem caso que
-> o alcance é ruído.
+> S.A.U. cita. O Seguro de Acidentes Pessoais é coberto no documento
+> `seguro-de-acidentes-pessoais.md`, por emenda do
+> [ADR-0007](../docs/adr/0007-corpus-derivado-do-instrumento.md): a cobertura
+> entrou por blocos reais do processo, não pelo instrumento.
 
 ## Formato do relatório de atividades
 
@@ -18,3 +18,7 @@ O modelo do relatório de atividades fica no portal do Aluno, na pasta Documenta
 ## Formato do relatório de acompanhamento do Supervisor
 
 O relatório de acompanhamento é preenchido pelo Supervisor(a) de Estágio sobre o desempenho do Aluno na Empresa, e não serve de modelo para o relatório que o Aluno entrega. <!-- caso: c2 — similaridade enganosa: assunto parecido com informação irrelevante para a pergunta do Aluno, que separa falso positivo de similaridade -->
+
+## Relatório parcial vs. relatório final
+
+O relatório parcial acompanha o andamento do Estágio e o relatório final encerra a etapa: os dois seguem o formato do relatório de atividades, e o Aluno confere com a Coordenação de Estágios qual dos dois é o pedido da vez.
