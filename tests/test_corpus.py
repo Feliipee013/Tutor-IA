@@ -4,8 +4,8 @@ O que se prova aqui é o material que o S.A.U. vai responder: que são quatro
 documentos versionados, que cada seção `##` responde a uma Pergunta Frequente,
 que o Seguro de Acidentes Pessoais é coberto no documento próprio por emenda
 do ADR-0007, que todo título de seção é único no Corpus inteiro — com um caso
-repetido de propósito provando que a verificação acusa — e que os quatro
-defeitos plantados existem, cada um nomeando o caso que ataca.
+repetido de propósito provando que a verificação acusa — e que os defeitos
+plantados existem, cada um nomeando o caso que ataca.
 
 Nenhum teste deste arquivo fala com o Ollama, e nenhum grava em `outputs/`:
 o Corpus é lido do repositório, e o caso repetido de propósito mora em
@@ -40,10 +40,10 @@ def _texto_dos_documentos() -> dict[str, str]:
     return {nome: (_CORPUS / nome).read_text(encoding="utf-8") for nome in _DOCUMENTOS_ESPERADOS}
 
 
-# --- Os três documentos ---
+# --- Os quatro documentos ---
 
 
-def test_corpus_tem_os_tres_documentos_versionados() -> None:
+def test_corpus_tem_os_quatro_documentos_versionados() -> None:
     assert _CORPUS.is_dir()
     assert sorted(p.name for p in _CORPUS.glob("*.md")) == sorted(_DOCUMENTOS_ESPERADOS)
 
@@ -108,7 +108,7 @@ def test_titulo_repetido_de_proposito_e_acusado() -> None:
     assert titulos_duplicados(secoes) == ["Prazo de entrega do relatório de atividades"]
 
 
-# --- Os quatro defeitos plantados ---
+# --- Os defeitos plantados ---
 
 
 def _defeitos_plantados() -> list[tuple[str, str, str]]:
@@ -120,7 +120,7 @@ def _defeitos_plantados() -> list[tuple[str, str, str]]:
     return achados
 
 
-def test_os_quatro_defeitos_plantados_existem_e_nomeiam_o_caso() -> None:
+def test_os_defeitos_plantados_existem_e_nomeiam_o_caso() -> None:
     defeitos = _defeitos_plantados()
     tipos = sorted(tipo for _, _, tipo in defeitos)
     assert tipos == [

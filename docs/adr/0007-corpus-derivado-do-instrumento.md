@@ -42,7 +42,7 @@ porque essas quatro perguntas existem.
 
 O Corpus mínimo cumpriu o papel de bancada, e agora limita a utilidade do
 S.A.U.: o Aluno pergunta por blocos reais do processo — carga horária,
-convênio entre Empresa e Instituição, rescisão e aditivo, relatório parcial
+autorização da Empresa pela Instituição, rescisão e aditivo, relatório parcial
 vs. final, quem assina, Seguro de Acidentes Pessoais — e a resposta "não
 tenho esse dado" para tudo que está fora das quatro seções do instrumento
 deixa de ser medida e passa a ser falta de cobertura.

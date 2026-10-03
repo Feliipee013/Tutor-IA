@@ -48,7 +48,7 @@ agente Implementar localizar o ponto de impacto sem varrer o repositório inteir
 | `docs/adr/0004-vram-por-maquina.md` | a VRAM é declarada por máquina: o contrato, como descobrir o valor e o que fazer sem GPU dedicada — **issue #7** | sim |
 | `docs/adr/0005-estado-da-conversa.md` | o estado da conversa vive num arquivo, isolado por `chat_id`, com TTL e ordem FIFO por conversa — **issue #9** | sim |
 | `docs/adr/0006-denominador-das-taxas.md` | as duas taxas da 1.1 saem por execução e por pergunta, e as duas são publicadas: o denominador de cada uma, e quando uma Pergunta-teste conta como acerto. Emenda: o veredito é responsabilidade de uma pessoa, pode ser redigido por um agente, e a folha nomeia **quem ratificou** — **issue #13** | sim |
-| `docs/adr/0007-corpus-derivado-do-instrumento.md` | o Corpus tem três documentos, derivados das Perguntas-teste que o alcançam, e não das categorias do escopo. Seguro de Acidentes Pessoais fica de fora | sim |
+| `docs/adr/0007-corpus-derivado-do-instrumento.md` | o Corpus tem quatro documentos (três do instrumento + Seguro por emenda), com cobertura de blocos reais do processo. Seguro de Acidentes Pessoais é coberto no documento próprio | sim |
 | `docs/adr/0008-recuperacao-sem-classificacao-de-intencao.md` | a recuperação entra como **nó único, em todo turno**, sem classificação de intenção nem roteamento; a topologia de três rotas que a 1.1.2 desenhava foi abandonada | sim |
 | `docs/adr/0009-exemplo-de-encaminhamento-na-persona.md` | a persona ganha **um** exemplo de Encaminhamento completo, porque a linha de base mostra o modelo encerrando em 5 tokens. Reverte `10d9c56` e `3400b32` | sim |
 | `docs/sprints/` | plano legível da 1.1 e da 1.2 | sim |

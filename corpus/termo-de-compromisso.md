@@ -17,9 +17,9 @@ O Termo de Compromisso de Estágio não exige número de protocolo prévio do Al
 
 O texto do Termo de Compromisso de Estágio registra que a Empresa devolve o Termo assinado em até 15 dias corridos após o recebimento. <!-- caso: c5 — contradição: discorda da seção "Prazo de devolução do Termo assinado pela Empresa", que dá outro prazo para a mesma devolução -->
 
-## Convênio entre Empresa e Instituição
+## Autorização da Empresa pela Instituição
 
-O convênio entre a Empresa e a Instituição autoriza a Empresa a receber o Aluno em Estágio: sem convênio assinado, o Termo de Compromisso de Estágio não é assinado, e o Aluno procura a Coordenação de Estágios para saber se o convênio existe.
+A Instituição autoriza a Empresa a receber o Aluno em Estágio: sem essa autorização registrada, o Termo de Compromisso de Estágio não é assinado, e o Aluno procura a Coordenação de Estágios para saber se a autorização existe.
 
 ## Quem assina o Termo
 
