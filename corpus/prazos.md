@@ -13,7 +13,7 @@ O relatório de atividades do Estágio é entregue até a segunda sexta-feira ap
 
 ## Prazo de devolução do Termo assinado pela Empresa
 
-A Empresa devolve o Termo de Compromisso de Estágio assinado em até 10 dias úteis após o recebimento, na Coordenação de Estágios. <!-- caso: c5 — contradição: discorda da seção "Prazo de devolução do Termo no texto do Termo", que dá outro prazo para a mesma devolução -->
+A Empresa devolve o Termo de Compromisso de Estágio assinado em até 15 dias úteis após o recebimento, na Coordenação de Estágios.
 
 ## Carga horária mínima do Estágio
 

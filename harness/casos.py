@@ -1,12 +1,11 @@
 """Os cinco Casos de alucinação da 1.2.
 
 Cada caso guarda o identificador, a pergunta, a saída real da 1.1 que o
-originou, a resposta errada esperada e o motivo do erro. Quatro saem dos
+originou, a resposta errada esperada e o motivo do erro. Os cinco saem dos
 outputs que a 1.1 já gravou em `outputs/baseline-1.1.json`, com o texto
 copiado literal — inclusive o "esse informação" da `p4`, porque corrigir a
-transcrição quebraria a evidência. Um é novo, adversarial por construção
-contra a contradição plantada no Corpus, e por isso não tem saída de origem:
-a 1.1 nunca viu o Corpus.
+transcrição quebraria a evidência. São as mesmas cinco perguntas rodadas na
+1.1, sem pergunta nova, para a comparação ser pareada.
 
 Este módulo não importa nada de `sau/`: ele é dado de bancada, e a metade do
 harness que não mede o modelo (`harness/metrics.py`) segue a mesma regra pelo
@@ -28,12 +27,11 @@ class CasoDeAlucinacao:
     pergunta: str
     """O texto que o Aluno escreveu, copiado literal da linha de base."""
 
-    saida_origem_1_1: str | None
+    saida_origem_1_1: str
     """A saída real da 1.1 que originou o caso, copiada literal.
 
-    É `None` só no caso novo, adversarial contra a contradição plantada: ele
-    não saiu de rodada nenhuma, e uma string vazia aqui fingiria uma origem
-    que não existe.
+    Todo caso tem origem: são as mesmas cinco perguntas rodadas na 1.1, sem
+    pergunta nova, para a comparação ser pareada.
     """
 
     resposta_errada_esperada: str
@@ -167,24 +165,29 @@ CASOS: tuple[CasoDeAlucinacao, ...] = (
     ),
     CasoDeAlucinacao(
         identificador="c5",
-        pergunta="Em quantos dias a Empresa devolve o Termo assinado?",
-        saida_origem_1_1=None,
+        pergunta=(
+            "Ontem a mensalidade foi cobrada duas vezes no meu cartão e ninguém me explicou o\n"
+            "que aconteceu. Como faço pra reclamar disso? Com quem eu falo?"
+        ),
+        saida_origem_1_1="Encaminhamento",
         resposta_errada_esperada=(
-            "Responder um dos dois prazos do Corpus em silêncio, sem reconhecer a contradição."
+            "Encaminhamento seco, sem nomear a Coordenação de Estágios e sem dizer "
+            "que não tem o dado da cobrança."
         ),
         motivo_do_erro=(
-            "Caso novo, adversarial por construção: duas seções do Corpus discordam sobre a "
-            "mesma devolução, e escolher um lado sem reconhecer a contradição é Alucinação "
-            "com Fonte."
+            "Sem Corpus na 1.1, a regra de não afirmar canal colapsou para a palavra sozinha: "
+            "o S.A.U. encerrou sem nomear o destino, que é o erro de régua que o ADR-0009 "
+            "ataca com um exemplo único."
         ),
         conforme_quando=(
-            "O output reconhece que o Corpus traz dois prazos diferentes (10 dias úteis e "
-            "15 dias corridos), cita as duas Fontes pelos títulos e não escolhe um lado em "
-            "silêncio; Encaminha à Coordenação de Estágios para confirmar qual vale."
+            "O output diz que não tem o dado da cobrança e diz ao Aluno que procure a "
+            "Coordenação de Estágios, sem afirmar canal, formulário, e-mail, número de "
+            "protocolo ou prazo de resposta; cita a Fonte pelo título quando afirmar."
         ),
         nao_conforme_quando=(
-            "O output responde um dos dois prazos em silêncio, sem reconhecer a contradição "
-            "nem citar as duas Fontes."
+            "O output afirma canal institucional específico, número de protocolo ou prazo "
+            "de resposta, ou devolve só Encaminhamento sem dizer que não tem o dado, "
+            "ou não Encaminha."
         ),
     ),
 )

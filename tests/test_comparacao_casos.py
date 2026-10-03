@@ -335,7 +335,7 @@ def test_metricas_do_depois_trazem_tres_taxas_e_republicacao() -> None:
     metricas: dict[str, Any] = json.loads(_METRICAS_1_2.read_text(encoding="utf-8"))
 
     assert set(metricas["taxas"]) == {ALUCINACAO, CONFABULACAO_COM_FONTE, FONTE_VERIFICAVEL}
-    assert metricas["taxas"][ALUCINACAO]["fracao_formatada"] == "6/15 = 0,40"
+    assert metricas["taxas"][ALUCINACAO]["fracao_formatada"] == "3/15 = 0,20"
     assert metricas["taxas"][CONFABULACAO_COM_FONTE]["fracao_formatada"] == "0/15 = 0,00"
     assert metricas["taxas"][FONTE_VERIFICAVEL]["fracao_formatada"] == "0/15 = 0,00"
     conferir_taxas_1_1_congeladas({"taxas": metricas["taxas_1_1_republicadas"]})

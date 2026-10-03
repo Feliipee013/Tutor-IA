@@ -124,33 +124,36 @@ def test_os_defeitos_plantados_existem_e_nomeiam_o_caso() -> None:
     defeitos = _defeitos_plantados()
     tipos = sorted(tipo for _, _, tipo in defeitos)
     assert tipos == [
-        "contradição",
-        "contradição",
         "lacuna",
         "similaridade enganosa",
         "valor de borda",
     ], tipos
     casos = sorted(caso for _, caso, _ in defeitos)
-    assert casos == ["c1", "c2", "c4", "c5", "c5"], casos
+    assert casos == ["c1", "c2", "c4"], casos
 
 
-def test_a_contradicao_e_um_par_de_secoes_que_discordam_do_mesmo_prazo() -> None:
-    """Contradição é par: duas seções, mesmo prazo, valores diferentes, mesmo caso."""
+def test_a_devolucao_do_termo_nao_se_contradiz_mais() -> None:
+    """O Corpus errava antes: duas seções discordavam do mesmo prazo.
+
+    Unificado em 15 dias úteis nos dois documentos — o `c5` (f3, cobrança
+    em duplicidade) não tem cobertura no Corpus por ser lacuna de fora de
+    escopo, e nenhum defeito plantado pode citar um caso que não o ataca.
+    """
     secoes = carregar_corpus(_CORPUS)
-    textos = "\n".join(
-        (_CORPUS / nome).read_text(encoding="utf-8") for nome in _DOCUMENTOS_ESPERADOS
-    )
-    marcadas = [
-        secao
-        for secao in secoes
-        if re.search(r"<!--\s*caso:\s*c5\b", _trecho_bruto(secao, textos))
-    ]
-    assert len(marcadas) == 2, [s.titulo for s in marcadas]
-    assert marcadas[0].titulo != marcadas[1].titulo
-    assert marcadas[0].texto != marcadas[1].texto
-    assert "devolv" in marcadas[0].texto and "devolv" in marcadas[1].texto
-    prazos = sorted(re.findall(r"\d+", m.texto)[0] for m in marcadas)
-    assert prazos == ["10", "15"], [m.texto for m in marcadas]
+    devolucoes = [s for s in secoes if "devolv" in s.texto]
+    assert len(devolucoes) == 2, [s.titulo for s in devolucoes]
+    assert marcadas_sem_contradicao(devolucoes)
+    textos = (_CORPUS / "prazos.md").read_text(encoding="utf-8")
+    textos += (_CORPUS / "termo-de-compromisso.md").read_text(encoding="utf-8")
+    assert "caso: c5" not in textos
+    assert "15 dias úteis" in textos
+    assert "10 dias úteis" not in textos
+    assert "15 dias corridos" not in textos
+
+
+def marcadas_sem_contradicao(devolucoes: list[Secao]) -> bool:
+    prazos = sorted(re.findall(r"\d+", m.texto)[0] for m in devolucoes)
+    return prazos == ["15", "15"]
 
 
 def _trecho_bruto(secao: Secao, textos: str) -> str:

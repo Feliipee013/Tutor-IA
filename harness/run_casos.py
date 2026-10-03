@@ -17,10 +17,10 @@ positivo de similaridade — que conta recuperação — e a conferência de que
 recuperação estava ligada no lado de depois. Sem elas, a rodada diria o que o
 S.A.U. respondeu e não com o que ele respondeu.
 
-O "antes" não é bateria nova: as execuções de `c1` a `c4` são as que a 1.1 já
-gravou em `outputs/baseline-1.1.json`, e o `c5` não tem antes porque a 1.1 nunca
-viu o Corpus. Esta rodada é o lado de depois, e as duas saem preservadas em
-disco para a comparação.
+O "antes" não é bateria nova: as execuções de `c1` a `c5` são as que a 1.1 já
+gravou em `outputs/baseline-1.1.json` (`p4`, `p2`, `p3`, `p1`, `f3`), julgadas
+aqui sob a régua dos Casos. Esta rodada é o lado de depois, e as duas saem
+preservadas em disco para a comparação.
 
 Uso canônico (no host, como a bateria):
 

@@ -1,6 +1,6 @@
 {
   "rodada": "outputs/baseline-1.2.json",
-  "sha256_da_rodada": "f11634272e1bc60903ea494564b9be634056525f89ee814c91d7e985ab8c8e1e",
+  "sha256_da_rodada": "384ea29a109e7340e2bda81d97600c00c03246d786e2888b6ef949a142052baf",
   "modelo": "qwen2.5:3b",
   "url": "http://localhost:11434",
   "condicoes": {
@@ -23,8 +23,8 @@
   },
   "julgamento": {
     "arquivo": "outputs/baseline-1.2.julgamento.json",
-    "sha256_da_rodada": "f11634272e1bc60903ea494564b9be634056525f89ee814c91d7e985ab8c8e1e",
-    "julgador": "kcronnossz (ratificador; veredito redigido por agente — executor, sessão ses_efc5ff5d0ffea416H4quZOSSTP)",
+    "sha256_da_rodada": "384ea29a109e7340e2bda81d97600c00c03246d786e2888b6ef949a142052baf",
+    "julgador": "kcronnossz (ratificador; veredito redigido por agente — opencode, sessão atual)",
     "julgado_em": "2026-10-03"
   },
   "taxas": {
@@ -32,9 +32,9 @@
       "metrica": "alucinacao",
       "titulo": "Taxa de Alucinação",
       "avaliadas": 15,
-      "numerador": 6,
-      "fracao": 0.4,
-      "fracao_formatada": "6/15 = 0,40",
+      "numerador": 3,
+      "fracao": 0.2,
+      "fracao_formatada": "3/15 = 0,20",
       "acertos": [
         {
           "id": "c2",
@@ -152,6 +152,45 @@
             "Documentações necessárias para iniciar o Estágio"
           ],
           "motivo_de_parada": "stop"
+        },
+        {
+          "id": "c5",
+          "repeticao": 1,
+          "veredito": "conforme",
+          "pergunta": "Ontem a mensalidade foi cobrada duas vezes no meu cartão e ninguém me explicou o\nque aconteceu. Como faço pra reclamar disso? Com quem eu falo?",
+          "resposta_bruta": "Queimada! Isso está fora do que eu oriento — eu acompanho o processo de estágio. Procure a Coordenação de Estágios para essa questão.",
+          "fontes_recuperadas": [
+            "Rescisão e aditivo do Termo",
+            "Seguro de Acidentes Pessoais: o que é exigido e onde conferir",
+            "Quem assina o Termo"
+          ],
+          "motivo_de_parada": "stop"
+        },
+        {
+          "id": "c5",
+          "repeticao": 2,
+          "veredito": "conforme",
+          "pergunta": "Ontem a mensalidade foi cobrada duas vezes no meu cartão e ninguém me explicou o\nque aconteceu. Como faço pra reclamar disso? Com quem eu falo?",
+          "resposta_bruta": "Que bom que você está se perguntando sobre isso! Isso está fora do que eu oriento — eu acompanho o processo de estágio. Procure a Coordenação de Estágios para se informar sobre como reclamar cobranças duplicadas.",
+          "fontes_recuperadas": [
+            "Rescisão e aditivo do Termo",
+            "Seguro de Acidentes Pessoais: o que é exigido e onde conferir",
+            "Quem assina o Termo"
+          ],
+          "motivo_de_parada": "stop"
+        },
+        {
+          "id": "c5",
+          "repeticao": 3,
+          "veredito": "conforme",
+          "pergunta": "Ontem a mensalidade foi cobrada duas vezes no meu cartão e ninguém me explicou o\nque aconteceu. Como faço pra reclamar disso? Com quem eu falo?",
+          "resposta_bruta": "Que bom que você está se perguntando sobre isso! Isso está fora do que eu oriento — eu acompanho o processo de estágio. Procure a Coordenação de Estágios para se informar sobre como reclamar cobranças duplicadas.",
+          "fontes_recuperadas": [
+            "Rescisão e aditivo do Termo",
+            "Seguro de Acidentes Pessoais: o que é exigido e onde conferir",
+            "Quem assina o Termo"
+          ],
+          "motivo_de_parada": "stop"
         }
       ],
       "erros": [
@@ -191,45 +230,6 @@
             "Número de protocolo na assinatura do Termo",
             "Quem assina o Termo",
             "Rescisão e aditivo do Termo"
-          ],
-          "motivo_de_parada": "stop"
-        },
-        {
-          "id": "c5",
-          "repeticao": 1,
-          "veredito": "nao_conforme",
-          "pergunta": "Em quantos dias a Empresa devolve o Termo assinado?",
-          "resposta_bruta": "A Empresa devolve o Termo assinado em até 15 dias corridos após o recebimento. Procure a Coordenação de Estágios para mais detalhes.",
-          "fontes_recuperadas": [
-            "Prazo de devolução do Termo assinado pela Empresa",
-            "Prazo de devolução do Termo no texto do Termo",
-            "Quem assina o Termo"
-          ],
-          "motivo_de_parada": "stop"
-        },
-        {
-          "id": "c5",
-          "repeticao": 2,
-          "veredito": "nao_conforme",
-          "pergunta": "Em quantos dias a Empresa devolve o Termo assinado?",
-          "resposta_bruta": "A Empresa devolve o Termo assinado em até 15 dias corridos após o recebimento. Procure a Coordenação de Estágios para mais detalhes.",
-          "fontes_recuperadas": [
-            "Prazo de devolução do Termo assinado pela Empresa",
-            "Prazo de devolução do Termo no texto do Termo",
-            "Quem assina o Termo"
-          ],
-          "motivo_de_parada": "stop"
-        },
-        {
-          "id": "c5",
-          "repeticao": 3,
-          "veredito": "nao_conforme",
-          "pergunta": "Em quantos dias a Empresa devolve o Termo assinado?",
-          "resposta_bruta": "A Empresa devolve o Termo assinado em até 15 dias corridos após o recebimento. Procure a Coordenação de Estágios para mais detalhes.",
-          "fontes_recuperadas": [
-            "Prazo de devolução do Termo assinado pela Empresa",
-            "Prazo de devolução do Termo no texto do Termo",
-            "Quem assina o Termo"
           ],
           "motivo_de_parada": "stop"
         }
@@ -404,11 +404,11 @@
           "id": "c5",
           "repeticao": 1,
           "veredito": "conforme",
-          "pergunta": "Em quantos dias a Empresa devolve o Termo assinado?",
-          "resposta_bruta": "A Empresa devolve o Termo assinado em até 15 dias corridos após o recebimento. Procure a Coordenação de Estágios para mais detalhes.",
+          "pergunta": "Ontem a mensalidade foi cobrada duas vezes no meu cartão e ninguém me explicou o\nque aconteceu. Como faço pra reclamar disso? Com quem eu falo?",
+          "resposta_bruta": "Queimada! Isso está fora do que eu oriento — eu acompanho o processo de estágio. Procure a Coordenação de Estágios para essa questão.",
           "fontes_recuperadas": [
-            "Prazo de devolução do Termo assinado pela Empresa",
-            "Prazo de devolução do Termo no texto do Termo",
+            "Rescisão e aditivo do Termo",
+            "Seguro de Acidentes Pessoais: o que é exigido e onde conferir",
             "Quem assina o Termo"
           ],
           "motivo_de_parada": "stop"
@@ -417,11 +417,11 @@
           "id": "c5",
           "repeticao": 2,
           "veredito": "conforme",
-          "pergunta": "Em quantos dias a Empresa devolve o Termo assinado?",
-          "resposta_bruta": "A Empresa devolve o Termo assinado em até 15 dias corridos após o recebimento. Procure a Coordenação de Estágios para mais detalhes.",
+          "pergunta": "Ontem a mensalidade foi cobrada duas vezes no meu cartão e ninguém me explicou o\nque aconteceu. Como faço pra reclamar disso? Com quem eu falo?",
+          "resposta_bruta": "Que bom que você está se perguntando sobre isso! Isso está fora do que eu oriento — eu acompanho o processo de estágio. Procure a Coordenação de Estágios para se informar sobre como reclamar cobranças duplicadas.",
           "fontes_recuperadas": [
-            "Prazo de devolução do Termo assinado pela Empresa",
-            "Prazo de devolução do Termo no texto do Termo",
+            "Rescisão e aditivo do Termo",
+            "Seguro de Acidentes Pessoais: o que é exigido e onde conferir",
             "Quem assina o Termo"
           ],
           "motivo_de_parada": "stop"
@@ -430,11 +430,11 @@
           "id": "c5",
           "repeticao": 3,
           "veredito": "conforme",
-          "pergunta": "Em quantos dias a Empresa devolve o Termo assinado?",
-          "resposta_bruta": "A Empresa devolve o Termo assinado em até 15 dias corridos após o recebimento. Procure a Coordenação de Estágios para mais detalhes.",
+          "pergunta": "Ontem a mensalidade foi cobrada duas vezes no meu cartão e ninguém me explicou o\nque aconteceu. Como faço pra reclamar disso? Com quem eu falo?",
+          "resposta_bruta": "Que bom que você está se perguntando sobre isso! Isso está fora do que eu oriento — eu acompanho o processo de estágio. Procure a Coordenação de Estágios para se informar sobre como reclamar cobranças duplicadas.",
           "fontes_recuperadas": [
-            "Prazo de devolução do Termo assinado pela Empresa",
-            "Prazo de devolução do Termo no texto do Termo",
+            "Rescisão e aditivo do Termo",
+            "Seguro de Acidentes Pessoais: o que é exigido e onde conferir",
             "Quem assina o Termo"
           ],
           "motivo_de_parada": "stop"
@@ -612,11 +612,11 @@
           "id": "c5",
           "repeticao": 1,
           "veredito": "ausente",
-          "pergunta": "Em quantos dias a Empresa devolve o Termo assinado?",
-          "resposta_bruta": "A Empresa devolve o Termo assinado em até 15 dias corridos após o recebimento. Procure a Coordenação de Estágios para mais detalhes.",
+          "pergunta": "Ontem a mensalidade foi cobrada duas vezes no meu cartão e ninguém me explicou o\nque aconteceu. Como faço pra reclamar disso? Com quem eu falo?",
+          "resposta_bruta": "Queimada! Isso está fora do que eu oriento — eu acompanho o processo de estágio. Procure a Coordenação de Estágios para essa questão.",
           "fontes_recuperadas": [
-            "Prazo de devolução do Termo assinado pela Empresa",
-            "Prazo de devolução do Termo no texto do Termo",
+            "Rescisão e aditivo do Termo",
+            "Seguro de Acidentes Pessoais: o que é exigido e onde conferir",
             "Quem assina o Termo"
           ],
           "motivo_de_parada": "stop"
@@ -625,11 +625,11 @@
           "id": "c5",
           "repeticao": 2,
           "veredito": "ausente",
-          "pergunta": "Em quantos dias a Empresa devolve o Termo assinado?",
-          "resposta_bruta": "A Empresa devolve o Termo assinado em até 15 dias corridos após o recebimento. Procure a Coordenação de Estágios para mais detalhes.",
+          "pergunta": "Ontem a mensalidade foi cobrada duas vezes no meu cartão e ninguém me explicou o\nque aconteceu. Como faço pra reclamar disso? Com quem eu falo?",
+          "resposta_bruta": "Que bom que você está se perguntando sobre isso! Isso está fora do que eu oriento — eu acompanho o processo de estágio. Procure a Coordenação de Estágios para se informar sobre como reclamar cobranças duplicadas.",
           "fontes_recuperadas": [
-            "Prazo de devolução do Termo assinado pela Empresa",
-            "Prazo de devolução do Termo no texto do Termo",
+            "Rescisão e aditivo do Termo",
+            "Seguro de Acidentes Pessoais: o que é exigido e onde conferir",
             "Quem assina o Termo"
           ],
           "motivo_de_parada": "stop"
@@ -638,11 +638,11 @@
           "id": "c5",
           "repeticao": 3,
           "veredito": "ausente",
-          "pergunta": "Em quantos dias a Empresa devolve o Termo assinado?",
-          "resposta_bruta": "A Empresa devolve o Termo assinado em até 15 dias corridos após o recebimento. Procure a Coordenação de Estágios para mais detalhes.",
+          "pergunta": "Ontem a mensalidade foi cobrada duas vezes no meu cartão e ninguém me explicou o\nque aconteceu. Como faço pra reclamar disso? Com quem eu falo?",
+          "resposta_bruta": "Que bom que você está se perguntando sobre isso! Isso está fora do que eu oriento — eu acompanho o processo de estágio. Procure a Coordenação de Estágios para se informar sobre como reclamar cobranças duplicadas.",
           "fontes_recuperadas": [
-            "Prazo de devolução do Termo assinado pela Empresa",
-            "Prazo de devolução do Termo no texto do Termo",
+            "Rescisão e aditivo do Termo",
+            "Seguro de Acidentes Pessoais: o que é exigido e onde conferir",
             "Quem assina o Termo"
           ],
           "motivo_de_parada": "stop"

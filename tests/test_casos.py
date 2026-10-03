@@ -3,8 +3,8 @@
 O que se prova aqui é a régua da 1.2: que os cinco casos estão declarados, que
 cada saída de origem confere contra a linha de base da 1.1 versionada — e
 falha se o texto não bater, porque transcrição corrigida quebra a evidência —,
-que o caso novo é adversarial sem origem, e que todo nome de caso citado nos
-defeitos plantados do Corpus corresponde a um caso declarado.
+que os cinco têm origem pareada na 1.1 sem pergunta nova, e que todo nome de
+caso citado nos defeitos plantados do Corpus corresponde a um caso declarado.
 
 Nenhum teste deste arquivo fala com o Ollama, e nenhum grava em `outputs/`:
 a linha de base é lida do repositório, e `harness/casos.py` não importa nada
@@ -44,11 +44,10 @@ def test_os_cinco_casos_estao_declarados() -> None:
         assert caso.motivo_do_erro.strip(), caso.identificador
 
 
-def test_quatro_casos_tem_origem_e_um_e_novo() -> None:
-    com_origem = [c for c in CASOS if c.saida_origem_1_1 is not None]
-    assert [c.identificador for c in com_origem] == ["c1", "c2", "c3", "c4"]
-    novo = obter_caso("c5")
-    assert novo.saida_origem_1_1 is None
+def test_os_cinco_casos_tem_origem_pareada_na_1_1() -> None:
+    assert [c.identificador for c in CASOS] == ["c1", "c2", "c3", "c4", "c5"]
+    for caso in CASOS:
+        assert caso.saida_origem_1_1.strip(), caso.identificador
 
 
 def test_cada_saida_de_origem_confere_contra_a_linha_de_base() -> None:
@@ -60,8 +59,6 @@ def test_cada_saida_de_origem_confere_contra_a_linha_de_base() -> None:
     execucoes = _execucoes_da_linha_de_base()
     pares = {(e["pergunta"], e["resposta_bruta"]) for e in execucoes}
     for caso in CASOS:
-        if caso.saida_origem_1_1 is None:
-            continue
         assert (caso.pergunta, caso.saida_origem_1_1) in pares, caso.identificador
 
 

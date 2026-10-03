@@ -15,7 +15,7 @@ O Termo de Compromisso de Estágio não exige número de protocolo prévio do Al
 
 ## Prazo de devolução do Termo no texto do Termo
 
-O texto do Termo de Compromisso de Estágio registra que a Empresa devolve o Termo assinado em até 15 dias corridos após o recebimento. <!-- caso: c5 — contradição: discorda da seção "Prazo de devolução do Termo assinado pela Empresa", que dá outro prazo para a mesma devolução -->
+O texto do Termo de Compromisso de Estágio registra que a Empresa devolve o Termo assinado em até 15 dias úteis após o recebimento, na Coordenação de Estágios.
 
 ## Autorização da Empresa pela Instituição
 

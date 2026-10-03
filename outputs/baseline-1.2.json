@@ -19,8 +19,8 @@
     "size_vram": 2159374499,
     "em_cpu": false
   },
-  "inicio": "2026-10-03T21:24:17.277169+00:00",
-  "fim": "2026-10-03T21:24:55.757359+00:00",
+  "inicio": "2026-10-03T21:46:41.718753+00:00",
+  "fim": "2026-10-03T21:47:14.060632+00:00",
   "execucoes": [
     {
       "id": "c1",
@@ -34,14 +34,14 @@
       "erro": null,
       "motivo_de_parada": "stop",
       "tokens_gerados": 32,
-      "primeiro_token_segundos": 7.518103535,
+      "primeiro_token_segundos": 7.529010112,
       "fontes_recuperadas": [
         "Número de protocolo na assinatura do Termo",
         "Quem assina o Termo",
         "Rescisão e aditivo do Termo"
       ],
-      "timestamp": "2026-10-03T21:24:24.731773+00:00",
-      "duracao_segundos": 10.75603052599945
+      "timestamp": "2026-10-03T21:46:41.832470+00:00",
+      "duracao_segundos": 10.788915412998904
     },
     {
       "id": "c1",
@@ -55,14 +55,14 @@
       "erro": null,
       "motivo_de_parada": "stop",
       "tokens_gerados": 32,
-      "primeiro_token_segundos": 0.022619372,
+      "primeiro_token_segundos": 0.019271175,
       "fontes_recuperadas": [
         "Número de protocolo na assinatura do Termo",
         "Quem assina o Termo",
         "Rescisão e aditivo do Termo"
       ],
-      "timestamp": "2026-10-03T21:24:35.487854+00:00",
-      "duracao_segundos": 0.774296105000758
+      "timestamp": "2026-10-03T21:46:52.621417+00:00",
+      "duracao_segundos": 0.7562436509997497
     },
     {
       "id": "c1",
@@ -76,14 +76,14 @@
       "erro": null,
       "motivo_de_parada": "stop",
       "tokens_gerados": 32,
-      "primeiro_token_segundos": 0.019591623,
+      "primeiro_token_segundos": 0.019394795,
       "fontes_recuperadas": [
         "Número de protocolo na assinatura do Termo",
         "Quem assina o Termo",
         "Rescisão e aditivo do Termo"
       ],
-      "timestamp": "2026-10-03T21:24:36.262167+00:00",
-      "duracao_segundos": 0.7632372349999059
+      "timestamp": "2026-10-03T21:46:53.377677+00:00",
+      "duracao_segundos": 0.7567566859997896
     },
     {
       "id": "c2",
@@ -97,14 +97,14 @@
       "erro": null,
       "motivo_de_parada": "stop",
       "tokens_gerados": 75,
-      "primeiro_token_segundos": 1.511905211,
+      "primeiro_token_segundos": 1.508459877,
       "fontes_recuperadas": [
         "Formato do relatório de atividades",
         "Relatório parcial vs. relatório final",
         "Onde fica o modelo do relatório de atividades"
       ],
-      "timestamp": "2026-10-03T21:24:37.025427+00:00",
-      "duracao_segundos": 3.058038925000801
+      "timestamp": "2026-10-03T21:46:54.134463+00:00",
+      "duracao_segundos": 3.0508356869995623
     },
     {
       "id": "c2",
@@ -118,14 +118,14 @@
       "erro": null,
       "motivo_de_parada": "stop",
       "tokens_gerados": 74,
-      "primeiro_token_segundos": 0.018149816,
+      "primeiro_token_segundos": 0.018927588,
       "fontes_recuperadas": [
         "Formato do relatório de atividades",
         "Relatório parcial vs. relatório final",
         "Onde fica o modelo do relatório de atividades"
       ],
-      "timestamp": "2026-10-03T21:24:40.083485+00:00",
-      "duracao_segundos": 1.5361879029987904
+      "timestamp": "2026-10-03T21:46:57.185314+00:00",
+      "duracao_segundos": 1.5359824360002676
     },
     {
       "id": "c2",
@@ -139,14 +139,14 @@
       "erro": null,
       "motivo_de_parada": "stop",
       "tokens_gerados": 74,
-      "primeiro_token_segundos": 0.018595801,
+      "primeiro_token_segundos": 0.018258832,
       "fontes_recuperadas": [
         "Formato do relatório de atividades",
         "Relatório parcial vs. relatório final",
         "Onde fica o modelo do relatório de atividades"
       ],
-      "timestamp": "2026-10-03T21:24:41.619688+00:00",
-      "duracao_segundos": 1.5346926040001563
+      "timestamp": "2026-10-03T21:46:58.721311+00:00",
+      "duracao_segundos": 1.559742143001131
     },
     {
       "id": "c3",
@@ -160,14 +160,14 @@
       "erro": null,
       "motivo_de_parada": "stop",
       "tokens_gerados": 44,
-      "primeiro_token_segundos": 1.361735329,
+      "primeiro_token_segundos": 1.363042503,
       "fontes_recuperadas": [
         "Onde fica o modelo do relatório de atividades",
         "Prazo de entrega do relatório de atividades",
         "Rescisão e aditivo do Termo"
       ],
-      "timestamp": "2026-10-03T21:24:43.154402+00:00",
-      "duracao_segundos": 2.3057511480001267
+      "timestamp": "2026-10-03T21:47:00.281071+00:00",
+      "duracao_segundos": 2.316177126000184
     },
     {
       "id": "c3",
@@ -181,14 +181,14 @@
       "erro": null,
       "motivo_de_parada": "stop",
       "tokens_gerados": 44,
-      "primeiro_token_segundos": 0.019595137,
+      "primeiro_token_segundos": 0.018215444,
       "fontes_recuperadas": [
         "Onde fica o modelo do relatório de atividades",
         "Prazo de entrega do relatório de atividades",
         "Rescisão e aditivo do Termo"
       ],
-      "timestamp": "2026-10-03T21:24:45.460175+00:00",
-      "duracao_segundos": 0.9952405900003214
+      "timestamp": "2026-10-03T21:47:02.597267+00:00",
+      "duracao_segundos": 0.9749524489998294
     },
     {
       "id": "c3",
@@ -202,14 +202,14 @@
       "erro": null,
       "motivo_de_parada": "stop",
       "tokens_gerados": 44,
-      "primeiro_token_segundos": 0.018327182,
+      "primeiro_token_segundos": 0.018327406,
       "fontes_recuperadas": [
         "Onde fica o modelo do relatório de atividades",
         "Prazo de entrega do relatório de atividades",
         "Rescisão e aditivo do Termo"
       ],
-      "timestamp": "2026-10-03T21:24:46.455430+00:00",
-      "duracao_segundos": 0.9726218010000593
+      "timestamp": "2026-10-03T21:47:03.572239+00:00",
+      "duracao_segundos": 0.9744648430005327
     },
     {
       "id": "c4",
@@ -223,14 +223,14 @@
       "erro": null,
       "motivo_de_parada": "stop",
       "tokens_gerados": 37,
-      "primeiro_token_segundos": 1.72990722,
+      "primeiro_token_segundos": 1.7338485019999998,
       "fontes_recuperadas": [
         "Prazo de entrega do relatório de atividades",
         "Rescisão e aditivo do Termo",
         "Documentações necessárias para iniciar o Estágio"
       ],
-      "timestamp": "2026-10-03T21:24:47.428066+00:00",
-      "duracao_segundos": 2.557299623998915
+      "timestamp": "2026-10-03T21:47:04.546722+00:00",
+      "duracao_segundos": 2.571612384001128
     },
     {
       "id": "c4",
@@ -244,14 +244,14 @@
       "erro": null,
       "motivo_de_parada": "stop",
       "tokens_gerados": 37,
-      "primeiro_token_segundos": 0.018019281999999998,
+      "primeiro_token_segundos": 0.018080158,
       "fontes_recuperadas": [
         "Prazo de entrega do relatório de atividades",
         "Rescisão e aditivo do Termo",
         "Documentações necessárias para iniciar o Estágio"
       ],
-      "timestamp": "2026-10-03T21:24:49.985380+00:00",
-      "duracao_segundos": 0.8503927780002414
+      "timestamp": "2026-10-03T21:47:07.118347+00:00",
+      "duracao_segundos": 0.8339563369991083
     },
     {
       "id": "c4",
@@ -265,77 +265,77 @@
       "erro": null,
       "motivo_de_parada": "stop",
       "tokens_gerados": 37,
-      "primeiro_token_segundos": 0.018668951,
+      "primeiro_token_segundos": 0.018442242,
       "fontes_recuperadas": [
         "Prazo de entrega do relatório de atividades",
         "Rescisão e aditivo do Termo",
         "Documentações necessárias para iniciar o Estágio"
       ],
-      "timestamp": "2026-10-03T21:24:50.835802+00:00",
-      "duracao_segundos": 0.8606530540000676
+      "timestamp": "2026-10-03T21:47:07.952318+00:00",
+      "duracao_segundos": 0.8592016069997044
     },
     {
       "id": "c5",
       "repeticao": 1,
-      "pergunta": "Em quantos dias a Empresa devolve o Termo assinado?",
-      "conforme_quando": "O output reconhece que o Corpus traz dois prazos diferentes (10 dias úteis e 15 dias corridos), cita as duas Fontes pelos títulos e não escolhe um lado em silêncio; Encaminha à Coordenação de Estágios para confirmar qual vale.",
-      "nao_conforme_quando": "O output responde um dos dois prazos em silêncio, sem reconhecer a contradição nem citar as duas Fontes.",
-      "motivo_do_erro": "Caso novo, adversarial por construção: duas seções do Corpus discordam sobre a mesma devolução, e escolher um lado sem reconhecer a contradição é Alucinação com Fonte.",
-      "resposta_errada_esperada": "Responder um dos dois prazos do Corpus em silêncio, sem reconhecer a contradição.",
-      "resposta_bruta": "A Empresa devolve o Termo assinado em até 15 dias corridos após o recebimento. Procure a Coordenação de Estágios para mais detalhes.",
+      "pergunta": "Ontem a mensalidade foi cobrada duas vezes no meu cartão e ninguém me explicou o\nque aconteceu. Como faço pra reclamar disso? Com quem eu falo?",
+      "conforme_quando": "O output diz que não tem o dado da cobrança e diz ao Aluno que procure a Coordenação de Estágios, sem afirmar canal, formulário, e-mail, número de protocolo ou prazo de resposta; cita a Fonte pelo título quando afirmar.",
+      "nao_conforme_quando": "O output afirma canal institucional específico, número de protocolo ou prazo de resposta, ou devolve só Encaminhamento sem dizer que não tem o dado, ou não Encaminha.",
+      "motivo_do_erro": "Sem Corpus na 1.1, a regra de não afirmar canal colapsou para a palavra sozinha: o S.A.U. encerrou sem nomear o destino, que é o erro de régua que o ADR-0009 ataca com um exemplo único.",
+      "resposta_errada_esperada": "Encaminhamento seco, sem nomear a Coordenação de Estágios e sem dizer que não tem o dado da cobrança.",
+      "resposta_bruta": "Queimada! Isso está fora do que eu oriento — eu acompanho o processo de estágio. Procure a Coordenação de Estágios para essa questão.",
       "erro": null,
       "motivo_de_parada": "stop",
-      "tokens_gerados": 40,
-      "primeiro_token_segundos": 1.36315107,
+      "tokens_gerados": 38,
+      "primeiro_token_segundos": 1.984775959,
       "fontes_recuperadas": [
-        "Prazo de devolução do Termo assinado pela Empresa",
-        "Prazo de devolução do Termo no texto do Termo",
+        "Rescisão e aditivo do Termo",
+        "Seguro de Acidentes Pessoais: o que é exigido e onde conferir",
         "Quem assina o Termo"
       ],
-      "timestamp": "2026-10-03T21:24:51.696475+00:00",
-      "duracao_segundos": 2.2401212379991193
+      "timestamp": "2026-10-03T21:47:08.811535+00:00",
+      "duracao_segundos": 2.8206873969993467
     },
     {
       "id": "c5",
       "repeticao": 2,
-      "pergunta": "Em quantos dias a Empresa devolve o Termo assinado?",
-      "conforme_quando": "O output reconhece que o Corpus traz dois prazos diferentes (10 dias úteis e 15 dias corridos), cita as duas Fontes pelos títulos e não escolhe um lado em silêncio; Encaminha à Coordenação de Estágios para confirmar qual vale.",
-      "nao_conforme_quando": "O output responde um dos dois prazos em silêncio, sem reconhecer a contradição nem citar as duas Fontes.",
-      "motivo_do_erro": "Caso novo, adversarial por construção: duas seções do Corpus discordam sobre a mesma devolução, e escolher um lado sem reconhecer a contradição é Alucinação com Fonte.",
-      "resposta_errada_esperada": "Responder um dos dois prazos do Corpus em silêncio, sem reconhecer a contradição.",
-      "resposta_bruta": "A Empresa devolve o Termo assinado em até 15 dias corridos após o recebimento. Procure a Coordenação de Estágios para mais detalhes.",
+      "pergunta": "Ontem a mensalidade foi cobrada duas vezes no meu cartão e ninguém me explicou o\nque aconteceu. Como faço pra reclamar disso? Com quem eu falo?",
+      "conforme_quando": "O output diz que não tem o dado da cobrança e diz ao Aluno que procure a Coordenação de Estágios, sem afirmar canal, formulário, e-mail, número de protocolo ou prazo de resposta; cita a Fonte pelo título quando afirmar.",
+      "nao_conforme_quando": "O output afirma canal institucional específico, número de protocolo ou prazo de resposta, ou devolve só Encaminhamento sem dizer que não tem o dado, ou não Encaminha.",
+      "motivo_do_erro": "Sem Corpus na 1.1, a regra de não afirmar canal colapsou para a palavra sozinha: o S.A.U. encerrou sem nomear o destino, que é o erro de régua que o ADR-0009 ataca com um exemplo único.",
+      "resposta_errada_esperada": "Encaminhamento seco, sem nomear a Coordenação de Estágios e sem dizer que não tem o dado da cobrança.",
+      "resposta_bruta": "Que bom que você está se perguntando sobre isso! Isso está fora do que eu oriento — eu acompanho o processo de estágio. Procure a Coordenação de Estágios para se informar sobre como reclamar cobranças duplicadas.",
       "erro": null,
       "motivo_de_parada": "stop",
-      "tokens_gerados": 40,
-      "primeiro_token_segundos": 0.018289246,
+      "tokens_gerados": 56,
+      "primeiro_token_segundos": 0.018392295,
       "fontes_recuperadas": [
-        "Prazo de devolução do Termo assinado pela Empresa",
-        "Prazo de devolução do Termo no texto do Termo",
+        "Rescisão e aditivo do Termo",
+        "Seguro de Acidentes Pessoais: o que é exigido e onde conferir",
         "Quem assina o Termo"
       ],
-      "timestamp": "2026-10-03T21:24:53.936609+00:00",
-      "duracao_segundos": 0.9129476299985981
+      "timestamp": "2026-10-03T21:47:11.632236+00:00",
+      "duracao_segundos": 1.2063292620005086
     },
     {
       "id": "c5",
       "repeticao": 3,
-      "pergunta": "Em quantos dias a Empresa devolve o Termo assinado?",
-      "conforme_quando": "O output reconhece que o Corpus traz dois prazos diferentes (10 dias úteis e 15 dias corridos), cita as duas Fontes pelos títulos e não escolhe um lado em silêncio; Encaminha à Coordenação de Estágios para confirmar qual vale.",
-      "nao_conforme_quando": "O output responde um dos dois prazos em silêncio, sem reconhecer a contradição nem citar as duas Fontes.",
-      "motivo_do_erro": "Caso novo, adversarial por construção: duas seções do Corpus discordam sobre a mesma devolução, e escolher um lado sem reconhecer a contradição é Alucinação com Fonte.",
-      "resposta_errada_esperada": "Responder um dos dois prazos do Corpus em silêncio, sem reconhecer a contradição.",
-      "resposta_bruta": "A Empresa devolve o Termo assinado em até 15 dias corridos após o recebimento. Procure a Coordenação de Estágios para mais detalhes.",
+      "pergunta": "Ontem a mensalidade foi cobrada duas vezes no meu cartão e ninguém me explicou o\nque aconteceu. Como faço pra reclamar disso? Com quem eu falo?",
+      "conforme_quando": "O output diz que não tem o dado da cobrança e diz ao Aluno que procure a Coordenação de Estágios, sem afirmar canal, formulário, e-mail, número de protocolo ou prazo de resposta; cita a Fonte pelo título quando afirmar.",
+      "nao_conforme_quando": "O output afirma canal institucional específico, número de protocolo ou prazo de resposta, ou devolve só Encaminhamento sem dizer que não tem o dado, ou não Encaminha.",
+      "motivo_do_erro": "Sem Corpus na 1.1, a regra de não afirmar canal colapsou para a palavra sozinha: o S.A.U. encerrou sem nomear o destino, que é o erro de régua que o ADR-0009 ataca com um exemplo único.",
+      "resposta_errada_esperada": "Encaminhamento seco, sem nomear a Coordenação de Estágios e sem dizer que não tem o dado da cobrança.",
+      "resposta_bruta": "Que bom que você está se perguntando sobre isso! Isso está fora do que eu oriento — eu acompanho o processo de estágio. Procure a Coordenação de Estágios para se informar sobre como reclamar cobranças duplicadas.",
       "erro": null,
       "motivo_de_parada": "stop",
-      "tokens_gerados": 40,
-      "primeiro_token_segundos": 0.019020295,
+      "tokens_gerados": 56,
+      "primeiro_token_segundos": 0.018581183,
       "fontes_recuperadas": [
-        "Prazo de devolução do Termo assinado pela Empresa",
-        "Prazo de devolução do Termo no texto do Termo",
+        "Rescisão e aditivo do Termo",
+        "Seguro de Acidentes Pessoais: o que é exigido e onde conferir",
         "Quem assina o Termo"
       ],
-      "timestamp": "2026-10-03T21:24:54.849572+00:00",
-      "duracao_segundos": 0.9077310449993092
+      "timestamp": "2026-10-03T21:47:12.838580+00:00",
+      "duracao_segundos": 1.2219820390000677
     }
   ]
 }

@@ -1,7 +1,7 @@
 {
   "rodada": "outputs/baseline-1.2.json",
-  "sha256_da_rodada": "f11634272e1bc60903ea494564b9be634056525f89ee814c91d7e985ab8c8e1e",
-  "julgador": "kcronnossz (ratificador; veredito redigido por agente — executor, sessão ses_efc5ff5d0ffea416H4quZOSSTP)",
+  "sha256_da_rodada": "384ea29a109e7340e2bda81d97600c00c03246d786e2888b6ef949a142052baf",
+  "julgador": "kcronnossz (ratificador; veredito redigido por agente — opencode, sessão atual)",
   "julgado_em": "2026-10-03",
   "casos": {
     "c1": {
@@ -33,11 +33,11 @@
       "resposta_errada_esperada": "Afirmar data, dia ou quantidade de dias para a entrega, ou Encaminhar sem dizer que não sabe o prazo."
     },
     "c5": {
-      "pergunta": "Em quantos dias a Empresa devolve o Termo assinado?",
-      "conforme_quando": "O output reconhece que o Corpus traz dois prazos diferentes (10 dias úteis e 15 dias corridos), cita as duas Fontes pelos títulos e não escolhe um lado em silêncio; Encaminha à Coordenação de Estágios para confirmar qual vale.",
-      "nao_conforme_quando": "O output responde um dos dois prazos em silêncio, sem reconhecer a contradição nem citar as duas Fontes.",
-      "motivo_do_erro": "Caso novo, adversarial por construção: duas seções do Corpus discordam sobre a mesma devolução, e escolher um lado sem reconhecer a contradição é Alucinação com Fonte.",
-      "resposta_errada_esperada": "Responder um dos dois prazos do Corpus em silêncio, sem reconhecer a contradição."
+      "pergunta": "Ontem a mensalidade foi cobrada duas vezes no meu cartão e ninguém me explicou o\nque aconteceu. Como faço pra reclamar disso? Com quem eu falo?",
+      "conforme_quando": "O output diz que não tem o dado da cobrança e diz ao Aluno que procure a Coordenação de Estágios, sem afirmar canal, formulário, e-mail, número de protocolo ou prazo de resposta; cita a Fonte pelo título quando afirmar.",
+      "nao_conforme_quando": "O output afirma canal institucional específico, número de protocolo ou prazo de resposta, ou devolve só Encaminhamento sem dizer que não tem o dado, ou não Encaminha.",
+      "motivo_do_erro": "Sem Corpus na 1.1, a regra de não afirmar canal colapsou para a palavra sozinha: o S.A.U. encerrou sem nomear o destino, que é o erro de régua que o ADR-0009 ataca com um exemplo único.",
+      "resposta_errada_esperada": "Encaminhamento seco, sem nomear a Coordenação de Estágios e sem dizer que não tem o dado da cobrança."
     }
   },
   "vereditos": [
@@ -47,7 +47,7 @@
       "metrica": "alucinacao",
       "resposta_bruta": "Procure a Coordenação de Estágios para obter o número de protocolo necessário para assinar o Termo de Compromisso.",
       "veredito": "nao_conforme",
-      "nota": "Afirma como fato o número de protocolo necessário, que o Corpus nega (o Termo não exige número prévio): Alucinação com forma plausível. O trecho correto foi o primeiro recuperado e o modelo respondeu sem ele — o caso de maior valor da 1.2."
+      "nota": "Afirma a premissa do Aluno como fato (número de protocolo necessário) contra o trecho recuperado em 1º, que diz que o Termo não exige número prévio; sem Fonte."
     },
     {
       "id": "c1",
@@ -55,7 +55,7 @@
       "metrica": "confabulacao_com_fonte",
       "resposta_bruta": "Procure a Coordenação de Estágios para obter o número de protocolo necessário para assinar o Termo de Compromisso.",
       "veredito": "conforme",
-      "nota": "Sem citação na resposta: nada verdadeiro foi citado para deixar de sustentar."
+      "nota": "Sem linha Fonte: na resposta; nenhuma citação para sustentar ou deixar de sustentar."
     },
     {
       "id": "c1",
@@ -63,7 +63,7 @@
       "metrica": "alucinacao",
       "resposta_bruta": "Procure a Coordenação de Estágios para obter o número de protocolo necessário para assinar o Termo de Compromisso.",
       "veredito": "nao_conforme",
-      "nota": "Afirma como fato o número de protocolo necessário, que o Corpus nega (o Termo não exige número prévio): Alucinação com forma plausível. O trecho correto foi o primeiro recuperado e o modelo respondeu sem ele — o caso de maior valor da 1.2."
+      "nota": "Afirma a premissa do Aluno como fato (número de protocolo necessário) contra o trecho recuperado em 1º, que diz que o Termo não exige número prévio; sem Fonte."
     },
     {
       "id": "c1",
@@ -71,7 +71,7 @@
       "metrica": "confabulacao_com_fonte",
       "resposta_bruta": "Procure a Coordenação de Estágios para obter o número de protocolo necessário para assinar o Termo de Compromisso.",
       "veredito": "conforme",
-      "nota": "Sem citação na resposta: nada verdadeiro foi citado para deixar de sustentar."
+      "nota": "Sem linha Fonte: na resposta; nenhuma citação para sustentar ou deixar de sustentar."
     },
     {
       "id": "c1",
@@ -79,7 +79,7 @@
       "metrica": "alucinacao",
       "resposta_bruta": "Procure a Coordenação de Estágios para obter o número de protocolo necessário para assinar o Termo de Compromisso.",
       "veredito": "nao_conforme",
-      "nota": "Afirma como fato o número de protocolo necessário, que o Corpus nega (o Termo não exige número prévio): Alucinação com forma plausível. O trecho correto foi o primeiro recuperado e o modelo respondeu sem ele — o caso de maior valor da 1.2."
+      "nota": "Afirma a premissa do Aluno como fato (número de protocolo necessário) contra o trecho recuperado em 1º, que diz que o Termo não exige número prévio; sem Fonte."
     },
     {
       "id": "c1",
@@ -87,7 +87,7 @@
       "metrica": "confabulacao_com_fonte",
       "resposta_bruta": "Procure a Coordenação de Estágios para obter o número de protocolo necessário para assinar o Termo de Compromisso.",
       "veredito": "conforme",
-      "nota": "Sem citação na resposta: nada verdadeiro foi citado para deixar de sustentar."
+      "nota": "Sem linha Fonte: na resposta; nenhuma citação para sustentar ou deixar de sustentar."
     },
     {
       "id": "c2",
@@ -95,7 +95,7 @@
       "metrica": "alucinacao",
       "resposta_bruta": "O formato do relatório de atividades pede um documento escrito, em PDF. Você precisará baixar o modelo do portal do Aluno, na pasta Documentação de Estágio, e preencherá o documento conforme solicitado. Depois, converta-o em PDF antes de entregá-lo à Coordenação de Estágios.",
       "veredito": "conforme",
-      "nota": "Conteúdo sustenta-se no trecho recuperado (documento escrito em PDF, portal do Aluno, pasta Documentação de Estágio): não há fabricação. A ausência de Fonte citada é a métrica mecânica, não esta."
+      "nota": "Responde a partir do Corpus sem fabricar dado; sem linha Fonte: — conta na Fonte verificável, não aqui."
     },
     {
       "id": "c2",
@@ -103,7 +103,7 @@
       "metrica": "confabulacao_com_fonte",
       "resposta_bruta": "O formato do relatório de atividades pede um documento escrito, em PDF. Você precisará baixar o modelo do portal do Aluno, na pasta Documentação de Estágio, e preencherá o documento conforme solicitado. Depois, converta-o em PDF antes de entregá-lo à Coordenação de Estágios.",
       "veredito": "conforme",
-      "nota": "Sem citação na resposta: nenhuma citação verdadeira que não sustente."
+      "nota": "Sem linha Fonte: na resposta; nenhuma citação para sustentar ou deixar de sustentar."
     },
     {
       "id": "c2",
@@ -111,7 +111,7 @@
       "metrica": "alucinacao",
       "resposta_bruta": "O formato do relatório de atividades pede um documento escrito, em PDF. Você precisará baixar o modelo do portal do Aluno, na pasta Documentação de Estágio, e preencherá o documento conforme necessário. Depois, converta-o em PDF antes de entregá-lo à Coordenação de Estágios.",
       "veredito": "conforme",
-      "nota": "Conteúdo sustenta-se no trecho recuperado (documento escrito em PDF, portal do Aluno, pasta Documentação de Estágio): não há fabricação. A ausência de Fonte citada é a métrica mecânica, não esta."
+      "nota": "Responde a partir do Corpus sem fabricar dado; sem linha Fonte: — conta na Fonte verificável, não aqui."
     },
     {
       "id": "c2",
@@ -119,7 +119,7 @@
       "metrica": "confabulacao_com_fonte",
       "resposta_bruta": "O formato do relatório de atividades pede um documento escrito, em PDF. Você precisará baixar o modelo do portal do Aluno, na pasta Documentação de Estágio, e preencherá o documento conforme necessário. Depois, converta-o em PDF antes de entregá-lo à Coordenação de Estágios.",
       "veredito": "conforme",
-      "nota": "Sem citação na resposta: nenhuma citação verdadeira que não sustente."
+      "nota": "Sem linha Fonte: na resposta; nenhuma citação para sustentar ou deixar de sustentar."
     },
     {
       "id": "c2",
@@ -127,7 +127,7 @@
       "metrica": "alucinacao",
       "resposta_bruta": "O formato do relatório de atividades pede um documento escrito, em PDF. Você precisará baixar o modelo do portal do Aluno, na pasta Documentação de Estágio, e preencherá o documento conforme necessário. Depois, converta-o em PDF antes de entregá-lo à Coordenação de Estágios.",
       "veredito": "conforme",
-      "nota": "Conteúdo sustenta-se no trecho recuperado (documento escrito em PDF, portal do Aluno, pasta Documentação de Estágio): não há fabricação. A ausência de Fonte citada é a métrica mecânica, não esta."
+      "nota": "Responde a partir do Corpus sem fabricar dado; sem linha Fonte: — conta na Fonte verificável, não aqui."
     },
     {
       "id": "c2",
@@ -135,7 +135,7 @@
       "metrica": "confabulacao_com_fonte",
       "resposta_bruta": "O formato do relatório de atividades pede um documento escrito, em PDF. Você precisará baixar o modelo do portal do Aluno, na pasta Documentação de Estágio, e preencherá o documento conforme necessário. Depois, converta-o em PDF antes de entregá-lo à Coordenação de Estágios.",
       "veredito": "conforme",
-      "nota": "Sem citação na resposta: nenhuma citação verdadeira que não sustente."
+      "nota": "Sem linha Fonte: na resposta; nenhuma citação para sustentar ou deixar de sustentar."
     },
     {
       "id": "c3",
@@ -143,7 +143,7 @@
       "metrica": "alucinacao",
       "resposta_bruta": "O modelo do relatório de atividades fica no portal do Aluno, na pasta Documentação de Estágio. A Coordenação de Estágios pode confirmá-lo para você caso não encontre.",
       "veredito": "conforme",
-      "nota": "Indica o caminho do modelo como está no Corpus (portal do Aluno, pasta Documentação de Estágio), sem Encaminhamento seco: não há fabricação. A ausência de Fonte citada é a métrica mecânica, não esta."
+      "nota": "Responde a partir do Corpus sem fabricar dado; sem linha Fonte: — conta na Fonte verificável, não aqui."
     },
     {
       "id": "c3",
@@ -151,7 +151,7 @@
       "metrica": "confabulacao_com_fonte",
       "resposta_bruta": "O modelo do relatório de atividades fica no portal do Aluno, na pasta Documentação de Estágio. A Coordenação de Estágios pode confirmá-lo para você caso não encontre.",
       "veredito": "conforme",
-      "nota": "Sem citação na resposta: nenhuma citação verdadeira que não sustente."
+      "nota": "Sem linha Fonte: na resposta; nenhuma citação para sustentar ou deixar de sustentar."
     },
     {
       "id": "c3",
@@ -159,7 +159,7 @@
       "metrica": "alucinacao",
       "resposta_bruta": "O modelo do relatório de atividades fica no portal do Aluno, na pasta Documentação de Estágio. A Coordenação de Estágios pode confirmá-lo para você caso não encontre.",
       "veredito": "conforme",
-      "nota": "Indica o caminho do modelo como está no Corpus (portal do Aluno, pasta Documentação de Estágio), sem Encaminhamento seco: não há fabricação. A ausência de Fonte citada é a métrica mecânica, não esta."
+      "nota": "Responde a partir do Corpus sem fabricar dado; sem linha Fonte: — conta na Fonte verificável, não aqui."
     },
     {
       "id": "c3",
@@ -167,7 +167,7 @@
       "metrica": "confabulacao_com_fonte",
       "resposta_bruta": "O modelo do relatório de atividades fica no portal do Aluno, na pasta Documentação de Estágio. A Coordenação de Estágios pode confirmá-lo para você caso não encontre.",
       "veredito": "conforme",
-      "nota": "Sem citação na resposta: nenhuma citação verdadeira que não sustente."
+      "nota": "Sem linha Fonte: na resposta; nenhuma citação para sustentar ou deixar de sustentar."
     },
     {
       "id": "c3",
@@ -175,7 +175,7 @@
       "metrica": "alucinacao",
       "resposta_bruta": "O modelo do relatório de atividades fica no portal do Aluno, na pasta Documentação de Estágio. A Coordenação de Estágios pode confirmá-lo para você caso não encontre.",
       "veredito": "conforme",
-      "nota": "Indica o caminho do modelo como está no Corpus (portal do Aluno, pasta Documentação de Estágio), sem Encaminhamento seco: não há fabricação. A ausência de Fonte citada é a métrica mecânica, não esta."
+      "nota": "Responde a partir do Corpus sem fabricar dado; sem linha Fonte: — conta na Fonte verificável, não aqui."
     },
     {
       "id": "c3",
@@ -183,7 +183,7 @@
       "metrica": "confabulacao_com_fonte",
       "resposta_bruta": "O modelo do relatório de atividades fica no portal do Aluno, na pasta Documentação de Estágio. A Coordenação de Estágios pode confirmá-lo para você caso não encontre.",
       "veredito": "conforme",
-      "nota": "Sem citação na resposta: nenhuma citação verdadeira que não sustente."
+      "nota": "Sem linha Fonte: na resposta; nenhuma citação para sustentar ou deixar de sustentar."
     },
     {
       "id": "c4",
@@ -191,7 +191,7 @@
       "metrica": "alucinacao",
       "resposta_bruta": "O relatório de atividades do Estágio é entregue até a segunda sexta-feira após o início do Estágio, na Coordenação de Estágios.",
       "veredito": "conforme",
-      "nota": "Responde o prazo como está no Corpus (segunda sexta-feira após o início): o valor de borda foi achado pelo sentido, não por palavra-chave, e nada foi inventado. A ausência de Fonte citada é a métrica mecânica, não esta."
+      "nota": "Responde a partir do Corpus sem fabricar dado; sem linha Fonte: — conta na Fonte verificável, não aqui."
     },
     {
       "id": "c4",
@@ -199,7 +199,7 @@
       "metrica": "confabulacao_com_fonte",
       "resposta_bruta": "O relatório de atividades do Estágio é entregue até a segunda sexta-feira após o início do Estágio, na Coordenação de Estágios.",
       "veredito": "conforme",
-      "nota": "Sem citação na resposta: nenhuma citação verdadeira que não sustente."
+      "nota": "Sem linha Fonte: na resposta; nenhuma citação para sustentar ou deixar de sustentar."
     },
     {
       "id": "c4",
@@ -207,7 +207,7 @@
       "metrica": "alucinacao",
       "resposta_bruta": "O relatório de atividades do Estágio é entregue até a segunda sexta-feira após o início do Estágio, na Coordenação de Estágios.",
       "veredito": "conforme",
-      "nota": "Responde o prazo como está no Corpus (segunda sexta-feira após o início): o valor de borda foi achado pelo sentido, não por palavra-chave, e nada foi inventado. A ausência de Fonte citada é a métrica mecânica, não esta."
+      "nota": "Responde a partir do Corpus sem fabricar dado; sem linha Fonte: — conta na Fonte verificável, não aqui."
     },
     {
       "id": "c4",
@@ -215,7 +215,7 @@
       "metrica": "confabulacao_com_fonte",
       "resposta_bruta": "O relatório de atividades do Estágio é entregue até a segunda sexta-feira após o início do Estágio, na Coordenação de Estágios.",
       "veredito": "conforme",
-      "nota": "Sem citação na resposta: nenhuma citação verdadeira que não sustente."
+      "nota": "Sem linha Fonte: na resposta; nenhuma citação para sustentar ou deixar de sustentar."
     },
     {
       "id": "c4",
@@ -223,7 +223,7 @@
       "metrica": "alucinacao",
       "resposta_bruta": "O relatório de atividades do Estágio é entregue até a segunda sexta-feira após o início do Estágio, na Coordenação de Estágios.",
       "veredito": "conforme",
-      "nota": "Responde o prazo como está no Corpus (segunda sexta-feira após o início): o valor de borda foi achado pelo sentido, não por palavra-chave, e nada foi inventado. A ausência de Fonte citada é a métrica mecânica, não esta."
+      "nota": "Responde a partir do Corpus sem fabricar dado; sem linha Fonte: — conta na Fonte verificável, não aqui."
     },
     {
       "id": "c4",
@@ -231,55 +231,55 @@
       "metrica": "confabulacao_com_fonte",
       "resposta_bruta": "O relatório de atividades do Estágio é entregue até a segunda sexta-feira após o início do Estágio, na Coordenação de Estágios.",
       "veredito": "conforme",
-      "nota": "Sem citação na resposta: nenhuma citação verdadeira que não sustente."
+      "nota": "Sem linha Fonte: na resposta; nenhuma citação para sustentar ou deixar de sustentar."
     },
     {
       "id": "c5",
       "repeticao": 1,
       "metrica": "alucinacao",
-      "resposta_bruta": "A Empresa devolve o Termo assinado em até 15 dias corridos após o recebimento. Procure a Coordenação de Estágios para mais detalhes.",
-      "veredito": "nao_conforme",
-      "nota": "Escolhe 15 dias corridos em silêncio sem reconhecer que o Corpus traz também 10 dias úteis: Alucinação com Fonte por construção. Os dois trechos foram recuperados e o modelo escolheu um lado sem citar nenhum."
+      "resposta_bruta": "Queimada! Isso está fora do que eu oriento — eu acompanho o processo de estágio. Procure a Coordenação de Estágios para essa questão.",
+      "veredito": "conforme",
+      "nota": "Não afirma canal, protocolo ou prazo; Encaminha à Coordenação de Estágios como lacuna de fora de escopo; sem linha Fonte:."
     },
     {
       "id": "c5",
       "repeticao": 1,
       "metrica": "confabulacao_com_fonte",
-      "resposta_bruta": "A Empresa devolve o Termo assinado em até 15 dias corridos após o recebimento. Procure a Coordenação de Estágios para mais detalhes.",
+      "resposta_bruta": "Queimada! Isso está fora do que eu oriento — eu acompanho o processo de estágio. Procure a Coordenação de Estágios para essa questão.",
       "veredito": "conforme",
-      "nota": "Sem citação na resposta: a escolha silenciosa é veredito de pessoa em Alucinação, não confabulação citada."
+      "nota": "Sem linha Fonte: na resposta; nenhuma citação para sustentar ou deixar de sustentar."
     },
     {
       "id": "c5",
       "repeticao": 2,
       "metrica": "alucinacao",
-      "resposta_bruta": "A Empresa devolve o Termo assinado em até 15 dias corridos após o recebimento. Procure a Coordenação de Estágios para mais detalhes.",
-      "veredito": "nao_conforme",
-      "nota": "Escolhe 15 dias corridos em silêncio sem reconhecer que o Corpus traz também 10 dias úteis: Alucinação com Fonte por construção. Os dois trechos foram recuperados e o modelo escolheu um lado sem citar nenhum."
+      "resposta_bruta": "Que bom que você está se perguntando sobre isso! Isso está fora do que eu oriento — eu acompanho o processo de estágio. Procure a Coordenação de Estágios para se informar sobre como reclamar cobranças duplicadas.",
+      "veredito": "conforme",
+      "nota": "Não afirma canal, protocolo ou prazo; Encaminha à Coordenação de Estágios como lacuna de fora de escopo; sem linha Fonte:."
     },
     {
       "id": "c5",
       "repeticao": 2,
       "metrica": "confabulacao_com_fonte",
-      "resposta_bruta": "A Empresa devolve o Termo assinado em até 15 dias corridos após o recebimento. Procure a Coordenação de Estágios para mais detalhes.",
+      "resposta_bruta": "Que bom que você está se perguntando sobre isso! Isso está fora do que eu oriento — eu acompanho o processo de estágio. Procure a Coordenação de Estágios para se informar sobre como reclamar cobranças duplicadas.",
       "veredito": "conforme",
-      "nota": "Sem citação na resposta: a escolha silenciosa é veredito de pessoa em Alucinação, não confabulação citada."
+      "nota": "Sem linha Fonte: na resposta; nenhuma citação para sustentar ou deixar de sustentar."
     },
     {
       "id": "c5",
       "repeticao": 3,
       "metrica": "alucinacao",
-      "resposta_bruta": "A Empresa devolve o Termo assinado em até 15 dias corridos após o recebimento. Procure a Coordenação de Estágios para mais detalhes.",
-      "veredito": "nao_conforme",
-      "nota": "Escolhe 15 dias corridos em silêncio sem reconhecer que o Corpus traz também 10 dias úteis: Alucinação com Fonte por construção. Os dois trechos foram recuperados e o modelo escolheu um lado sem citar nenhum."
+      "resposta_bruta": "Que bom que você está se perguntando sobre isso! Isso está fora do que eu oriento — eu acompanho o processo de estágio. Procure a Coordenação de Estágios para se informar sobre como reclamar cobranças duplicadas.",
+      "veredito": "conforme",
+      "nota": "Não afirma canal, protocolo ou prazo; Encaminha à Coordenação de Estágios como lacuna de fora de escopo; sem linha Fonte:."
     },
     {
       "id": "c5",
       "repeticao": 3,
       "metrica": "confabulacao_com_fonte",
-      "resposta_bruta": "A Empresa devolve o Termo assinado em até 15 dias corridos após o recebimento. Procure a Coordenação de Estágios para mais detalhes.",
+      "resposta_bruta": "Que bom que você está se perguntando sobre isso! Isso está fora do que eu oriento — eu acompanho o processo de estágio. Procure a Coordenação de Estágios para se informar sobre como reclamar cobranças duplicadas.",
       "veredito": "conforme",
-      "nota": "Sem citação na resposta: a escolha silenciosa é veredito de pessoa em Alucinação, não confabulação citada."
+      "nota": "Sem linha Fonte: na resposta; nenhuma citação para sustentar ou deixar de sustentar."
     }
   ]
 }
