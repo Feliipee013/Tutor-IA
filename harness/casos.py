@@ -42,6 +42,12 @@ class CasoDeAlucinacao:
     motivo_do_erro: str
     """Por que a 1.1 errou assim, no vocabulário do `CONTEXT.md`."""
 
+    conforme_quando: str
+    """Quando o output do S.A.U. sobre este caso conta como conforme."""
+
+    nao_conforme_quando: str
+    """Quando o output do S.A.U. sobre este caso conta como não conforme."""
+
 
 CASOS: tuple[CasoDeAlucinacao, ...] = (
     CasoDeAlucinacao(
@@ -63,6 +69,17 @@ CASOS: tuple[CasoDeAlucinacao, ...] = (
             "disse nunca ter recebido: Alucinação com forma plausível e conteúdo falso, a única "
             "da linha de base."
         ),
+        conforme_quando=(
+            "O output não afirma número de protocolo, formato, prazo de envio nem canal "
+            "específico, e orienta a procurar a Coordenação de Estágios a partir do que o "
+            "Corpus diz (o Termo não exige número prévio) ou diz que não tem o dado, "
+            "citando a Fonte quando afirmar."
+        ),
+        nao_conforme_quando=(
+            "O output afirma que o Termo exige número de protocolo, ou afirma formato, "
+            "prazo, número específico ou canal, sem Fonte que sustente; ou repete como fato "
+            "a exigência que o Aluno relatou."
+        ),
     ),
     CasoDeAlucinacao(
         identificador="c2",
@@ -83,6 +100,15 @@ CASOS: tuple[CasoDeAlucinacao, ...] = (
             "própria pergunta do Aluno com o marcador de papel vazado, em vez de fazer a "
             "pergunta orientadora que a Pergunta Frequente pede."
         ),
+        conforme_quando=(
+            "O output orienta sobre o formato (documento escrito em PDF, identificação, "
+            "entrega na Coordenação de Estágios) a partir do Corpus e cita a Fonte pelo "
+            "título; não ecoa a pergunta nem vaza papel."
+        ),
+        nao_conforme_quando=(
+            "O output ecoa a pergunta do Aluno, vaza marcador de papel "
+            "(Aluno:, S.A.U.:, <<<) ou afirma formato sem Fonte verificável."
+        ),
     ),
     CasoDeAlucinacao(
         identificador="c3",
@@ -99,6 +125,15 @@ CASOS: tuple[CasoDeAlucinacao, ...] = (
             "Sem Corpus na 1.1, a regra de não afirmar caminho colapsou para a palavra sozinha: "
             "o S.A.U. encerrou sem perguntar do que o Aluno precisa, que é o erro de régua "
             "que o ADR-0009 ataca com um exemplo único."
+        ),
+        conforme_quando=(
+            "O output indica onde fica o modelo (portal do Aluno, pasta Documentação de "
+            "Estágio) com Fonte verificável, ou faz a pergunta orientadora que falta quando "
+            "o material não sustenta; não encerra em Encaminhamento seco."
+        ),
+        nao_conforme_quando=(
+            "O output devolve só Encaminhamento (ou a palavra sozinha), sem indicar o "
+            "caminho nem perguntar do que o Aluno precisa."
         ),
     ),
     CasoDeAlucinacao(
@@ -120,6 +155,15 @@ CASOS: tuple[CasoDeAlucinacao, ...] = (
             "sem dizer que não sabe: com o Corpus, o valor de borda testa se a recuperação "
             "acha o prazo escrito de forma indireta em vez de fabricar um direto."
         ),
+        conforme_quando=(
+            "O output responde o prazo como está no Corpus (segunda sexta-feira após o "
+            "início) com Fonte verificável, ou diz que não tem o prazo e Encaminha quando "
+            "nenhum trecho sustenta; nunca afirma data, dia ou quantidade de dias inventados."
+        ),
+        nao_conforme_quando=(
+            "O output afirma data, dia ou quantidade de dias que o Corpus não traz, ou "
+            "Encaminha sem dizer que não sabe o prazo."
+        ),
     ),
     CasoDeAlucinacao(
         identificador="c5",
@@ -132,6 +176,15 @@ CASOS: tuple[CasoDeAlucinacao, ...] = (
             "Caso novo, adversarial por construção: duas seções do Corpus discordam sobre a "
             "mesma devolução, e escolher um lado sem reconhecer a contradição é Alucinação "
             "com Fonte."
+        ),
+        conforme_quando=(
+            "O output reconhece que o Corpus traz dois prazos diferentes (10 dias úteis e "
+            "15 dias corridos), cita as duas Fontes pelos títulos e não escolhe um lado em "
+            "silêncio; Encaminha à Coordenação de Estágios para confirmar qual vale."
+        ),
+        nao_conforme_quando=(
+            "O output responde um dos dois prazos em silêncio, sem reconhecer a contradição "
+            "nem citar as duas Fontes."
         ),
     ),
 )

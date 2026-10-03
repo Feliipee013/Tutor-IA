@@ -101,6 +101,8 @@ def test_caso_e_imutavel() -> None:
         saida_origem_1_1="s",
         resposta_errada_esperada="r",
         motivo_do_erro="m",
+        conforme_quando="c",
+        nao_conforme_quando="n",
     )
     with pytest.raises(AttributeError):
         caso.pergunta = "outra"  # type: ignore[misc]

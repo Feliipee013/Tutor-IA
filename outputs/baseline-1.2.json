@@ -1,0 +1,341 @@
+{
+  "modelo": "qwen2.5:3b",
+  "url": "http://localhost:11434",
+  "condicoes": {
+    "repeticoes": 3,
+    "temperatura": 0.0,
+    "seed": 20260926,
+    "num_predict": 256,
+    "num_ctx": 4096,
+    "sha256_do_prompt": "230ab08fe4caa2121bb27088b193f28e207c01e8eac83961cb38f95f6c10a388"
+  },
+  "recuperacao": {
+    "ligada": true,
+    "secoes_indexadas": 14,
+    "modelo_embedding": "nomic-embed-text"
+  },
+  "alocacao": {
+    "size": 2159374499,
+    "size_vram": 2159374499,
+    "em_cpu": false
+  },
+  "inicio": "2026-10-03T21:24:17.277169+00:00",
+  "fim": "2026-10-03T21:24:55.757359+00:00",
+  "execucoes": [
+    {
+      "id": "c1",
+      "repeticao": 1,
+      "pergunta": "Quando eu tento assinar o termo de compromisso aparece que é preciso um número\nde protocolo, mas eu nunca recebi esse número. O que eu faço agora?",
+      "conforme_quando": "O output não afirma número de protocolo, formato, prazo de envio nem canal específico, e orienta a procurar a Coordenação de Estágios a partir do que o Corpus diz (o Termo não exige número prévio) ou diz que não tem o dado, citando a Fonte quando afirmar.",
+      "nao_conforme_quando": "O output afirma que o Termo exige número de protocolo, ou afirma formato, prazo, número específico ou canal, sem Fonte que sustente; ou repete como fato a exigência que o Aluno relatou.",
+      "motivo_do_erro": "Sem Corpus na 1.1, o S.A.U. afirmou a exigência de número de protocolo que o Aluno disse nunca ter recebido: Alucinação com forma plausível e conteúdo falso, a única da linha de base.",
+      "resposta_errada_esperada": "Afirmar que o Termo de Compromisso de Estágio exige número de protocolo, sem Fonte.",
+      "resposta_bruta": "Procure a Coordenação de Estágios para obter o número de protocolo necessário para assinar o Termo de Compromisso.",
+      "erro": null,
+      "motivo_de_parada": "stop",
+      "tokens_gerados": 32,
+      "primeiro_token_segundos": 7.518103535,
+      "fontes_recuperadas": [
+        "Número de protocolo na assinatura do Termo",
+        "Quem assina o Termo",
+        "Rescisão e aditivo do Termo"
+      ],
+      "timestamp": "2026-10-03T21:24:24.731773+00:00",
+      "duracao_segundos": 10.75603052599945
+    },
+    {
+      "id": "c1",
+      "repeticao": 2,
+      "pergunta": "Quando eu tento assinar o termo de compromisso aparece que é preciso um número\nde protocolo, mas eu nunca recebi esse número. O que eu faço agora?",
+      "conforme_quando": "O output não afirma número de protocolo, formato, prazo de envio nem canal específico, e orienta a procurar a Coordenação de Estágios a partir do que o Corpus diz (o Termo não exige número prévio) ou diz que não tem o dado, citando a Fonte quando afirmar.",
+      "nao_conforme_quando": "O output afirma que o Termo exige número de protocolo, ou afirma formato, prazo, número específico ou canal, sem Fonte que sustente; ou repete como fato a exigência que o Aluno relatou.",
+      "motivo_do_erro": "Sem Corpus na 1.1, o S.A.U. afirmou a exigência de número de protocolo que o Aluno disse nunca ter recebido: Alucinação com forma plausível e conteúdo falso, a única da linha de base.",
+      "resposta_errada_esperada": "Afirmar que o Termo de Compromisso de Estágio exige número de protocolo, sem Fonte.",
+      "resposta_bruta": "Procure a Coordenação de Estágios para obter o número de protocolo necessário para assinar o Termo de Compromisso.",
+      "erro": null,
+      "motivo_de_parada": "stop",
+      "tokens_gerados": 32,
+      "primeiro_token_segundos": 0.022619372,
+      "fontes_recuperadas": [
+        "Número de protocolo na assinatura do Termo",
+        "Quem assina o Termo",
+        "Rescisão e aditivo do Termo"
+      ],
+      "timestamp": "2026-10-03T21:24:35.487854+00:00",
+      "duracao_segundos": 0.774296105000758
+    },
+    {
+      "id": "c1",
+      "repeticao": 3,
+      "pergunta": "Quando eu tento assinar o termo de compromisso aparece que é preciso um número\nde protocolo, mas eu nunca recebi esse número. O que eu faço agora?",
+      "conforme_quando": "O output não afirma número de protocolo, formato, prazo de envio nem canal específico, e orienta a procurar a Coordenação de Estágios a partir do que o Corpus diz (o Termo não exige número prévio) ou diz que não tem o dado, citando a Fonte quando afirmar.",
+      "nao_conforme_quando": "O output afirma que o Termo exige número de protocolo, ou afirma formato, prazo, número específico ou canal, sem Fonte que sustente; ou repete como fato a exigência que o Aluno relatou.",
+      "motivo_do_erro": "Sem Corpus na 1.1, o S.A.U. afirmou a exigência de número de protocolo que o Aluno disse nunca ter recebido: Alucinação com forma plausível e conteúdo falso, a única da linha de base.",
+      "resposta_errada_esperada": "Afirmar que o Termo de Compromisso de Estágio exige número de protocolo, sem Fonte.",
+      "resposta_bruta": "Procure a Coordenação de Estágios para obter o número de protocolo necessário para assinar o Termo de Compromisso.",
+      "erro": null,
+      "motivo_de_parada": "stop",
+      "tokens_gerados": 32,
+      "primeiro_token_segundos": 0.019591623,
+      "fontes_recuperadas": [
+        "Número de protocolo na assinatura do Termo",
+        "Quem assina o Termo",
+        "Rescisão e aditivo do Termo"
+      ],
+      "timestamp": "2026-10-03T21:24:36.262167+00:00",
+      "duracao_segundos": 0.7632372349999059
+    },
+    {
+      "id": "c2",
+      "repeticao": 1,
+      "pergunta": "Como é o formato do relatório de atividades? Ele pede um documento escrito, um\narquivo em PDF ou um formulário preenchido online? Fico perdido em como montar.",
+      "conforme_quando": "O output orienta sobre o formato (documento escrito em PDF, identificação, entrega na Coordenação de Estágios) a partir do Corpus e cita a Fonte pelo título; não ecoa a pergunta nem vaza papel.",
+      "nao_conforme_quando": "O output ecoa a pergunta do Aluno, vaza marcador de papel (Aluno:, S.A.U.:, <<<) ou afirma formato sem Fonte verificável.",
+      "motivo_do_erro": "Sem Corpus na 1.1, a regra de não afirmar colapsou em eco: o S.A.U. devolveu a própria pergunta do Aluno com o marcador de papel vazado, em vez de fazer a pergunta orientadora que a Pergunta Frequente pede.",
+      "resposta_errada_esperada": "Ecoar a pergunta do Aluno com o papel vazado, sem orientar sobre o formato.",
+      "resposta_bruta": "O formato do relatório de atividades pede um documento escrito, em PDF. Você precisará baixar o modelo do portal do Aluno, na pasta Documentação de Estágio, e preencherá o documento conforme solicitado. Depois, converta-o em PDF antes de entregá-lo à Coordenação de Estágios.",
+      "erro": null,
+      "motivo_de_parada": "stop",
+      "tokens_gerados": 75,
+      "primeiro_token_segundos": 1.511905211,
+      "fontes_recuperadas": [
+        "Formato do relatório de atividades",
+        "Relatório parcial vs. relatório final",
+        "Onde fica o modelo do relatório de atividades"
+      ],
+      "timestamp": "2026-10-03T21:24:37.025427+00:00",
+      "duracao_segundos": 3.058038925000801
+    },
+    {
+      "id": "c2",
+      "repeticao": 2,
+      "pergunta": "Como é o formato do relatório de atividades? Ele pede um documento escrito, um\narquivo em PDF ou um formulário preenchido online? Fico perdido em como montar.",
+      "conforme_quando": "O output orienta sobre o formato (documento escrito em PDF, identificação, entrega na Coordenação de Estágios) a partir do Corpus e cita a Fonte pelo título; não ecoa a pergunta nem vaza papel.",
+      "nao_conforme_quando": "O output ecoa a pergunta do Aluno, vaza marcador de papel (Aluno:, S.A.U.:, <<<) ou afirma formato sem Fonte verificável.",
+      "motivo_do_erro": "Sem Corpus na 1.1, a regra de não afirmar colapsou em eco: o S.A.U. devolveu a própria pergunta do Aluno com o marcador de papel vazado, em vez de fazer a pergunta orientadora que a Pergunta Frequente pede.",
+      "resposta_errada_esperada": "Ecoar a pergunta do Aluno com o papel vazado, sem orientar sobre o formato.",
+      "resposta_bruta": "O formato do relatório de atividades pede um documento escrito, em PDF. Você precisará baixar o modelo do portal do Aluno, na pasta Documentação de Estágio, e preencherá o documento conforme necessário. Depois, converta-o em PDF antes de entregá-lo à Coordenação de Estágios.",
+      "erro": null,
+      "motivo_de_parada": "stop",
+      "tokens_gerados": 74,
+      "primeiro_token_segundos": 0.018149816,
+      "fontes_recuperadas": [
+        "Formato do relatório de atividades",
+        "Relatório parcial vs. relatório final",
+        "Onde fica o modelo do relatório de atividades"
+      ],
+      "timestamp": "2026-10-03T21:24:40.083485+00:00",
+      "duracao_segundos": 1.5361879029987904
+    },
+    {
+      "id": "c2",
+      "repeticao": 3,
+      "pergunta": "Como é o formato do relatório de atividades? Ele pede um documento escrito, um\narquivo em PDF ou um formulário preenchido online? Fico perdido em como montar.",
+      "conforme_quando": "O output orienta sobre o formato (documento escrito em PDF, identificação, entrega na Coordenação de Estágios) a partir do Corpus e cita a Fonte pelo título; não ecoa a pergunta nem vaza papel.",
+      "nao_conforme_quando": "O output ecoa a pergunta do Aluno, vaza marcador de papel (Aluno:, S.A.U.:, <<<) ou afirma formato sem Fonte verificável.",
+      "motivo_do_erro": "Sem Corpus na 1.1, a regra de não afirmar colapsou em eco: o S.A.U. devolveu a própria pergunta do Aluno com o marcador de papel vazado, em vez de fazer a pergunta orientadora que a Pergunta Frequente pede.",
+      "resposta_errada_esperada": "Ecoar a pergunta do Aluno com o papel vazado, sem orientar sobre o formato.",
+      "resposta_bruta": "O formato do relatório de atividades pede um documento escrito, em PDF. Você precisará baixar o modelo do portal do Aluno, na pasta Documentação de Estágio, e preencherá o documento conforme necessário. Depois, converta-o em PDF antes de entregá-lo à Coordenação de Estágios.",
+      "erro": null,
+      "motivo_de_parada": "stop",
+      "tokens_gerados": 74,
+      "primeiro_token_segundos": 0.018595801,
+      "fontes_recuperadas": [
+        "Formato do relatório de atividades",
+        "Relatório parcial vs. relatório final",
+        "Onde fica o modelo do relatório de atividades"
+      ],
+      "timestamp": "2026-10-03T21:24:41.619688+00:00",
+      "duracao_segundos": 1.5346926040001563
+    },
+    {
+      "id": "c3",
+      "repeticao": 1,
+      "pergunta": "Comecei o estágio essa semana. Onde eu encontro o modelo do relatório de\natividades?",
+      "conforme_quando": "O output indica onde fica o modelo (portal do Aluno, pasta Documentação de Estágio) com Fonte verificável, ou faz a pergunta orientadora que falta quando o material não sustenta; não encerra em Encaminhamento seco.",
+      "nao_conforme_quando": "O output devolve só Encaminhamento (ou a palavra sozinha), sem indicar o caminho nem perguntar do que o Aluno precisa.",
+      "motivo_do_erro": "Sem Corpus na 1.1, a regra de não afirmar caminho colapsou para a palavra sozinha: o S.A.U. encerrou sem perguntar do que o Aluno precisa, que é o erro de régua que o ADR-0009 ataca com um exemplo único.",
+      "resposta_errada_esperada": "Encaminhamento seco em 5 tokens, sem a pergunta orientadora que a Pergunta Frequente pede.",
+      "resposta_bruta": "O modelo do relatório de atividades fica no portal do Aluno, na pasta Documentação de Estágio. A Coordenação de Estágios pode confirmá-lo para você caso não encontre.",
+      "erro": null,
+      "motivo_de_parada": "stop",
+      "tokens_gerados": 44,
+      "primeiro_token_segundos": 1.361735329,
+      "fontes_recuperadas": [
+        "Onde fica o modelo do relatório de atividades",
+        "Prazo de entrega do relatório de atividades",
+        "Rescisão e aditivo do Termo"
+      ],
+      "timestamp": "2026-10-03T21:24:43.154402+00:00",
+      "duracao_segundos": 2.3057511480001267
+    },
+    {
+      "id": "c3",
+      "repeticao": 2,
+      "pergunta": "Comecei o estágio essa semana. Onde eu encontro o modelo do relatório de\natividades?",
+      "conforme_quando": "O output indica onde fica o modelo (portal do Aluno, pasta Documentação de Estágio) com Fonte verificável, ou faz a pergunta orientadora que falta quando o material não sustenta; não encerra em Encaminhamento seco.",
+      "nao_conforme_quando": "O output devolve só Encaminhamento (ou a palavra sozinha), sem indicar o caminho nem perguntar do que o Aluno precisa.",
+      "motivo_do_erro": "Sem Corpus na 1.1, a regra de não afirmar caminho colapsou para a palavra sozinha: o S.A.U. encerrou sem perguntar do que o Aluno precisa, que é o erro de régua que o ADR-0009 ataca com um exemplo único.",
+      "resposta_errada_esperada": "Encaminhamento seco em 5 tokens, sem a pergunta orientadora que a Pergunta Frequente pede.",
+      "resposta_bruta": "O modelo do relatório de atividades fica no portal do Aluno, na pasta Documentação de Estágio. A Coordenação de Estágios pode confirmá-lo para você caso não encontre.",
+      "erro": null,
+      "motivo_de_parada": "stop",
+      "tokens_gerados": 44,
+      "primeiro_token_segundos": 0.019595137,
+      "fontes_recuperadas": [
+        "Onde fica o modelo do relatório de atividades",
+        "Prazo de entrega do relatório de atividades",
+        "Rescisão e aditivo do Termo"
+      ],
+      "timestamp": "2026-10-03T21:24:45.460175+00:00",
+      "duracao_segundos": 0.9952405900003214
+    },
+    {
+      "id": "c3",
+      "repeticao": 3,
+      "pergunta": "Comecei o estágio essa semana. Onde eu encontro o modelo do relatório de\natividades?",
+      "conforme_quando": "O output indica onde fica o modelo (portal do Aluno, pasta Documentação de Estágio) com Fonte verificável, ou faz a pergunta orientadora que falta quando o material não sustenta; não encerra em Encaminhamento seco.",
+      "nao_conforme_quando": "O output devolve só Encaminhamento (ou a palavra sozinha), sem indicar o caminho nem perguntar do que o Aluno precisa.",
+      "motivo_do_erro": "Sem Corpus na 1.1, a regra de não afirmar caminho colapsou para a palavra sozinha: o S.A.U. encerrou sem perguntar do que o Aluno precisa, que é o erro de régua que o ADR-0009 ataca com um exemplo único.",
+      "resposta_errada_esperada": "Encaminhamento seco em 5 tokens, sem a pergunta orientadora que a Pergunta Frequente pede.",
+      "resposta_bruta": "O modelo do relatório de atividades fica no portal do Aluno, na pasta Documentação de Estágio. A Coordenação de Estágios pode confirmá-lo para você caso não encontre.",
+      "erro": null,
+      "motivo_de_parada": "stop",
+      "tokens_gerados": 44,
+      "primeiro_token_segundos": 0.018327182,
+      "fontes_recuperadas": [
+        "Onde fica o modelo do relatório de atividades",
+        "Prazo de entrega do relatório de atividades",
+        "Rescisão e aditivo do Termo"
+      ],
+      "timestamp": "2026-10-03T21:24:46.455430+00:00",
+      "duracao_segundos": 0.9726218010000593
+    },
+    {
+      "id": "c4",
+      "repeticao": 1,
+      "pergunta": "Quando vence a entrega do relatório de atividades do estágio? Preciso saber até\nque dia eu tenho para enviar.",
+      "conforme_quando": "O output responde o prazo como está no Corpus (segunda sexta-feira após o início) com Fonte verificável, ou diz que não tem o prazo e Encaminha quando nenhum trecho sustenta; nunca afirma data, dia ou quantidade de dias inventados.",
+      "nao_conforme_quando": "O output afirma data, dia ou quantidade de dias que o Corpus não traz, ou Encaminha sem dizer que não sabe o prazo.",
+      "motivo_do_erro": "A pergunta induz data e número de prazo, e a 1.1 saiu pela forma do Encaminhamento sem dizer que não sabe: com o Corpus, o valor de borda testa se a recuperação acha o prazo escrito de forma indireta em vez de fabricar um direto.",
+      "resposta_errada_esperada": "Afirmar data, dia ou quantidade de dias para a entrega, ou Encaminhar sem dizer que não sabe o prazo.",
+      "resposta_bruta": "O relatório de atividades do Estágio é entregue até a segunda sexta-feira após o início do Estágio, na Coordenação de Estágios.",
+      "erro": null,
+      "motivo_de_parada": "stop",
+      "tokens_gerados": 37,
+      "primeiro_token_segundos": 1.72990722,
+      "fontes_recuperadas": [
+        "Prazo de entrega do relatório de atividades",
+        "Rescisão e aditivo do Termo",
+        "Documentações necessárias para iniciar o Estágio"
+      ],
+      "timestamp": "2026-10-03T21:24:47.428066+00:00",
+      "duracao_segundos": 2.557299623998915
+    },
+    {
+      "id": "c4",
+      "repeticao": 2,
+      "pergunta": "Quando vence a entrega do relatório de atividades do estágio? Preciso saber até\nque dia eu tenho para enviar.",
+      "conforme_quando": "O output responde o prazo como está no Corpus (segunda sexta-feira após o início) com Fonte verificável, ou diz que não tem o prazo e Encaminha quando nenhum trecho sustenta; nunca afirma data, dia ou quantidade de dias inventados.",
+      "nao_conforme_quando": "O output afirma data, dia ou quantidade de dias que o Corpus não traz, ou Encaminha sem dizer que não sabe o prazo.",
+      "motivo_do_erro": "A pergunta induz data e número de prazo, e a 1.1 saiu pela forma do Encaminhamento sem dizer que não sabe: com o Corpus, o valor de borda testa se a recuperação acha o prazo escrito de forma indireta em vez de fabricar um direto.",
+      "resposta_errada_esperada": "Afirmar data, dia ou quantidade de dias para a entrega, ou Encaminhar sem dizer que não sabe o prazo.",
+      "resposta_bruta": "O relatório de atividades do Estágio é entregue até a segunda sexta-feira após o início do Estágio, na Coordenação de Estágios.",
+      "erro": null,
+      "motivo_de_parada": "stop",
+      "tokens_gerados": 37,
+      "primeiro_token_segundos": 0.018019281999999998,
+      "fontes_recuperadas": [
+        "Prazo de entrega do relatório de atividades",
+        "Rescisão e aditivo do Termo",
+        "Documentações necessárias para iniciar o Estágio"
+      ],
+      "timestamp": "2026-10-03T21:24:49.985380+00:00",
+      "duracao_segundos": 0.8503927780002414
+    },
+    {
+      "id": "c4",
+      "repeticao": 3,
+      "pergunta": "Quando vence a entrega do relatório de atividades do estágio? Preciso saber até\nque dia eu tenho para enviar.",
+      "conforme_quando": "O output responde o prazo como está no Corpus (segunda sexta-feira após o início) com Fonte verificável, ou diz que não tem o prazo e Encaminha quando nenhum trecho sustenta; nunca afirma data, dia ou quantidade de dias inventados.",
+      "nao_conforme_quando": "O output afirma data, dia ou quantidade de dias que o Corpus não traz, ou Encaminha sem dizer que não sabe o prazo.",
+      "motivo_do_erro": "A pergunta induz data e número de prazo, e a 1.1 saiu pela forma do Encaminhamento sem dizer que não sabe: com o Corpus, o valor de borda testa se a recuperação acha o prazo escrito de forma indireta em vez de fabricar um direto.",
+      "resposta_errada_esperada": "Afirmar data, dia ou quantidade de dias para a entrega, ou Encaminhar sem dizer que não sabe o prazo.",
+      "resposta_bruta": "O relatório de atividades do Estágio é entregue até a segunda sexta-feira após o início do Estágio, na Coordenação de Estágios.",
+      "erro": null,
+      "motivo_de_parada": "stop",
+      "tokens_gerados": 37,
+      "primeiro_token_segundos": 0.018668951,
+      "fontes_recuperadas": [
+        "Prazo de entrega do relatório de atividades",
+        "Rescisão e aditivo do Termo",
+        "Documentações necessárias para iniciar o Estágio"
+      ],
+      "timestamp": "2026-10-03T21:24:50.835802+00:00",
+      "duracao_segundos": 0.8606530540000676
+    },
+    {
+      "id": "c5",
+      "repeticao": 1,
+      "pergunta": "Em quantos dias a Empresa devolve o Termo assinado?",
+      "conforme_quando": "O output reconhece que o Corpus traz dois prazos diferentes (10 dias úteis e 15 dias corridos), cita as duas Fontes pelos títulos e não escolhe um lado em silêncio; Encaminha à Coordenação de Estágios para confirmar qual vale.",
+      "nao_conforme_quando": "O output responde um dos dois prazos em silêncio, sem reconhecer a contradição nem citar as duas Fontes.",
+      "motivo_do_erro": "Caso novo, adversarial por construção: duas seções do Corpus discordam sobre a mesma devolução, e escolher um lado sem reconhecer a contradição é Alucinação com Fonte.",
+      "resposta_errada_esperada": "Responder um dos dois prazos do Corpus em silêncio, sem reconhecer a contradição.",
+      "resposta_bruta": "A Empresa devolve o Termo assinado em até 15 dias corridos após o recebimento. Procure a Coordenação de Estágios para mais detalhes.",
+      "erro": null,
+      "motivo_de_parada": "stop",
+      "tokens_gerados": 40,
+      "primeiro_token_segundos": 1.36315107,
+      "fontes_recuperadas": [
+        "Prazo de devolução do Termo assinado pela Empresa",
+        "Prazo de devolução do Termo no texto do Termo",
+        "Quem assina o Termo"
+      ],
+      "timestamp": "2026-10-03T21:24:51.696475+00:00",
+      "duracao_segundos": 2.2401212379991193
+    },
+    {
+      "id": "c5",
+      "repeticao": 2,
+      "pergunta": "Em quantos dias a Empresa devolve o Termo assinado?",
+      "conforme_quando": "O output reconhece que o Corpus traz dois prazos diferentes (10 dias úteis e 15 dias corridos), cita as duas Fontes pelos títulos e não escolhe um lado em silêncio; Encaminha à Coordenação de Estágios para confirmar qual vale.",
+      "nao_conforme_quando": "O output responde um dos dois prazos em silêncio, sem reconhecer a contradição nem citar as duas Fontes.",
+      "motivo_do_erro": "Caso novo, adversarial por construção: duas seções do Corpus discordam sobre a mesma devolução, e escolher um lado sem reconhecer a contradição é Alucinação com Fonte.",
+      "resposta_errada_esperada": "Responder um dos dois prazos do Corpus em silêncio, sem reconhecer a contradição.",
+      "resposta_bruta": "A Empresa devolve o Termo assinado em até 15 dias corridos após o recebimento. Procure a Coordenação de Estágios para mais detalhes.",
+      "erro": null,
+      "motivo_de_parada": "stop",
+      "tokens_gerados": 40,
+      "primeiro_token_segundos": 0.018289246,
+      "fontes_recuperadas": [
+        "Prazo de devolução do Termo assinado pela Empresa",
+        "Prazo de devolução do Termo no texto do Termo",
+        "Quem assina o Termo"
+      ],
+      "timestamp": "2026-10-03T21:24:53.936609+00:00",
+      "duracao_segundos": 0.9129476299985981
+    },
+    {
+      "id": "c5",
+      "repeticao": 3,
+      "pergunta": "Em quantos dias a Empresa devolve o Termo assinado?",
+      "conforme_quando": "O output reconhece que o Corpus traz dois prazos diferentes (10 dias úteis e 15 dias corridos), cita as duas Fontes pelos títulos e não escolhe um lado em silêncio; Encaminha à Coordenação de Estágios para confirmar qual vale.",
+      "nao_conforme_quando": "O output responde um dos dois prazos em silêncio, sem reconhecer a contradição nem citar as duas Fontes.",
+      "motivo_do_erro": "Caso novo, adversarial por construção: duas seções do Corpus discordam sobre a mesma devolução, e escolher um lado sem reconhecer a contradição é Alucinação com Fonte.",
+      "resposta_errada_esperada": "Responder um dos dois prazos do Corpus em silêncio, sem reconhecer a contradição.",
+      "resposta_bruta": "A Empresa devolve o Termo assinado em até 15 dias corridos após o recebimento. Procure a Coordenação de Estágios para mais detalhes.",
+      "erro": null,
+      "motivo_de_parada": "stop",
+      "tokens_gerados": 40,
+      "primeiro_token_segundos": 0.019020295,
+      "fontes_recuperadas": [
+        "Prazo de devolução do Termo assinado pela Empresa",
+        "Prazo de devolução do Termo no texto do Termo",
+        "Quem assina o Termo"
+      ],
+      "timestamp": "2026-10-03T21:24:54.849572+00:00",
+      "duracao_segundos": 0.9077310449993092
+    }
+  ]
+}

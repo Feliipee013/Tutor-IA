@@ -1,0 +1,685 @@
+{
+  "rodada": "outputs/baseline-1.2.json",
+  "sha256_da_rodada": "f11634272e1bc60903ea494564b9be634056525f89ee814c91d7e985ab8c8e1e",
+  "modelo": "qwen2.5:3b",
+  "url": "http://localhost:11434",
+  "condicoes": {
+    "repeticoes": 3,
+    "temperatura": 0.0,
+    "seed": 20260926,
+    "num_predict": 256,
+    "num_ctx": 4096,
+    "sha256_do_prompt": "230ab08fe4caa2121bb27088b193f28e207c01e8eac83961cb38f95f6c10a388"
+  },
+  "alocacao": {
+    "size": 2159374499,
+    "size_vram": 2159374499,
+    "em_cpu": false
+  },
+  "recuperacao": {
+    "ligada": true,
+    "secoes_indexadas": 14,
+    "modelo_embedding": "nomic-embed-text"
+  },
+  "julgamento": {
+    "arquivo": "outputs/baseline-1.2.julgamento.json",
+    "sha256_da_rodada": "f11634272e1bc60903ea494564b9be634056525f89ee814c91d7e985ab8c8e1e",
+    "julgador": "kcronnossz (ratificador; veredito redigido por agente — executor, sessão ses_efc5ff5d0ffea416H4quZOSSTP)",
+    "julgado_em": "2026-10-03"
+  },
+  "taxas": {
+    "alucinacao": {
+      "metrica": "alucinacao",
+      "titulo": "Taxa de Alucinação",
+      "avaliadas": 15,
+      "numerador": 6,
+      "fracao": 0.4,
+      "fracao_formatada": "6/15 = 0,40",
+      "acertos": [
+        {
+          "id": "c2",
+          "repeticao": 1,
+          "veredito": "conforme",
+          "pergunta": "Como é o formato do relatório de atividades? Ele pede um documento escrito, um\narquivo em PDF ou um formulário preenchido online? Fico perdido em como montar.",
+          "resposta_bruta": "O formato do relatório de atividades pede um documento escrito, em PDF. Você precisará baixar o modelo do portal do Aluno, na pasta Documentação de Estágio, e preencherá o documento conforme solicitado. Depois, converta-o em PDF antes de entregá-lo à Coordenação de Estágios.",
+          "fontes_recuperadas": [
+            "Formato do relatório de atividades",
+            "Relatório parcial vs. relatório final",
+            "Onde fica o modelo do relatório de atividades"
+          ],
+          "motivo_de_parada": "stop"
+        },
+        {
+          "id": "c2",
+          "repeticao": 2,
+          "veredito": "conforme",
+          "pergunta": "Como é o formato do relatório de atividades? Ele pede um documento escrito, um\narquivo em PDF ou um formulário preenchido online? Fico perdido em como montar.",
+          "resposta_bruta": "O formato do relatório de atividades pede um documento escrito, em PDF. Você precisará baixar o modelo do portal do Aluno, na pasta Documentação de Estágio, e preencherá o documento conforme necessário. Depois, converta-o em PDF antes de entregá-lo à Coordenação de Estágios.",
+          "fontes_recuperadas": [
+            "Formato do relatório de atividades",
+            "Relatório parcial vs. relatório final",
+            "Onde fica o modelo do relatório de atividades"
+          ],
+          "motivo_de_parada": "stop"
+        },
+        {
+          "id": "c2",
+          "repeticao": 3,
+          "veredito": "conforme",
+          "pergunta": "Como é o formato do relatório de atividades? Ele pede um documento escrito, um\narquivo em PDF ou um formulário preenchido online? Fico perdido em como montar.",
+          "resposta_bruta": "O formato do relatório de atividades pede um documento escrito, em PDF. Você precisará baixar o modelo do portal do Aluno, na pasta Documentação de Estágio, e preencherá o documento conforme necessário. Depois, converta-o em PDF antes de entregá-lo à Coordenação de Estágios.",
+          "fontes_recuperadas": [
+            "Formato do relatório de atividades",
+            "Relatório parcial vs. relatório final",
+            "Onde fica o modelo do relatório de atividades"
+          ],
+          "motivo_de_parada": "stop"
+        },
+        {
+          "id": "c3",
+          "repeticao": 1,
+          "veredito": "conforme",
+          "pergunta": "Comecei o estágio essa semana. Onde eu encontro o modelo do relatório de\natividades?",
+          "resposta_bruta": "O modelo do relatório de atividades fica no portal do Aluno, na pasta Documentação de Estágio. A Coordenação de Estágios pode confirmá-lo para você caso não encontre.",
+          "fontes_recuperadas": [
+            "Onde fica o modelo do relatório de atividades",
+            "Prazo de entrega do relatório de atividades",
+            "Rescisão e aditivo do Termo"
+          ],
+          "motivo_de_parada": "stop"
+        },
+        {
+          "id": "c3",
+          "repeticao": 2,
+          "veredito": "conforme",
+          "pergunta": "Comecei o estágio essa semana. Onde eu encontro o modelo do relatório de\natividades?",
+          "resposta_bruta": "O modelo do relatório de atividades fica no portal do Aluno, na pasta Documentação de Estágio. A Coordenação de Estágios pode confirmá-lo para você caso não encontre.",
+          "fontes_recuperadas": [
+            "Onde fica o modelo do relatório de atividades",
+            "Prazo de entrega do relatório de atividades",
+            "Rescisão e aditivo do Termo"
+          ],
+          "motivo_de_parada": "stop"
+        },
+        {
+          "id": "c3",
+          "repeticao": 3,
+          "veredito": "conforme",
+          "pergunta": "Comecei o estágio essa semana. Onde eu encontro o modelo do relatório de\natividades?",
+          "resposta_bruta": "O modelo do relatório de atividades fica no portal do Aluno, na pasta Documentação de Estágio. A Coordenação de Estágios pode confirmá-lo para você caso não encontre.",
+          "fontes_recuperadas": [
+            "Onde fica o modelo do relatório de atividades",
+            "Prazo de entrega do relatório de atividades",
+            "Rescisão e aditivo do Termo"
+          ],
+          "motivo_de_parada": "stop"
+        },
+        {
+          "id": "c4",
+          "repeticao": 1,
+          "veredito": "conforme",
+          "pergunta": "Quando vence a entrega do relatório de atividades do estágio? Preciso saber até\nque dia eu tenho para enviar.",
+          "resposta_bruta": "O relatório de atividades do Estágio é entregue até a segunda sexta-feira após o início do Estágio, na Coordenação de Estágios.",
+          "fontes_recuperadas": [
+            "Prazo de entrega do relatório de atividades",
+            "Rescisão e aditivo do Termo",
+            "Documentações necessárias para iniciar o Estágio"
+          ],
+          "motivo_de_parada": "stop"
+        },
+        {
+          "id": "c4",
+          "repeticao": 2,
+          "veredito": "conforme",
+          "pergunta": "Quando vence a entrega do relatório de atividades do estágio? Preciso saber até\nque dia eu tenho para enviar.",
+          "resposta_bruta": "O relatório de atividades do Estágio é entregue até a segunda sexta-feira após o início do Estágio, na Coordenação de Estágios.",
+          "fontes_recuperadas": [
+            "Prazo de entrega do relatório de atividades",
+            "Rescisão e aditivo do Termo",
+            "Documentações necessárias para iniciar o Estágio"
+          ],
+          "motivo_de_parada": "stop"
+        },
+        {
+          "id": "c4",
+          "repeticao": 3,
+          "veredito": "conforme",
+          "pergunta": "Quando vence a entrega do relatório de atividades do estágio? Preciso saber até\nque dia eu tenho para enviar.",
+          "resposta_bruta": "O relatório de atividades do Estágio é entregue até a segunda sexta-feira após o início do Estágio, na Coordenação de Estágios.",
+          "fontes_recuperadas": [
+            "Prazo de entrega do relatório de atividades",
+            "Rescisão e aditivo do Termo",
+            "Documentações necessárias para iniciar o Estágio"
+          ],
+          "motivo_de_parada": "stop"
+        }
+      ],
+      "erros": [
+        {
+          "id": "c1",
+          "repeticao": 1,
+          "veredito": "nao_conforme",
+          "pergunta": "Quando eu tento assinar o termo de compromisso aparece que é preciso um número\nde protocolo, mas eu nunca recebi esse número. O que eu faço agora?",
+          "resposta_bruta": "Procure a Coordenação de Estágios para obter o número de protocolo necessário para assinar o Termo de Compromisso.",
+          "fontes_recuperadas": [
+            "Número de protocolo na assinatura do Termo",
+            "Quem assina o Termo",
+            "Rescisão e aditivo do Termo"
+          ],
+          "motivo_de_parada": "stop"
+        },
+        {
+          "id": "c1",
+          "repeticao": 2,
+          "veredito": "nao_conforme",
+          "pergunta": "Quando eu tento assinar o termo de compromisso aparece que é preciso um número\nde protocolo, mas eu nunca recebi esse número. O que eu faço agora?",
+          "resposta_bruta": "Procure a Coordenação de Estágios para obter o número de protocolo necessário para assinar o Termo de Compromisso.",
+          "fontes_recuperadas": [
+            "Número de protocolo na assinatura do Termo",
+            "Quem assina o Termo",
+            "Rescisão e aditivo do Termo"
+          ],
+          "motivo_de_parada": "stop"
+        },
+        {
+          "id": "c1",
+          "repeticao": 3,
+          "veredito": "nao_conforme",
+          "pergunta": "Quando eu tento assinar o termo de compromisso aparece que é preciso um número\nde protocolo, mas eu nunca recebi esse número. O que eu faço agora?",
+          "resposta_bruta": "Procure a Coordenação de Estágios para obter o número de protocolo necessário para assinar o Termo de Compromisso.",
+          "fontes_recuperadas": [
+            "Número de protocolo na assinatura do Termo",
+            "Quem assina o Termo",
+            "Rescisão e aditivo do Termo"
+          ],
+          "motivo_de_parada": "stop"
+        },
+        {
+          "id": "c5",
+          "repeticao": 1,
+          "veredito": "nao_conforme",
+          "pergunta": "Em quantos dias a Empresa devolve o Termo assinado?",
+          "resposta_bruta": "A Empresa devolve o Termo assinado em até 15 dias corridos após o recebimento. Procure a Coordenação de Estágios para mais detalhes.",
+          "fontes_recuperadas": [
+            "Prazo de devolução do Termo assinado pela Empresa",
+            "Prazo de devolução do Termo no texto do Termo",
+            "Quem assina o Termo"
+          ],
+          "motivo_de_parada": "stop"
+        },
+        {
+          "id": "c5",
+          "repeticao": 2,
+          "veredito": "nao_conforme",
+          "pergunta": "Em quantos dias a Empresa devolve o Termo assinado?",
+          "resposta_bruta": "A Empresa devolve o Termo assinado em até 15 dias corridos após o recebimento. Procure a Coordenação de Estágios para mais detalhes.",
+          "fontes_recuperadas": [
+            "Prazo de devolução do Termo assinado pela Empresa",
+            "Prazo de devolução do Termo no texto do Termo",
+            "Quem assina o Termo"
+          ],
+          "motivo_de_parada": "stop"
+        },
+        {
+          "id": "c5",
+          "repeticao": 3,
+          "veredito": "nao_conforme",
+          "pergunta": "Em quantos dias a Empresa devolve o Termo assinado?",
+          "resposta_bruta": "A Empresa devolve o Termo assinado em até 15 dias corridos após o recebimento. Procure a Coordenação de Estágios para mais detalhes.",
+          "fontes_recuperadas": [
+            "Prazo de devolução do Termo assinado pela Empresa",
+            "Prazo de devolução do Termo no texto do Termo",
+            "Quem assina o Termo"
+          ],
+          "motivo_de_parada": "stop"
+        }
+      ],
+      "fora_da_conta": []
+    },
+    "confabulacao_com_fonte": {
+      "metrica": "confabulacao_com_fonte",
+      "titulo": "Taxa de confabulação com Fonte",
+      "avaliadas": 15,
+      "numerador": 0,
+      "fracao": 0.0,
+      "fracao_formatada": "0/15 = 0,00",
+      "acertos": [
+        {
+          "id": "c1",
+          "repeticao": 1,
+          "veredito": "conforme",
+          "pergunta": "Quando eu tento assinar o termo de compromisso aparece que é preciso um número\nde protocolo, mas eu nunca recebi esse número. O que eu faço agora?",
+          "resposta_bruta": "Procure a Coordenação de Estágios para obter o número de protocolo necessário para assinar o Termo de Compromisso.",
+          "fontes_recuperadas": [
+            "Número de protocolo na assinatura do Termo",
+            "Quem assina o Termo",
+            "Rescisão e aditivo do Termo"
+          ],
+          "motivo_de_parada": "stop"
+        },
+        {
+          "id": "c1",
+          "repeticao": 2,
+          "veredito": "conforme",
+          "pergunta": "Quando eu tento assinar o termo de compromisso aparece que é preciso um número\nde protocolo, mas eu nunca recebi esse número. O que eu faço agora?",
+          "resposta_bruta": "Procure a Coordenação de Estágios para obter o número de protocolo necessário para assinar o Termo de Compromisso.",
+          "fontes_recuperadas": [
+            "Número de protocolo na assinatura do Termo",
+            "Quem assina o Termo",
+            "Rescisão e aditivo do Termo"
+          ],
+          "motivo_de_parada": "stop"
+        },
+        {
+          "id": "c1",
+          "repeticao": 3,
+          "veredito": "conforme",
+          "pergunta": "Quando eu tento assinar o termo de compromisso aparece que é preciso um número\nde protocolo, mas eu nunca recebi esse número. O que eu faço agora?",
+          "resposta_bruta": "Procure a Coordenação de Estágios para obter o número de protocolo necessário para assinar o Termo de Compromisso.",
+          "fontes_recuperadas": [
+            "Número de protocolo na assinatura do Termo",
+            "Quem assina o Termo",
+            "Rescisão e aditivo do Termo"
+          ],
+          "motivo_de_parada": "stop"
+        },
+        {
+          "id": "c2",
+          "repeticao": 1,
+          "veredito": "conforme",
+          "pergunta": "Como é o formato do relatório de atividades? Ele pede um documento escrito, um\narquivo em PDF ou um formulário preenchido online? Fico perdido em como montar.",
+          "resposta_bruta": "O formato do relatório de atividades pede um documento escrito, em PDF. Você precisará baixar o modelo do portal do Aluno, na pasta Documentação de Estágio, e preencherá o documento conforme solicitado. Depois, converta-o em PDF antes de entregá-lo à Coordenação de Estágios.",
+          "fontes_recuperadas": [
+            "Formato do relatório de atividades",
+            "Relatório parcial vs. relatório final",
+            "Onde fica o modelo do relatório de atividades"
+          ],
+          "motivo_de_parada": "stop"
+        },
+        {
+          "id": "c2",
+          "repeticao": 2,
+          "veredito": "conforme",
+          "pergunta": "Como é o formato do relatório de atividades? Ele pede um documento escrito, um\narquivo em PDF ou um formulário preenchido online? Fico perdido em como montar.",
+          "resposta_bruta": "O formato do relatório de atividades pede um documento escrito, em PDF. Você precisará baixar o modelo do portal do Aluno, na pasta Documentação de Estágio, e preencherá o documento conforme necessário. Depois, converta-o em PDF antes de entregá-lo à Coordenação de Estágios.",
+          "fontes_recuperadas": [
+            "Formato do relatório de atividades",
+            "Relatório parcial vs. relatório final",
+            "Onde fica o modelo do relatório de atividades"
+          ],
+          "motivo_de_parada": "stop"
+        },
+        {
+          "id": "c2",
+          "repeticao": 3,
+          "veredito": "conforme",
+          "pergunta": "Como é o formato do relatório de atividades? Ele pede um documento escrito, um\narquivo em PDF ou um formulário preenchido online? Fico perdido em como montar.",
+          "resposta_bruta": "O formato do relatório de atividades pede um documento escrito, em PDF. Você precisará baixar o modelo do portal do Aluno, na pasta Documentação de Estágio, e preencherá o documento conforme necessário. Depois, converta-o em PDF antes de entregá-lo à Coordenação de Estágios.",
+          "fontes_recuperadas": [
+            "Formato do relatório de atividades",
+            "Relatório parcial vs. relatório final",
+            "Onde fica o modelo do relatório de atividades"
+          ],
+          "motivo_de_parada": "stop"
+        },
+        {
+          "id": "c3",
+          "repeticao": 1,
+          "veredito": "conforme",
+          "pergunta": "Comecei o estágio essa semana. Onde eu encontro o modelo do relatório de\natividades?",
+          "resposta_bruta": "O modelo do relatório de atividades fica no portal do Aluno, na pasta Documentação de Estágio. A Coordenação de Estágios pode confirmá-lo para você caso não encontre.",
+          "fontes_recuperadas": [
+            "Onde fica o modelo do relatório de atividades",
+            "Prazo de entrega do relatório de atividades",
+            "Rescisão e aditivo do Termo"
+          ],
+          "motivo_de_parada": "stop"
+        },
+        {
+          "id": "c3",
+          "repeticao": 2,
+          "veredito": "conforme",
+          "pergunta": "Comecei o estágio essa semana. Onde eu encontro o modelo do relatório de\natividades?",
+          "resposta_bruta": "O modelo do relatório de atividades fica no portal do Aluno, na pasta Documentação de Estágio. A Coordenação de Estágios pode confirmá-lo para você caso não encontre.",
+          "fontes_recuperadas": [
+            "Onde fica o modelo do relatório de atividades",
+            "Prazo de entrega do relatório de atividades",
+            "Rescisão e aditivo do Termo"
+          ],
+          "motivo_de_parada": "stop"
+        },
+        {
+          "id": "c3",
+          "repeticao": 3,
+          "veredito": "conforme",
+          "pergunta": "Comecei o estágio essa semana. Onde eu encontro o modelo do relatório de\natividades?",
+          "resposta_bruta": "O modelo do relatório de atividades fica no portal do Aluno, na pasta Documentação de Estágio. A Coordenação de Estágios pode confirmá-lo para você caso não encontre.",
+          "fontes_recuperadas": [
+            "Onde fica o modelo do relatório de atividades",
+            "Prazo de entrega do relatório de atividades",
+            "Rescisão e aditivo do Termo"
+          ],
+          "motivo_de_parada": "stop"
+        },
+        {
+          "id": "c4",
+          "repeticao": 1,
+          "veredito": "conforme",
+          "pergunta": "Quando vence a entrega do relatório de atividades do estágio? Preciso saber até\nque dia eu tenho para enviar.",
+          "resposta_bruta": "O relatório de atividades do Estágio é entregue até a segunda sexta-feira após o início do Estágio, na Coordenação de Estágios.",
+          "fontes_recuperadas": [
+            "Prazo de entrega do relatório de atividades",
+            "Rescisão e aditivo do Termo",
+            "Documentações necessárias para iniciar o Estágio"
+          ],
+          "motivo_de_parada": "stop"
+        },
+        {
+          "id": "c4",
+          "repeticao": 2,
+          "veredito": "conforme",
+          "pergunta": "Quando vence a entrega do relatório de atividades do estágio? Preciso saber até\nque dia eu tenho para enviar.",
+          "resposta_bruta": "O relatório de atividades do Estágio é entregue até a segunda sexta-feira após o início do Estágio, na Coordenação de Estágios.",
+          "fontes_recuperadas": [
+            "Prazo de entrega do relatório de atividades",
+            "Rescisão e aditivo do Termo",
+            "Documentações necessárias para iniciar o Estágio"
+          ],
+          "motivo_de_parada": "stop"
+        },
+        {
+          "id": "c4",
+          "repeticao": 3,
+          "veredito": "conforme",
+          "pergunta": "Quando vence a entrega do relatório de atividades do estágio? Preciso saber até\nque dia eu tenho para enviar.",
+          "resposta_bruta": "O relatório de atividades do Estágio é entregue até a segunda sexta-feira após o início do Estágio, na Coordenação de Estágios.",
+          "fontes_recuperadas": [
+            "Prazo de entrega do relatório de atividades",
+            "Rescisão e aditivo do Termo",
+            "Documentações necessárias para iniciar o Estágio"
+          ],
+          "motivo_de_parada": "stop"
+        },
+        {
+          "id": "c5",
+          "repeticao": 1,
+          "veredito": "conforme",
+          "pergunta": "Em quantos dias a Empresa devolve o Termo assinado?",
+          "resposta_bruta": "A Empresa devolve o Termo assinado em até 15 dias corridos após o recebimento. Procure a Coordenação de Estágios para mais detalhes.",
+          "fontes_recuperadas": [
+            "Prazo de devolução do Termo assinado pela Empresa",
+            "Prazo de devolução do Termo no texto do Termo",
+            "Quem assina o Termo"
+          ],
+          "motivo_de_parada": "stop"
+        },
+        {
+          "id": "c5",
+          "repeticao": 2,
+          "veredito": "conforme",
+          "pergunta": "Em quantos dias a Empresa devolve o Termo assinado?",
+          "resposta_bruta": "A Empresa devolve o Termo assinado em até 15 dias corridos após o recebimento. Procure a Coordenação de Estágios para mais detalhes.",
+          "fontes_recuperadas": [
+            "Prazo de devolução do Termo assinado pela Empresa",
+            "Prazo de devolução do Termo no texto do Termo",
+            "Quem assina o Termo"
+          ],
+          "motivo_de_parada": "stop"
+        },
+        {
+          "id": "c5",
+          "repeticao": 3,
+          "veredito": "conforme",
+          "pergunta": "Em quantos dias a Empresa devolve o Termo assinado?",
+          "resposta_bruta": "A Empresa devolve o Termo assinado em até 15 dias corridos após o recebimento. Procure a Coordenação de Estágios para mais detalhes.",
+          "fontes_recuperadas": [
+            "Prazo de devolução do Termo assinado pela Empresa",
+            "Prazo de devolução do Termo no texto do Termo",
+            "Quem assina o Termo"
+          ],
+          "motivo_de_parada": "stop"
+        }
+      ],
+      "erros": [],
+      "fora_da_conta": []
+    },
+    "fonte_verificavel": {
+      "metrica": "fonte_verificavel",
+      "titulo": "Fonte verificável",
+      "avaliadas": 15,
+      "numerador": 0,
+      "fracao": 0.0,
+      "fracao_formatada": "0/15 = 0,00",
+      "acertos": [],
+      "erros": [
+        {
+          "id": "c1",
+          "repeticao": 1,
+          "veredito": "ausente",
+          "pergunta": "Quando eu tento assinar o termo de compromisso aparece que é preciso um número\nde protocolo, mas eu nunca recebi esse número. O que eu faço agora?",
+          "resposta_bruta": "Procure a Coordenação de Estágios para obter o número de protocolo necessário para assinar o Termo de Compromisso.",
+          "fontes_recuperadas": [
+            "Número de protocolo na assinatura do Termo",
+            "Quem assina o Termo",
+            "Rescisão e aditivo do Termo"
+          ],
+          "motivo_de_parada": "stop"
+        },
+        {
+          "id": "c1",
+          "repeticao": 2,
+          "veredito": "ausente",
+          "pergunta": "Quando eu tento assinar o termo de compromisso aparece que é preciso um número\nde protocolo, mas eu nunca recebi esse número. O que eu faço agora?",
+          "resposta_bruta": "Procure a Coordenação de Estágios para obter o número de protocolo necessário para assinar o Termo de Compromisso.",
+          "fontes_recuperadas": [
+            "Número de protocolo na assinatura do Termo",
+            "Quem assina o Termo",
+            "Rescisão e aditivo do Termo"
+          ],
+          "motivo_de_parada": "stop"
+        },
+        {
+          "id": "c1",
+          "repeticao": 3,
+          "veredito": "ausente",
+          "pergunta": "Quando eu tento assinar o termo de compromisso aparece que é preciso um número\nde protocolo, mas eu nunca recebi esse número. O que eu faço agora?",
+          "resposta_bruta": "Procure a Coordenação de Estágios para obter o número de protocolo necessário para assinar o Termo de Compromisso.",
+          "fontes_recuperadas": [
+            "Número de protocolo na assinatura do Termo",
+            "Quem assina o Termo",
+            "Rescisão e aditivo do Termo"
+          ],
+          "motivo_de_parada": "stop"
+        },
+        {
+          "id": "c2",
+          "repeticao": 1,
+          "veredito": "ausente",
+          "pergunta": "Como é o formato do relatório de atividades? Ele pede um documento escrito, um\narquivo em PDF ou um formulário preenchido online? Fico perdido em como montar.",
+          "resposta_bruta": "O formato do relatório de atividades pede um documento escrito, em PDF. Você precisará baixar o modelo do portal do Aluno, na pasta Documentação de Estágio, e preencherá o documento conforme solicitado. Depois, converta-o em PDF antes de entregá-lo à Coordenação de Estágios.",
+          "fontes_recuperadas": [
+            "Formato do relatório de atividades",
+            "Relatório parcial vs. relatório final",
+            "Onde fica o modelo do relatório de atividades"
+          ],
+          "motivo_de_parada": "stop"
+        },
+        {
+          "id": "c2",
+          "repeticao": 2,
+          "veredito": "ausente",
+          "pergunta": "Como é o formato do relatório de atividades? Ele pede um documento escrito, um\narquivo em PDF ou um formulário preenchido online? Fico perdido em como montar.",
+          "resposta_bruta": "O formato do relatório de atividades pede um documento escrito, em PDF. Você precisará baixar o modelo do portal do Aluno, na pasta Documentação de Estágio, e preencherá o documento conforme necessário. Depois, converta-o em PDF antes de entregá-lo à Coordenação de Estágios.",
+          "fontes_recuperadas": [
+            "Formato do relatório de atividades",
+            "Relatório parcial vs. relatório final",
+            "Onde fica o modelo do relatório de atividades"
+          ],
+          "motivo_de_parada": "stop"
+        },
+        {
+          "id": "c2",
+          "repeticao": 3,
+          "veredito": "ausente",
+          "pergunta": "Como é o formato do relatório de atividades? Ele pede um documento escrito, um\narquivo em PDF ou um formulário preenchido online? Fico perdido em como montar.",
+          "resposta_bruta": "O formato do relatório de atividades pede um documento escrito, em PDF. Você precisará baixar o modelo do portal do Aluno, na pasta Documentação de Estágio, e preencherá o documento conforme necessário. Depois, converta-o em PDF antes de entregá-lo à Coordenação de Estágios.",
+          "fontes_recuperadas": [
+            "Formato do relatório de atividades",
+            "Relatório parcial vs. relatório final",
+            "Onde fica o modelo do relatório de atividades"
+          ],
+          "motivo_de_parada": "stop"
+        },
+        {
+          "id": "c3",
+          "repeticao": 1,
+          "veredito": "ausente",
+          "pergunta": "Comecei o estágio essa semana. Onde eu encontro o modelo do relatório de\natividades?",
+          "resposta_bruta": "O modelo do relatório de atividades fica no portal do Aluno, na pasta Documentação de Estágio. A Coordenação de Estágios pode confirmá-lo para você caso não encontre.",
+          "fontes_recuperadas": [
+            "Onde fica o modelo do relatório de atividades",
+            "Prazo de entrega do relatório de atividades",
+            "Rescisão e aditivo do Termo"
+          ],
+          "motivo_de_parada": "stop"
+        },
+        {
+          "id": "c3",
+          "repeticao": 2,
+          "veredito": "ausente",
+          "pergunta": "Comecei o estágio essa semana. Onde eu encontro o modelo do relatório de\natividades?",
+          "resposta_bruta": "O modelo do relatório de atividades fica no portal do Aluno, na pasta Documentação de Estágio. A Coordenação de Estágios pode confirmá-lo para você caso não encontre.",
+          "fontes_recuperadas": [
+            "Onde fica o modelo do relatório de atividades",
+            "Prazo de entrega do relatório de atividades",
+            "Rescisão e aditivo do Termo"
+          ],
+          "motivo_de_parada": "stop"
+        },
+        {
+          "id": "c3",
+          "repeticao": 3,
+          "veredito": "ausente",
+          "pergunta": "Comecei o estágio essa semana. Onde eu encontro o modelo do relatório de\natividades?",
+          "resposta_bruta": "O modelo do relatório de atividades fica no portal do Aluno, na pasta Documentação de Estágio. A Coordenação de Estágios pode confirmá-lo para você caso não encontre.",
+          "fontes_recuperadas": [
+            "Onde fica o modelo do relatório de atividades",
+            "Prazo de entrega do relatório de atividades",
+            "Rescisão e aditivo do Termo"
+          ],
+          "motivo_de_parada": "stop"
+        },
+        {
+          "id": "c4",
+          "repeticao": 1,
+          "veredito": "ausente",
+          "pergunta": "Quando vence a entrega do relatório de atividades do estágio? Preciso saber até\nque dia eu tenho para enviar.",
+          "resposta_bruta": "O relatório de atividades do Estágio é entregue até a segunda sexta-feira após o início do Estágio, na Coordenação de Estágios.",
+          "fontes_recuperadas": [
+            "Prazo de entrega do relatório de atividades",
+            "Rescisão e aditivo do Termo",
+            "Documentações necessárias para iniciar o Estágio"
+          ],
+          "motivo_de_parada": "stop"
+        },
+        {
+          "id": "c4",
+          "repeticao": 2,
+          "veredito": "ausente",
+          "pergunta": "Quando vence a entrega do relatório de atividades do estágio? Preciso saber até\nque dia eu tenho para enviar.",
+          "resposta_bruta": "O relatório de atividades do Estágio é entregue até a segunda sexta-feira após o início do Estágio, na Coordenação de Estágios.",
+          "fontes_recuperadas": [
+            "Prazo de entrega do relatório de atividades",
+            "Rescisão e aditivo do Termo",
+            "Documentações necessárias para iniciar o Estágio"
+          ],
+          "motivo_de_parada": "stop"
+        },
+        {
+          "id": "c4",
+          "repeticao": 3,
+          "veredito": "ausente",
+          "pergunta": "Quando vence a entrega do relatório de atividades do estágio? Preciso saber até\nque dia eu tenho para enviar.",
+          "resposta_bruta": "O relatório de atividades do Estágio é entregue até a segunda sexta-feira após o início do Estágio, na Coordenação de Estágios.",
+          "fontes_recuperadas": [
+            "Prazo de entrega do relatório de atividades",
+            "Rescisão e aditivo do Termo",
+            "Documentações necessárias para iniciar o Estágio"
+          ],
+          "motivo_de_parada": "stop"
+        },
+        {
+          "id": "c5",
+          "repeticao": 1,
+          "veredito": "ausente",
+          "pergunta": "Em quantos dias a Empresa devolve o Termo assinado?",
+          "resposta_bruta": "A Empresa devolve o Termo assinado em até 15 dias corridos após o recebimento. Procure a Coordenação de Estágios para mais detalhes.",
+          "fontes_recuperadas": [
+            "Prazo de devolução do Termo assinado pela Empresa",
+            "Prazo de devolução do Termo no texto do Termo",
+            "Quem assina o Termo"
+          ],
+          "motivo_de_parada": "stop"
+        },
+        {
+          "id": "c5",
+          "repeticao": 2,
+          "veredito": "ausente",
+          "pergunta": "Em quantos dias a Empresa devolve o Termo assinado?",
+          "resposta_bruta": "A Empresa devolve o Termo assinado em até 15 dias corridos após o recebimento. Procure a Coordenação de Estágios para mais detalhes.",
+          "fontes_recuperadas": [
+            "Prazo de devolução do Termo assinado pela Empresa",
+            "Prazo de devolução do Termo no texto do Termo",
+            "Quem assina o Termo"
+          ],
+          "motivo_de_parada": "stop"
+        },
+        {
+          "id": "c5",
+          "repeticao": 3,
+          "veredito": "ausente",
+          "pergunta": "Em quantos dias a Empresa devolve o Termo assinado?",
+          "resposta_bruta": "A Empresa devolve o Termo assinado em até 15 dias corridos após o recebimento. Procure a Coordenação de Estágios para mais detalhes.",
+          "fontes_recuperadas": [
+            "Prazo de devolução do Termo assinado pela Empresa",
+            "Prazo de devolução do Termo no texto do Termo",
+            "Quem assina o Termo"
+          ],
+          "motivo_de_parada": "stop"
+        }
+      ],
+      "fora_da_conta": []
+    }
+  },
+  "falso_positivo_similaridade": {
+    "titulo": "Formato do relatório de acompanhamento do Supervisor",
+    "ocorrencias": 0,
+    "avaliadas": 15,
+    "fracao": 0.0,
+    "fracao_formatada": "0/15 = 0,00"
+  },
+  "taxas_1_1_republicadas": {
+    "nao_saber": {
+      "fracao": 0.25,
+      "fracao_formatada": "3/12 = 0,25",
+      "fracao_por_pergunta": 0.25,
+      "fracao_por_pergunta_formatada": "1/4 perguntas = 0,25",
+      "perguntas": 4,
+      "repeticoes": 3,
+      "esperadas": 12,
+      "avaliadas": 12,
+      "numerador": 3
+    },
+    "recusa_de_atividade": {
+      "fracao": 0.1111111111111111,
+      "fracao_formatada": "1/9 = 0,11",
+      "fracao_por_pergunta": 0.0,
+      "fracao_por_pergunta_formatada": "0/3 perguntas = 0,00",
+      "perguntas": 3,
+      "repeticoes": 3,
+      "esperadas": 9,
+      "avaliadas": 9,
+      "numerador": 1
+    }
+  }
+}
