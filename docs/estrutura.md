@@ -96,15 +96,15 @@ classificação de intenção e sem aresta condicional
 | `sau/graph/state.py` | o estado da conversa, isolado por Aluno: o registro em arquivo, o TTL que apaga a conversa ociosa e a fila FIFO por `chat_id` | #9 | sim |
 | `sau/graph/graph.py` | monta o grafo LangGraph do turno. Nasceu com um caminho só (`START → responder → END`) e a recuperação da 1.2 entra aqui como o **único** nó novo, sem aresta condicional. Desde a #9 `executar_turno` recebe o histórico da conversa do Aluno. O texto do Encaminhamento determinístico mora **aqui**, e não na persona, para que o `sha256_do_prompt` continue reportando a persona e não a topologia | #8, #9, P4 | sim |
 | `sau/graph/nodes.py` | os nós do grafo. A #8 criou o `responder` e o `montar_prompt`, a costura onde a #10 injeta a persona; a recuperação é o único nó que a 1.2 soma. Desde a #9 o `montar_prompt` recebe as últimas mensagens do Aluno para que ele não precise repetir a pergunta a cada turno, e desde a #10 ele é o `montar_prompt` de `sau/persona.py`, reexportado aqui: quem monta o prompt mora no módulo da persona, e este só entrega o estado do turno a ele | #8, #9, #10, P4 | sim |
-| `sau/rag/embed.py` | embeddings locais via Ollama e indexação do Corpus. O modelo de embedding é **medido** aqui, com `ollama ps`, contra o orçamento de VRAM do ADR-0003 — não é escolhido antes | P2 | não |
-| `sau/rag/retrieve.py` | busca os `k` trechos mais próximos, com a Fonte. `k` é 3 porque `num_ctx` é 4096 e não é tocado: três trechos curtos é o que cabe antes de a conversa perder contexto | P3 | não |
+| `sau/rag/embed.py` | embeddings locais via Ollama e indexação do Corpus. O modelo de embedding é **medido** aqui, com `ollama ps`, contra o orçamento de VRAM do ADR-0003 — não é escolhido antes | #29 | sim |
+| `sau/rag/retrieve.py` | busca os `k` trechos mais próximos, com a Fonte. `k` é 3 porque `num_ctx` é 4096 e não é tocado: três trechos curtos é o que cabe antes de a conversa perder contexto. A #29 entrega o **mínimo do índice** (montar das seções em memória, guardar e expor); a busca top-k é do P3 | #29, P3 | parcial |
 
 ## Conteúdo do time
 
 | Caminho | O que é | Ticket | Existe |
 | --- | --- | --- | --- |
 | `perguntas-teste/` | as 10 Perguntas-teste, com o comportamento esperado de cada uma | #6 | sim |
-| `corpus/` | os **três** documentos autorados, um por aglomerado que as Perguntas-teste alcançam, com as contradições plantadas cada uma nomeando o caso que ataca — [ADR-0007](./adr/0007-corpus-derivado-do-instrumento.md) | P1 | não |
+| `corpus/` | os **três** documentos autorados, um por aglomerado que as Perguntas-teste alcançam, com as contradições plantadas cada uma nomeando o caso que ataca — [ADR-0007](./adr/0007-corpus-derivado-do-instrumento.md) | #29 | sim |
 | `outputs/` | evidência bruta do harness: as rodadas são rascunho ignorado, as linhas de base entram no repositório. Desde a #13 a mesma exceção preserva os três artefatos da linha de base juntos: a rodada, o julgamento e o JSON das taxas | #12, #13 | sim |
 | `tests/` | suíte `pytest`, com `test_config.py` e `test_prereqs.py` da #4, `test_webhook.py` da #5 (o caminho do turno da #8, o isolamento por Aluno da #9, a sentinela que afasta a persona da conversa, que ele precisa desde que a persona entra em todo prompt na #10, e a fila e o semáforo da #11), `test_graph.py` da #8, `test_state.py` e `test_semaphore.py` da #9 e da #11, `test_ollama.py` e `test_fumaca.py` da #7, `test_persona.py` da #10, `test_harness.py` da #12 e `test_metrics.py` da #13 | #4, #5, #7, #8, #9, #10, #11, #12, #13 | sim |
 
@@ -122,7 +122,7 @@ recuperado custa contexto que a conversa não tem.
 | --- | --- | --- | --- |
 | `harness/run.py` | roda as 10 Perguntas-teste, 3 repetições cada, e grava os outputs brutos com as condições da medição | #12 | sim |
 | `harness/metrics.py` | taxa de não-saber e taxa de recusa de Atividade, com a folha de julgamento humano e a evidência de cada contagem. Os dois nomes são do instrumento, amarrados às linhas `conta na métrica do #13` de `perguntas-teste/perguntas-teste.md` | #13 | sim |
-| `harness/casos.py` | os cinco Casos de alucinação, com o motivo do erro de cada um e o output real que cada um origina. É onde o caminho B mora: a 1.2 mede sobre estes cinco casos, e não sobre a bateria de 30 execuções | P1 | não |
+| `harness/casos.py` | os cinco Casos de alucinação, com o motivo do erro de cada um e o output real que cada um origina. É onde o caminho B mora: a 1.2 mede sobre estes cinco casos, e não sobre a bateria de 30 execuções | #29 | sim |
 
 O harness é a régua das duas sprints: a 1.2 roda **o mesmo** harness sobre
 **os mesmos** casos, e é por isso que ele precisa ser reexecutável sem refazer

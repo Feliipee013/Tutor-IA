@@ -487,6 +487,44 @@ Revisamos se:
   procurar um arquivo que não existe — **3 repetições na máquina de CPU e 3 na
   máquina do ADR-0002**. Esse é o motivo, e ele vale nas duas máquinas.
 
+## Modelo de embedding da 1.2 (P2)
+
+O modelo de embedding não foi escolhido antes: foi **medido no host**, com o
+gerador e o candidato carregados lado a lado, contra o orçamento de ~1 GB que
+a seção de Consequences acima reserva para embedding. O escolhido é o
+**`nomic-embed-text`**, e a medição que prova que ele coube está transcrita
+abaixo, com a máquina junto — pelo mesmo motivo dos dois arquivos de
+`medicao-modelo/`: número de VRAM sem a máquina junto é número que se cita
+errado depois.
+
+| | |
+| --- | --- |
+| Máquina | a mesma do `ollama serve` desta medição: NVIDIA GeForce GTX 1650, 3,6 GiB de VRAM visíveis ao Ollama 0.34.4 |
+| Comando | `ollama ps` com os dois modelos carregados (geração no `qwen2.5:3b` + `/api/embed` no candidato) |
+| Data | 2026-10-03 |
+
+Saída literal do `ollama ps`:
+
+```text
+NAME                       ID              SIZE      PROCESSOR    CONTEXT    UNTIL
+qwen2.5:3b                 357c53fb659c    2.2 GB    100% GPU     4096       4 minutes from now
+nomic-embed-text:latest    0a109f422b47    323 MB    100% GPU     2048       4 minutes from now
+```
+
+E os pesos, do `ollama list` na mesma hora: `qwen2.5:3b` com 1,9 GB e
+`nomic-embed-text` com 274 MB. O embedding ocupa **323 MB residentes contra
+~1 GB de orçamento** — menos de um terço — e os dois juntos somam ~2,5 GB,
+dentro dos 3,6 GiB visíveis, com o gerador a `100% GPU`: o Ollama não
+descarregou o gerador para caber o embedding, e a falha de latência que a
+§12 de [`1.2-rag.md`](../sprints/1.2-rag.md) previa não apareceu.
+
+Dois detalhes do contrato, medidos na mesma chamada:
+
+- **768 dimensões.** É o tamanho do vetor que o índice em memória guarda por seção.
+- **Norma ~1 na saída.** O vetor medido saiu com norma L2 1,0000004 — e mesmo
+  assim o cliente (`sau/rag/embed.py`) normaliza na saída, porque invariante
+  no contrato vale mais que sorte da versão do servidor.
+
 ## Referências
 
 - [`sondagem.md`](../medicao-modelo/sondagem.md) — as 4 perguntas e o comportamento esperado de cada uma
