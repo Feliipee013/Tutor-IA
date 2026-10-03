@@ -7,10 +7,9 @@ Este módulo lê essas seções, casa cada uma com o seu vetor e guarda o índic
 que montou — e o expõe, para que a rodada do harness consiga declarar o que
 realmente usou.
 
-O que este módulo não faz, de propósito: busca top-k e matriz de
-similaridade são do P3, e nada aqui escreve em disco. Um índice em disco é um
-segundo artefato que precisa ser sincronizado com o Corpus, e um índice
-desatualizado mede em silêncio.
+O que este módulo não faz, de propósito: nada aqui escreve em disco. Um índice
+em disco é um segundo artefato que precisa ser sincronizado com o Corpus, e um
+índice desatualizado mede em silêncio.
 """
 
 from __future__ import annotations
@@ -20,7 +19,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from sau.rag.embed import ClienteEmbedding
+from sau.rag.embed import ProtocoloEmbedding, cosseno
 
 logger = logging.getLogger("sau.rag.retrieve")
 
@@ -106,6 +105,8 @@ class Indice:
 
     secoes: list[Secao]
     vetores: list[list[float]] = field(repr=False)
+    modelo_embedding: str = ""
+    """O modelo que produziu os vetores: o que a rodada declara como usado."""
 
     def __post_init__(self) -> None:
         if len(self.secoes) != len(self.vetores):
@@ -115,13 +116,118 @@ class Indice:
             )
 
 
-def montar_indice(diretorio: Path, cliente: ClienteEmbedding) -> Indice:
+@dataclass(frozen=True)
+class TrechoRecuperado:
+    """Um trecho devolvido pela busca: a seção do Corpus com a similaridade.
+
+    Carrega documento, seção, texto e similaridade para que a busca seja
+    inspecionável: dá para ver por que um trecho voltou e o outro não. A
+    seção citada como Fonte é o título, copiado verbatim do trecho que o
+    modelo tem na mão — e a verificação é correspondência exata contra os
+    títulos do Corpus, que são únicos.
+    """
+
+    documento: str
+    """O arquivo do Corpus, ex. `prazos.md`: a primeira metade da Fonte."""
+
+    titulo: str
+    """O título da seção `##`, único no Corpus inteiro: a Fonte citada."""
+
+    texto: str
+    """O corpo da seção, como o Aluno a lê."""
+
+    similaridade: float
+    """O cosseno entre o vetor da seção e o da consulta: por que voltou."""
+
+
+def similaridades(indice: Indice, vetor_consulta: list[float]) -> list[float]:
+    """O cosseno da consulta contra cada seção, na ordem do índice.
+
+    É a matriz de similaridade inspecionável: um vetor por seção, na mesma
+    ordem de `indice.secoes`, para que a equipe discuta por que um trecho
+    voltou e o outro não em vez de ler uma caixa-preta.
+    """
+    return [cosseno(vetor, vetor_consulta) for vetor in indice.vetores]
+
+
+K_PADRAO = 3
+"""Quantos trechos a busca devolve: parâmetro de orçamento, não de qualidade.
+
+O `num_ctx` é 4096 e não é tocado, e as seções do Corpus são curtas de
+propósito para caber: três trechos é o que cabe antes de a conversa perder
+contexto.
+"""
+
+
+def buscar(
+    indice: Indice, vetor_consulta: list[float], k: int = K_PADRAO
+) -> list[TrechoRecuperado]:
+    """Devolve os `k` trechos mais próximos da consulta, com a similaridade.
+
+    A ordenação é pelo sentido da pergunta — o cosseno entre vetores — e não
+    por palavra-chave: seção sem uma palavra em comum com a consulta volta
+    quando o vetor dela é o mais próximo. Índice vazio devolve lista vazia,
+    que é o que o grafo lê como recuperação desligada.
+    """
+    if k < 1:
+        raise ValueError(f"A busca precisa de ao menos um trecho: k foi {k}.")
+    pontuados = [
+        (similaridade, posicao)
+        for posicao, similaridade in enumerate(similaridades(indice, vetor_consulta))
+    ]
+    pontuados.sort(key=lambda item: item[0], reverse=True)
+    trechos: list[TrechoRecuperado] = []
+    for similaridade, posicao in pontuados[:k]:
+        secao = indice.secoes[posicao]
+        trechos.append(
+            TrechoRecuperado(
+                documento=secao.documento,
+                titulo=secao.titulo,
+                texto=secao.texto,
+                similaridade=similaridade,
+            )
+        )
+    return trechos
+
+
+def resolver_fonte(titulo: str, secoes: list[Secao]) -> Secao | None:
+    """Resolve a Fonte citada para a seção do Corpus, por correspondência exata.
+
+    O título é único no Corpus inteiro, então não há par para parsear nem
+    separador que o modelo possa errar: ou o título é exatamente um título do
+    Corpus, ou a citação não resolve. Maiúscula trocada não resolve — a Fonte
+    é copiada verbatim do trecho recuperado, e cópia fiel não muda letra.
+    """
+    for secao in secoes:
+        if secao.titulo == titulo:
+            return secao
+    return None
+
+
+_ULTIMO_INDICE: Indice | None = None
+"""O índice que a última montagem guardou, para a rodada declarar o que usou.
+
+É o mesmo papel que já cumprem o modelo, a alocação e o `sha256` do prompt:
+separar "o RAG mudou" de "o RAG nem estava ligado". Vazio significa bloco
+declarando recuperação desligada — que é a verdade, e é o que dá valor ao
+campo.
+"""
+
+
+def ultimo_indice() -> Indice | None:
+    """O índice montado por último, ou `None` se a recuperação nunca rodou."""
+    return _ULTIMO_INDICE
+
+
+def montar_indice(diretorio: Path, cliente: ProtocoloEmbedding) -> Indice:
     """Monta o índice em memória a partir das seções do Corpus, sem escrever em disco."""
     secoes = carregar_corpus(diretorio)
     if not secoes:
         raise ValueError(f"Nenhuma seção no Corpus em {diretorio}: índice vazio não mede nada.")
     textos = [f"{secao.titulo}\n{secao.texto}" for secao in secoes]
     vetores = cliente.embutir(textos)
-    indice = Indice(secoes=list(secoes), vetores=vetores)
+    indice = Indice(secoes=list(secoes), vetores=vetores, modelo_embedding=cliente.modelo_embedding)
+    global _ULTIMO_INDICE
+    _ULTIMO_INDICE = indice
     logger.info("Índice montado: %d seções de %s, em memória.", len(secoes), diretorio)
     return indice

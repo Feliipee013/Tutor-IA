@@ -339,11 +339,12 @@ def destinos_de_saida(monkeypatch: pytest.MonkeyPatch, telegram: TelegramFalso) 
     a guarda ficava verde com a garantia quebrada.
 
     Cada destino é respondido no formato que ele espera: o Telegram recebe a
-    resposta de `TelegramFalso` e o Ollama recebe um `/api/generate` de verdade,
-    com o campo `response`. Sem isso o `ClienteOllama` real — que é o que a
-    guarda precisa exercitar — cairia em "não devolveu o campo 'response'" e a
-    prova da ordem viria de um turno que falhou por um motivo que não é o do
-    teste.
+    resposta de `TelegramFalso`, a geração recebe um `/api/generate` de verdade,
+    com o campo `response`, e o embedding recebe um `/api/embed` de verdade, com
+    um vetor por texto de entrada. Sem isso o `ClienteOllama` real — que é o que
+    a guarda precisa exercitar — cairia em "não devolveu o campo 'response'" ou
+    em "não devolveu uma lista de vetores", e a prova da ordem viria de um turno
+    que falhou por um motivo que não é o do teste.
     """
     destinos: list[str] = []
     endereco_do_modelo = carregar_configuracao(_ENV_PADRAO).ollama_base_url
@@ -360,6 +361,14 @@ def destinos_de_saida(monkeypatch: pytest.MonkeyPatch, telegram: TelegramFalso) 
         url = kwargs["url"] if "url" in kwargs else args[1]
         destinos.append(str(url))
         if endereco_do_modelo in str(url):
+            if str(url).endswith("/api/embed"):
+                corpo = kwargs.get("json", {})
+                total = len(corpo.get("input", []))
+                return httpx.Response(
+                    status_code=200,
+                    json={"embeddings": [[1.0, 0.0] for _ in range(total)]},
+                    request=httpx.Request("POST", url),
+                )
             return httpx.Response(
                 status_code=200,
                 json=_geracao(ModeloFalso.texto),
@@ -384,6 +393,19 @@ class ModeloFalso:
 
     def __init__(self, *_args: Any, **_kwargs: Any) -> None:
         self.prompts: list[str] = []
+
+    def embutir(self, textos: list[str]) -> list[list[float]]:
+        """O embedding do turno, falso: um vetor por texto, sem rede e sem Ollama.
+
+        Existe porque o grafo é o de verdade — o nó `recuperar` monta o índice
+        do Corpus e embute a pergunta do Aluno pelo cliente do turno. Sem ele,
+        todo turno do webhook degradaria para o Encaminhamento determinístico.
+        """
+        return [[1.0, 0.0] for _ in textos]
+
+    @property
+    def modelo_embedding(self) -> str:
+        return "falso-para-o-webhook"
 
     def responder(self, prompt: str, *, opcoes: dict[str, Any] | None = None) -> Resposta:
         self.prompts.append(prompt)
@@ -876,8 +898,8 @@ def test_o_acuse_sai_antes_de_o_turno_comecar(
     contagem vista de dentro do turno. Aqui vão as três peças de verdade — o
     `ClienteOllama` real, o grafo real e o `sendMessage` real —, e a fixture
     registra toda URL que saiu do processo, venha de onde vier. A lista sai nesta
-    ordem: Telegram, modelo, Telegram. Um turno disparado antes do acuse a
-    inverteria para modelo, Telegram, Telegram, e a lista inteira é a asserção —
+    ordem: Telegram, embedding do índice, embedding da consulta, modelo, Telegram.
+    Um turno disparado antes do acuse a inverteria, e a lista inteira é a asserção —
     não só o seu primeiro elemento.
 
     A versão anterior desta guarda afirmava duas coisas que nada exercitava: que
@@ -888,11 +910,18 @@ def test_o_acuse_sai_antes_de_o_turno_comecar(
     """
     config = carregar_configuracao(_ENV_PADRAO)
     para_o_telegram = f"{config.telegram_api_base}/bot{_TOKEN}/sendMessage"
+    para_o_embed = f"{config.ollama_base_url}/api/embed"
     para_o_modelo = f"{config.ollama_base_url}/api/generate"
 
     _postar(_app(telegram, executor=None), UPDATE_DO_ALUNO)
 
-    assert destinos_de_saida == [para_o_telegram, para_o_modelo, para_o_telegram], (
+    assert destinos_de_saida == [
+        para_o_telegram,
+        para_o_embed,
+        para_o_embed,
+        para_o_modelo,
+        para_o_telegram,
+    ], (
         f"o turno não rodou depois do acuse, ou rodou por outra via: {destinos_de_saida}"
     )
 
@@ -1069,6 +1098,8 @@ def test_o_turno_roda_na_thread_de_producao(
     assert resposta.status_code == 200
     assert destinos_de_saida == [
         f"{config.telegram_api_base}/bot{_TOKEN}/sendMessage",
+        f"{config.ollama_base_url}/api/embed",
+        f"{config.ollama_base_url}/api/embed",
         f"{config.ollama_base_url}/api/generate",
         f"{config.telegram_api_base}/bot{_TOKEN}/sendMessage",
     ], f"o turno não rodou depois do acuse, ou rodou por outra via: {destinos_de_saida}"

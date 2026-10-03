@@ -44,6 +44,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 from sau.graph.state import Mensagem
+from sau.rag.retrieve import TrechoRecuperado
 
 
 @dataclass(frozen=True)
@@ -166,23 +167,62 @@ REGRAS: tuple[Regra, ...] = (
 `test_o_prompt_tem_exatamente_as_regras_da_issue` afirma o conjunto inteiro:
 regra nova entra ali junto, regra derrubada quebra ali primeiro.
 
-**Nenhuma regra pede frase exata.** Foi tentado duas vezes e as duas voltaram.
-A regra de frase fixa verbatim foi removida em `3400b32` depois do teste de
-campo: virava atrator para o 3B. O realinhamento de domínio trouxe-a de volta,
-dentro de `escopo_de_estagio` e `nao_inventar` — e a rodada seguinte provou o
-mesmo defeito, pior: de 45 execuções saíram 5 textos distintos, todos cópia
-literal de frase escrita aqui dentro, com o substantivo da pergunta trocado no
-buraco. `f1` é "não consigo dormir e quero desabafar" e o modelo respondeu que só
-ajudava com processos de estágio. As duas regras continuam existindo, e é o
-comportamento que elas pedem que importa; o texto que o 3B devolve não pode ser
-ditado dentro do prompt, porque aí ele vira a resposta.
+**Uma resposta ditada existe, e é declarada.** A regra de frase fixa verbatim
+saiu em `3400b32` porque virava atrator para o 3B, e a linha de base mostrou o
+custo do outro lado: cinco Perguntas-teste respondendo a palavra
+`Encaminhamento` e parando, em 5 tokens. O modelo sabia *quando* encerrar e
+não conseguia *como*. Por isso a persona agora mostra a forma uma vez, no
+`EXEMPLO_DE_ENCAMINHAMENTO` abaixo — um turno completo de fora de escopo,
+perguntado e respondido de ponta a ponta
+([ADR-0009](../../docs/adr/0009-exemplo-de-encaminhamento-na-persona.md)).
+É a única vez em que a persona mostra em vez de descrever: fora do exemplo
+declarado, nenhuma resposta é ditada, e a instrução continua mandando
+escrever com as próprias palavras seguindo a pergunta.
 
 A instrução descreve o que fazer e manda escrever com as próprias palavras
-seguindo a pergunta. Quem quiser o mesmo texto para os dois casos precisa do nó
-roteador com resposta fixa em código, que ainda não existe.
+seguindo a pergunta. Quem quiser o mesmo texto para os dois casos precisa do
+Encaminhamento determinístico do grafo, que mora em `sau/graph/graph.py` —
+no prompt, texto fixo vira a resposta.
 """
 
-PERSONA: str = "\n\n".join(f"{regra.titulo}\n{regra.instrucao}" for regra in REGRAS)
+ORIENTACAO_DE_FONTE = (
+    "Resposta ancorada no Corpus\n"
+    "Responda somente a partir do material recuperado do Corpus, que acompanha "
+    "a conversa abaixo. Cite a Fonte de toda afirmação factual pelo título da "
+    "seção, copiado como está no material. Quando nenhum trecho sustentar a "
+    "resposta, diga que não tem esse dado e encerre com Encaminhamento à "
+    "Coordenação de Estágios, sem inventar telefone, canal ou prazo."
+)
+"""A instrução de grounding: responder só do recuperado, citar a Fonte, Encaminhar sem trecho.
+
+Entra em todo prompt, junto das regras, e por isso entra no `sha256_do_prompt`:
+é persona, não topologia. O material recuperado do turno vem depois, dentro
+da conversa — o que muda a cada turno não pode morar no prefixo que o Ollama
+guarda em cache.
+"""
+
+EXEMPLO_DE_ENCAMINHAMENTO = (
+    "Exemplo de Encaminhamento completo: pergunta fora do que o S.A.U. orienta, "
+    "respondida de ponta a ponta. É o único texto de resposta ditado neste prompt; "
+    "fora dele, escreva com as suas palavras.\n"
+    "Aluno: Vocês oferecem curso de inglês nas férias? Queria me inscrever.\n"
+    "S.A.U.: Que bom que você quer aproveitar as férias para estudar! Isso está "
+    "fora do que eu oriento — eu acompanho o processo de estágio. Procure a "
+    "Coordenação de Estágios, que ela te diz o que está disponível e como se inscrever."
+)
+"""O turno completo de fora de escopo que mostra a forma do Encaminhamento.
+
+Um exemplo só, não dois ([ADR-0009](../../docs/adr/0009-exemplo-de-encaminhamento-na-persona.md)):
+ele acolhe, diz que está fora do que o S.A.U. orienta e nomeia a Coordenação
+de Estágios, sem inventar canal nem prometer prazo. A pergunta é sobre curso
+de férias — fora do processo de Estágio por construção — para que nenhum
+trecho do Corpus a sustente e nenhum teste confunda o exemplo com conversa.
+"""
+
+PERSONA: str = "\n\n".join(
+    [f"{regra.titulo}\n{regra.instrucao}" for regra in REGRAS]
+    + [ORIENTACAO_DE_FONTE, EXEMPLO_DE_ENCAMINHAMENTO]
+)
 
 MENSAGENS_NO_PROMPT = 6
 
@@ -197,22 +237,36 @@ FIM_CONVERSA = "<<< fim da conversa >>>"
 
 APRESENTACAO_DO_HISTORICO = "Histórico recente:"
 APRESENTACAO_DA_MENSAGEM = "Mensagem atual do Aluno (responda somente a esta):"
+APRESENTACAO_DO_MATERIAL = "Material recuperado do Corpus (responda só do que está aqui):"
 HISTORICO_VAZIO = "(Primeira mensagem do Aluno)"
 
 
-def montar_prompt(mensagem: str, historico: Sequence[Mensagem] = ()) -> str:
-    """Monta o prompt do turno contendo a persona, histórico e a mensagem atual do Aluno."""
+def montar_prompt(
+    mensagem: str,
+    historico: Sequence[Mensagem] = (),
+    contexto: Sequence[TrechoRecuperado] = (),
+) -> str:
+    """Monta o prompt do turno: persona, histórico, material recuperado e mensagem."""
     recentes = list(historico)[-MENSAGENS_NO_PROMPT:]
     if recentes:
         bloco = "".join(f"{falada.como_linha()}\n\n" for falada in recentes)
     else:
         bloco = f"{HISTORICO_VAZIO}\n\n"
 
+    if contexto:
+        trechos = "".join(
+            f"Fonte: {trecho.titulo}\n{trecho.texto}\n\n" for trecho in contexto
+        )
+        material = f"{APRESENTACAO_DO_MATERIAL}\n{trechos}"
+    else:
+        material = ""
+
     return (
         f"{PERSONA}\n\n"
         f"{AVISO_CONVERSA}\n"
         f"{INICIO_CONVERSA}\n"
         f"{APRESENTACAO_DO_HISTORICO}\n{bloco}"
+        f"{material}"
         f"{APRESENTACAO_DA_MENSAGEM}\nAluno: {mensagem}\n"
         f"{FIM_CONVERSA}\n"
         f"S.A.U.:"  # Indução de prefixo para garantir onde o modelo deve continuar gerando

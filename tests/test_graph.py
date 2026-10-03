@@ -14,16 +14,23 @@ fechar.
 
 from __future__ import annotations
 
+import hashlib
+import inspect
 import json
 import logging
+from pathlib import Path
 from typing import Any, Callable, Iterator
 
 import httpx
 import pytest
 
-from sau.graph.graph import construir_grafo, executar_turno
+from harness.run import sha256_do_prompt
+from sau.graph.graph import TEXTO_ENCAMINHAMENTO, construir_grafo, executar_turno
 from sau.graph.nodes import EstadoTurno, montar_prompt
 from sau.inference.ollama import MOTIVO_PARADA_NO_LIMITE, ClienteOllama, ErroDeInferencia
+from sau.persona import PERSONA
+from sau.rag.embed import ClienteEmbedding
+from sau.rag.retrieve import TrechoRecuperado, buscar, carregar_corpus, montar_indice
 
 _BASE_URL = "http://host.docker.internal:11434"
 _MODELO = "qwen2.5:3b"
@@ -36,6 +43,12 @@ _MODELO = "qwen2.5:3b"
 # que ele não tem e não pode inventar.
 _MENSAGEM = "até que dia eu preciso entregar?"
 _RESPOSTA = "Esse prazo eu não sei."
+
+# O vetor que o embedding falso devolve para todo texto: todo trecho empata
+# em similaridade, e a busca devolve os três primeiros do índice em ordem.
+_VETOR_FALSO = [1.0, 0.0]
+
+_CORPUS = Path(__file__).resolve().parent.parent / "corpus"
 
 LOGGER_GRAFO = "sau.graph.graph"
 LOGGER_NOS = "sau.graph.nodes"
@@ -55,6 +68,17 @@ def _payload(texto: str) -> dict[str, Any]:
         "eval_duration": 1_000_000_000,
         "eval_count": 50,
     }
+
+
+def _resposta_embed(request: httpx.Request) -> httpx.Response:
+    """O que o Ollama devolve no `/api/embed`: um vetor falso por texto de entrada."""
+    corpo = json.loads(request.content.decode("utf-8"))
+    total = len(corpo["input"])
+    return httpx.Response(200, json={"embeddings": [_VETOR_FALSO for _ in range(total)]})
+
+
+def _e_rota_de_embed(request: httpx.Request) -> bool:
+    return request.url.path.endswith("/api/embed")
 
 
 @pytest.fixture
@@ -77,12 +101,36 @@ def fazer_cliente() -> Iterator[FabricaCliente]:
 
 
 def _responde(texto: str) -> Any:
-    """Transporte que devolve uma geração completa com o texto dado."""
+    """Transporte que devolve uma geração completa com o texto dado, e embedding falso.
 
-    def handler(_request: httpx.Request) -> httpx.Response:
+    O turno agora fala duas rotas do Ollama — `/api/embed` na recuperação e
+    `/api/generate` na resposta — e o transporte falso precisa responder as
+    duas: sem a rota de embedding, nenhum teste chegaria ao modelo.
+    """
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if _e_rota_de_embed(request):
+            return _resposta_embed(request)
         return httpx.Response(200, json=_payload(texto))
 
     return handler
+
+
+def _cliente_embed_falso() -> ClienteEmbedding:
+    """O embedding falso para montar o índice esperado, sem rede e sem Ollama."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return _resposta_embed(request)
+
+    return ClienteEmbedding(
+        _BASE_URL, client=httpx.Client(transport=httpx.MockTransport(handler))
+    )
+
+
+def _contexto_esperado() -> list[TrechoRecuperado]:
+    """Os 3 trechos que a recuperação encontra com o vetor falso, na ordem do índice."""
+    indice = montar_indice(_CORPUS, _cliente_embed_falso())
+    return buscar(indice, list(_VETOR_FALSO))
 
 
 def _espelhando(registros: list[Any], campo: str | None = None) -> Any:
@@ -94,9 +142,14 @@ def _espelhando(registros: list[Any], campo: str | None = None) -> Any:
     `campo` é o nome do que interessa guardar; sem ele, o corpo inteiro é
     guardado, porque `test_turno_chama_o_modelo_uma_vez_so` afirma duas coisas ao
     mesmo tempo sobre esse mesmo corpo.
+
+    Só a geração é espelhada: o embedding da recuperação passa pelo mesmo
+    transporte, e quem conta chamadas ao modelo não pode contar o índice junto.
     """
 
     def handler(request: httpx.Request) -> httpx.Response:
+        if _e_rota_de_embed(request):
+            return _resposta_embed(request)
         corpo = json.loads(request.content.decode("utf-8"))
         registros.append(corpo if campo is None else corpo[campo])
         return httpx.Response(200, json=_payload(_RESPOSTA))
@@ -104,31 +157,52 @@ def _espelhando(registros: list[Any], campo: str | None = None) -> Any:
     return handler
 
 
-# --- Topologia: um caminho só, que é o que a #8 promete ---
+# --- Topologia: um caminho só, com a recuperação em todo turno ---
 
 
 def test_grafo_tem_um_caminho_so(fazer_cliente: FabricaCliente) -> None:
-    """`START → responder → END`, e nenhum outro nó nem aresta.
+    """`START → recuperar → responder → END`, e nenhum outro nó nem aresta.
 
     A topologia é o critério de aceitação do grafo, e ela é afirmada pela visão
     que o LangGraph monta do grafo compilado — não pelo código que a construiu,
     que é a mesma coisa que se verificaria escrevendo o mesmo grafo de novo.
+    A recuperação roda em todo turno, sem classificação de intenção e sem
+    aresta condicional (ADR-0008): somar um nó aqui e uma aresta condicional
+    ali quebram este teste do mesmo jeito.
     """
     visao = construir_grafo(fazer_cliente(_responde(_RESPOSTA))).get_graph()
 
-    assert sorted(visao.nodes) == ["__end__", "__start__", "responder"]
+    assert sorted(visao.nodes) == ["__end__", "__start__", "recuperar", "responder"]
     assert {(aresta.source, aresta.target) for aresta in visao.edges} == {
-        ("__start__", "responder"),
+        ("__start__", "recuperar"),
+        ("recuperar", "responder"),
         ("responder", "__end__"),
     }
+
+
+def test_assinatura_do_turno_e_do_grafo_nao_muda() -> None:
+    """`executar_turno` e `construir_grafo` mantêm a assinatura.
+
+    É o cliente que carrega o embedding: a recuperação entra sem parâmetro novo
+    porque o `ClienteOllama` passou a embutir junto de gerar. Um parâmetro novo
+    aqui seria mudança de medição levada para dentro do caminho quente do
+    Telegram, e este teste é o que segura a porta.
+    """
+    assert list(inspect.signature(executar_turno).parameters) == [
+        "cliente",
+        "mensagem",
+        "historico",
+    ]
+    assert list(inspect.signature(construir_grafo).parameters) == ["cliente"]
 
 
 def test_turno_chama_o_modelo_uma_vez_so(fazer_cliente: FabricaCliente) -> None:
     """Um caminho só na topologia e uma geração só na prática.
 
     A topologia do teste anterior é a estrutura; esta é o comportamento. Uma
-    segunda chamada ao modelo no mesmo turno passaria pela topologia de um nó e
-    sairia daqui.
+    segunda chamada de geração no mesmo turno passaria pela topologia de dois
+    nós e sairia daqui — e o embedding da recuperação não conta, porque ele
+    não gera resposta nenhuma.
     """
     corpos: list[dict[str, Any]] = []
 
@@ -137,6 +211,31 @@ def test_turno_chama_o_modelo_uma_vez_so(fazer_cliente: FabricaCliente) -> None:
     assert len(corpos) == 1
     assert corpos[0]["model"] == _MODELO
     assert corpos[0]["stream"] is False
+
+
+def test_turno_embute_o_corpus_e_a_consulta(fazer_cliente: FabricaCliente) -> None:
+    """A recuperação embute as seções do índice e a pergunta do Aluno.
+
+    O grafo é remontado a cada turno e o índice mora no fecho do nó: cada
+    turno embute o Corpus uma vez — a lista inteira, numa chamada só — e a
+    consulta uma vez. Sem essas duas chamadas, o turno responderia sem
+    material e sem que nenhum teste notasse.
+    """
+    rotas: list[str] = []
+    corpos: list[list[str]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if _e_rota_de_embed(request):
+            rotas.append(request.url.path)
+            corpos.append(json.loads(request.content.decode("utf-8"))["input"])
+            return _resposta_embed(request)
+        return httpx.Response(200, json=_payload(_RESPOSTA))
+
+    executar_turno(fazer_cliente(handler), _MENSAGEM)
+
+    assert rotas == ["/api/embed", "/api/embed"]
+    assert len(corpos[0]) == len(carregar_corpus(_CORPUS))
+    assert corpos[1] == [_MENSAGEM]
 
 
 # --- O que o grafo devolve ---
@@ -177,12 +276,34 @@ def test_o_prompt_que_chega_ao_modelo_e_o_montar_prompt(
     prompt montado dentro do grafo — deixaria as duas pontas diferentes sem que
     nenhum teste de conteúdo notasse. Quem afirma o conteúdo da persona é o
     `test_persona.py`, que é o arquivo dono dela.
+
+    O contexto esperado é o que a recuperação encontra com o vetor falso: os
+    três primeiros trechos do índice, na mesma ordem em que `buscar` devolve.
+    """
+    prompts: list[str] = []
+    contexto = _contexto_esperado()
+
+    executar_turno(fazer_cliente(_espelhando(prompts, "prompt")), _MENSAGEM)
+
+    assert prompts == [montar_prompt(_MENSAGEM, [], contexto)]
+
+
+def test_os_titulos_recuperados_chegam_ao_prompt(fazer_cliente: FabricaCliente) -> None:
+    """Cada Fonte do turno está no prompt que o modelo recebeu, pelo título.
+
+    Sem esta afirmação, um grafo que recuperasse e não entregasse passaria por
+    `test_o_prompt_que_chega_ao_modelo_e_o_montar_prompt` do mesmo jeito que um
+    grafo que nunca recuperou: a comparação provaria a costura, e o material
+    teria ficado pelo caminho sem ninguém notar.
     """
     prompts: list[str] = []
 
     executar_turno(fazer_cliente(_espelhando(prompts, "prompt")), _MENSAGEM)
 
-    assert prompts == [montar_prompt(_MENSAGEM)]
+    assert len(prompts) == 1
+    for trecho in _contexto_esperado():
+        assert trecho.titulo in prompts[0], f"a Fonte {trecho.titulo!r} não chegou ao modelo"
+        assert trecho.texto in prompts[0]
 
 
 def test_montar_prompt_carrega_a_mensagem_e_mais_nada(fazer_cliente: FabricaCliente) -> None:
@@ -202,10 +323,10 @@ def test_montar_prompt_carrega_a_mensagem_e_mais_nada(fazer_cliente: FabricaClie
     assert prompt != _MENSAGEM
 
 
-def test_o_grafo_entra_somente_com_a_mensagem_e_devolve_os_dois_campos(
+def test_o_grafo_entra_somente_com_a_mensagem_e_devolve_os_quatro_campos(
     fazer_cliente: FabricaCliente,
 ) -> None:
-    """O grafo entra com a mensagem do Aluno e devolve mensagem e resposta.
+    """O grafo entra com a mensagem e devolve mensagem, material, Fontes e resposta.
 
     É o que o `NotRequired` em `resposta` compra: sem ele, o estado de entrada
     seria obrigado a carregar uma resposta que ainda não existe, e o `invoke` com
@@ -215,11 +336,76 @@ def test_o_grafo_entra_somente_com_a_mensagem_e_devolve_os_dois_campos(
     `from`, não o estado.
     """
     grafo = construir_grafo(fazer_cliente(_responde(_RESPOSTA)))
+    contexto = _contexto_esperado()
 
     entrada: EstadoTurno = {"mensagem": _MENSAGEM}
     estado = grafo.invoke(entrada)
 
-    assert estado == {"mensagem": _MENSAGEM, "resposta": _RESPOSTA}
+    assert estado == {
+        "mensagem": _MENSAGEM,
+        "contexto": contexto,
+        "fontes": [trecho.titulo for trecho in contexto],
+        "resposta": _RESPOSTA,
+    }
+
+
+def test_as_fontes_resolvem_por_correspondencia_exata_no_corpus(
+    fazer_cliente: FabricaCliente,
+) -> None:
+    """Toda Fonte do turno é exatamente um título do Corpus, sem parsear nada.
+
+    É o que permite ao S.A.U. citar copiando verbatim do trecho que ele tem na
+    mão: título único no Corpus inteiro dispensa separar documento de seção, e
+    letra trocada não resolve — que é o que a correspondência exata compra.
+    """
+    grafo = construir_grafo(fazer_cliente(_responde(_RESPOSTA)))
+
+    entrada: EstadoTurno = {"mensagem": _MENSAGEM}
+    estado = grafo.invoke(entrada)
+
+    titulos = {secao.titulo for secao in carregar_corpus(_CORPUS)}
+    assert estado["fontes"]
+    for fonte in estado["fontes"]:
+        assert fonte in titulos, f"a Fonte {fonte!r} não é um título do Corpus"
+
+
+# --- Sem material: o Encaminhamento determinístico mora no grafo ---
+
+
+def test_sem_trecho_o_turno_encerra_com_o_encaminhamento_deterministico(
+    fazer_cliente: FabricaCliente,
+) -> None:
+    """Sem material recuperado, o S.A.U. diz que não tem o dado e Encaminha.
+
+    O texto é fixo em código, e não pedido ao modelo: sem trecho não há o que
+    dizer, e levar a pergunta ao modelo seria pedir forma onde falta conteúdo.
+    A geração nem é chamada — o turno encerra no grafo.
+    """
+    geracoes: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if _e_rota_de_embed(request):
+            return httpx.Response(500, json={"error": "model not found"})
+        geracoes.append(request.url.path)
+        return httpx.Response(200, json=_payload(_RESPOSTA))
+
+    resposta = executar_turno(fazer_cliente(handler), _MENSAGEM)
+
+    assert resposta == TEXTO_ENCAMINHAMENTO
+    assert geracoes == []
+    assert "Coordenação de Estágios" in resposta
+
+
+def test_o_encaminhamento_deterministico_nao_mora_na_persona() -> None:
+    """O texto fixo vive no grafo, e o `sha256` do prompt não muda com a topologia.
+
+    É a separação que o ADR-0008 pede: o hash reporta a persona, e mudar o
+    encerramento — ou somar nó — não muda o hash. Se este texto entrar na
+    persona, a rodada passa a declarar mudança de persona onde houve mudança
+    de grafo, e a comparação da 1.2 mede duas coisas ao mesmo tempo.
+    """
+    assert TEXTO_ENCAMINHAMENTO not in PERSONA
+    assert sha256_do_prompt() == hashlib.sha256(PERSONA.encode("utf-8")).hexdigest()
 
 
 # --- A entrada e a saída no log, que é o outro critério ---
@@ -276,12 +462,15 @@ def test_o_no_registra_o_prompt_que_manda_ao_modelo(
 # --- O corte de geração: sucesso do modelo, texto pela metade no Aluno ---
 
 
-def _parada_no_limite(_request: httpx.Request) -> httpx.Response:
+def _parada_no_limite(request: httpx.Request) -> httpx.Response:
     """Geração que o Ollama fecha com sucesso e sem o texto inteiro.
 
     É o corpo exato do defeito: `done: true` e `done_reason: length` numa
-    resposta que termina no meio da frase.
+    resposta que termina no meio da frase. O embedding segue falso, para que
+    o turno chegue à geração com material.
     """
+    if _e_rota_de_embed(request):
+        return _resposta_embed(request)
     corpo = _payload("Esse prazo eu não sei. Consultar o calendário")
     corpo["done_reason"] = MOTIVO_PARADA_NO_LIMITE
     return httpx.Response(200, json=corpo)
@@ -333,15 +522,23 @@ def _avisos_do_no(caplog: pytest.LogCaptureFixture) -> list[str]:
 
 
 def test_erro_de_inferencia_do_ollama_sobe_do_grafo(fazer_cliente: FabricaCliente) -> None:
-    """O grafo não engole a falha do modelo.
+    """O grafo não engole a falha da geração.
 
     Quem vira a falha em mensagem para o Aluno é o `webhook`, no seu executor de
     turno. Se o grafo a engolisse e devolvesse texto vazio, o Aluno receberia uma
     resposta em branco sem nenhum sinal de que o turno não aconteceu — que é o
     defeito que a issue exige fechar.
+
+    A falha coberta aqui é a da geração: o embedding segue falso, para que o
+    turno chegue ao modelo com material. Falha no embedding é recuperação
+    desligada, e o turno encerra com o Encaminhamento determinístico em vez de
+    subir erro — que é o que `test_sem_trecho_o_turno_encerra_com_o_encaminhamento_deterministico`
+    prova.
     """
 
-    def handler(_request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if _e_rota_de_embed(request):
+            return _resposta_embed(request)
         raise httpx.ConnectError("Connection refused")
 
     with pytest.raises(ErroDeInferencia):

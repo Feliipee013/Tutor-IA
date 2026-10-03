@@ -70,6 +70,7 @@ from sau.inference.ollama import (
 )
 from sau.persona import PERSONA
 from sau.prereqs import PreRequisitoError, executar_checagens, modelo_servido_em_cpu
+from sau.rag.retrieve import Indice, ultimo_indice
 
 RAIZ_DO_PROJETO: Final = Path(__file__).resolve().parent.parent
 ARQUIVO_PERGUNTAS_PADRAO: Final = RAIZ_DO_PROJETO / "perguntas-teste" / "perguntas-teste.md"
@@ -244,6 +245,37 @@ class RegistroDoPassoDaCadeia:
     duracao_segundos: float
 
 
+@dataclass(frozen=True)
+class RecuperacaoDaRodada:
+    """O que a recuperação realmente usou nesta rodada, lido do índice montado.
+
+    É o mesmo papel que já cumprem o modelo, a alocação e o `sha256` do
+    prompt: separar "o RAG mudou" de "o RAG nem estava ligado". `ligada` é
+    falsa quando o índice nunca foi montado — a verdade, e é o que dá valor
+    ao campo —, e `modelo_embedding` é `None` nesse caso pelo mesmo motivo.
+    """
+
+    ligada: bool
+    secoes_indexadas: int
+    modelo_embedding: str | None
+
+
+def descrever_recuperacao(indice: Indice | None) -> RecuperacaoDaRodada:
+    """Lê o bloco de recuperação do índice que o nó guardou, depois da bateria.
+
+    Índice vazio — ou nunca montado — declara recuperação desligada: gravar o
+    que deveria ter acontecido não separaria nada, e um JSON que declara o
+    esperado em vez do usado é o buraco que este bloco existe para fechar.
+    """
+    if indice is None or not indice.secoes:
+        return RecuperacaoDaRodada(ligada=False, secoes_indexadas=0, modelo_embedding=None)
+    return RecuperacaoDaRodada(
+        ligada=True,
+        secoes_indexadas=len(indice.secoes),
+        modelo_embedding=indice.modelo_embedding,
+    )
+
+
 class ClienteMedido(ClienteOllama):
     """O cliente do Ollama com as travas da medição aplicadas, e que guarda a `Resposta`.
 
@@ -253,10 +285,12 @@ class ClienteMedido(ClienteOllama):
     quente do Telegram. `sau/inference/ollama.py` diz que quem mede passa as
     condições em `opcoes`, e esta classe é o "quem mede" do harness.
 
-    `ultima` é a `Resposta` da última geração. Com o grafo de um nó só, cada
-    execução gera exatamente uma, e ela é a resposta do turno. É o único
-    ponto deste módulo que depende do grafo ter um nó: quando a 1.2 somar nós
-    que também geram, é aqui que se revê.
+    `ultima` é a `Resposta` da última geração. Com o grafo de um caminho só,
+    cada execução gera exatamente uma — a do `responder` — porque a recuperação
+    não gera, só embute. A exceção é o Encaminhamento determinístico: sem
+    material recuperado o turno encerra sem chamar o modelo, e `ultima` segue
+    valendo a geração anterior. É o ponto que o ADR-0008 marcou para rever
+    "quando a 1.2 somar nós que também geram", revisto aqui.
     """
 
     def __init__(
@@ -552,14 +586,18 @@ def gravar_rodada(
     condicoes: CondicoesDaRodada,
     destino: Path,
     cadeia: Sequence[RegistroDoPassoDaCadeia] = (),
+    recuperacao: RecuperacaoDaRodada | None = None,
 ) -> Path:
     """Grava o JSON de uma rodada: as condições, a máquina, as execuções e a cadeia.
 
     `condicoes` vem antes dos registros porque é ele que dá sentido aos
     registros: os números só se comparam com os mesmos números. A `cadeia` vai
     em bloco separado porque roda com histórico acumulado, e não isolada como
-    a bateria.
+    a bateria. A `recuperacao` declara o que a recuperação realmente usou —
+    lida do índice montado, depois da bateria — e ausente declara desligada,
+    que é a verdade quando o grafo nunca rodou.
     """
+    bloco = recuperacao if recuperacao is not None else descrever_recuperacao(None)
     rodada = {
         "modelo": condicoes.modelo,
         "url": condicoes.url,
@@ -571,6 +609,7 @@ def gravar_rodada(
             "num_ctx": condicoes.num_ctx,
             "sha256_do_prompt": condicoes.sha256_do_prompt,
         },
+        "recuperacao": asdict(bloco),
         "alocacao": asdict(condicoes.alocacao) if condicoes.alocacao is not None else None,
         "inicio": condicoes.inicio,
         "fim": condicoes.fim,
@@ -750,6 +789,7 @@ def main(argumentos: Sequence[str] | None = None) -> int:
 
     registros = executar_bateria(perguntas, turno, opcoes.repeticoes)
     registros_da_cadeia = executar_cadeia(cadeia_passos, turno_com_historico, opcoes.repeticoes)
+    recuperacao = descrever_recuperacao(ultimo_indice())
 
     condicoes = CondicoesDaRodada(
         modelo=modelo,
@@ -765,7 +805,7 @@ def main(argumentos: Sequence[str] | None = None) -> int:
         fim=datetime.now(timezone.utc).isoformat(),
     )
     destino = opcoes.saida or _nome_padrao_de_saida()
-    gravar_rodada(registros, condicoes, destino, registros_da_cadeia)
+    gravar_rodada(registros, condicoes, destino, registros_da_cadeia, recuperacao)
 
     com_resposta = sum(1 for registro in registros if registro.resposta_bruta is not None)
     com_resposta_cadeia = sum(

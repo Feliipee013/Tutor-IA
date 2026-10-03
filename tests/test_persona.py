@@ -39,9 +39,11 @@ from sau.inference.ollama import ClienteOllama
 from sau.persona import (
     APRESENTACAO_DA_MENSAGEM,
     APRESENTACAO_DO_HISTORICO,
+    APRESENTACAO_DO_MATERIAL,
     AVISO_CONVERSA,
     ENCAMINHAMENTO,
     ESCOPO_DE_ESTAGIO,
+    EXEMPLO_DE_ENCAMINHAMENTO,
     FIM_CONVERSA,
     FORMATO_SAIDA,
     HISTORICO_VAZIO,
@@ -49,6 +51,7 @@ from sau.persona import (
     INICIO_CONVERSA,
     MENSAGENS_NO_PROMPT,
     NAO_INVENTAR,
+    ORIENTACAO_DE_FONTE,
     ORIENTACAO_PROCEDURAL,
     PERSONA,
     REGRAS,
@@ -56,6 +59,7 @@ from sau.persona import (
     USAR_HISTORICO,
     montar_prompt,
 )
+from sau.rag.retrieve import TrechoRecuperado
 
 _BASE_URL = "http://host.docker.internal:11434"
 _MODELO = "qwen2.5:3b"
@@ -95,6 +99,10 @@ def _espelhando_prompts(registros: list[str]) -> Any:
     """Transporte que guarda o prompt que o turno mandou ao modelo."""
 
     def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/api/embed"):
+            corpo = json.loads(request.content.decode("utf-8"))
+            total = len(corpo["input"])
+            return httpx.Response(200, json={"embeddings": [[1.0, 0.0] for _ in range(total)]})
         corpo = json.loads(request.content.decode("utf-8"))
         registros.append(corpo["prompt"])
         return httpx.Response(200, json=_payload(_RESPOSTA))
@@ -500,8 +508,10 @@ def test_as_regras_moram_so_em_sau_persona() -> None:
         )
 
 
-def test_nenhuma_regra_dita_a_resposta_do_aluno() -> None:
-    """Nenhuma regra manda o modelo repetir um texto escrito no prompt.
+def test_nenhuma_resposta_ditada_fora_do_exemplo_declarado(
+    fazer_cliente: FabricaCliente,
+) -> None:
+    """Só o exemplo de Encaminhamento mostra resposta pronta; o resto descreve.
 
     O defeito já aconteceu duas vezes. A regra de frase fixa verbatim saiu em
     `3400b32` porque virava atrator para o 3B; o realinhamento de domínio a
@@ -511,9 +521,12 @@ def test_nenhuma_regra_dita_a_resposta_do_aluno() -> None:
     trocado no buraco. O `f1` — "não consigo dormir e quero desabafar" — recebeu
     "só posso ajudar com dúvidas sobre processos de estágio".
 
-    A instrução descreve o comportamento e manda escrever com as próprias
-    palavras. Quem quiser a mesma resposta nos dois casos precisa do nó roteador
-    com resposta fixa em código, que ainda não existe: no prompt, vira a resposta.
+    O ADR-0009 volta atrás de propósito: a linha de base mostra o modelo sabendo
+    *quando* encerrar e não conseguindo *como* — cinco Perguntas-teste em 5
+    tokens —, e por isso a persona mostra a forma uma vez, no exemplo declarado.
+    O critério muda junto: nenhuma resposta ditada *fora do exemplo*, e o exemplo
+    passa a ser o ponto que o teste verifica — turno completo de fora de escopo,
+    perguntado e respondido de ponta a ponta, com Encaminhamento à Coordenação.
     """
     proibidos = ("exatamente", "exatamente e apenas", "texto fixo", "verbatim", "literalmente")
 
@@ -525,6 +538,81 @@ def test_nenhuma_regra_dita_a_resposta_do_aluno() -> None:
             f"de orientar: ele preenche o buraco da frase e para de ler a "
             f"pergunta. Descreva o comportamento em vez de ditar a resposta."
         )
+
+    prompt = _prompt_do_turno(fazer_cliente)
+
+    assert EXEMPLO_DE_ENCAMINHAMENTO in prompt
+    assert "Aluno:" in EXEMPLO_DE_ENCAMINHAMENTO
+    assert "S.A.U.:" in EXEMPLO_DE_ENCAMINHAMENTO
+    assert "Coordenação de Estágios" in EXEMPLO_DE_ENCAMINHAMENTO
+
+
+# --- O grounding: responder só do recuperado, citar a Fonte, Encaminhar sem trecho ---
+
+
+def test_a_orientacao_de_fonte_chega_ao_modelo(fazer_cliente: FabricaCliente) -> None:
+    """O modelo recebe a ordem de responder só do material recuperado.
+
+    É esta instrução que segura a Alucinação do `CONTEXT.md`: sem ela, o S.A.U.
+    menos recusador para de dizer "não sei" e passa a dizer algo vindo do
+    próprio conhecimento dele. Quem observa a obediência é a pessoa, lendo o
+    output; o que este teste segura é que a ordem chegou — responder só do
+    recuperado, citar a Fonte de toda afirmação factual, e dizer que não tem o
+    dado e Encaminhar quando nenhum trecho sustentar.
+    """
+    prompt = _prompt_do_turno(fazer_cliente)
+
+    assert ORIENTACAO_DE_FONTE in prompt
+    assert prompt.count(ORIENTACAO_DE_FONTE) == 1
+
+
+def _trecho_falso(titulo: str = "Prazo de entrega do relatório de atividades") -> TrechoRecuperado:
+    return TrechoRecuperado(
+        documento="prazos.md",
+        titulo=titulo,
+        texto="O relatório é entregue até a segunda sexta-feira após o início.",
+        similaridade=0.91,
+    )
+
+
+def test_os_titulos_recuperados_chegam_ao_prompt_montado() -> None:
+    """O material do turno entra no prompt com o título como Fonte e o texto junto.
+
+    É o mesmo padrão do teste que compara o prompt recebido com o que a
+    montagem produz: quem afirma a costura é a igualdade com `montar_prompt`,
+    e quem afirma o conteúdo é a presença do título e do texto no prompt.
+    """
+    contexto = [_trecho_falso(), _trecho_falso("Prazo de devolução do Termo assinado pela Empresa")]
+
+    prompt = montar_prompt(_MENSAGEM, (), contexto)
+
+    assert prompt == montar_prompt(_MENSAGEM, (), contexto)
+    for trecho in contexto:
+        assert trecho.titulo in prompt
+        assert trecho.texto in prompt
+    assert APRESENTACAO_DO_MATERIAL in prompt
+
+
+def test_os_titulos_recuperados_chegam_ao_modelo(fazer_cliente: FabricaCliente) -> None:
+    """Os títulos que o turno recuperou estão no prompt que o modelo recebeu.
+
+    O modelo já tem o título na mão — e é por isso que a Fonte citada é o
+    título copiado verbatim, sem par para parsear nem separador que ele possa
+    errar. Sem os títulos aqui, a instrução de citar a Fonte pediria o que o
+    modelo não tem.
+    """
+    prompt = _prompt_do_turno(fazer_cliente)
+
+    assert APRESENTACAO_DO_MATERIAL in prompt
+    assert "Fonte:" in prompt
+
+
+def test_sem_contexto_o_prompt_nao_traz_bloco_de_material() -> None:
+    """Sem material não há bloco vazio: o turno sem trecho encerra no grafo."""
+    prompt = montar_prompt(_MENSAGEM)
+
+    assert APRESENTACAO_DO_MATERIAL not in prompt
+    assert "Fonte:" not in prompt.split(INICIO_CONVERSA, 1)[1]
 
 
 def _normalizar(texto: str) -> str:

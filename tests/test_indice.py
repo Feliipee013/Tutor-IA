@@ -20,8 +20,8 @@ from typing import Any
 import httpx
 import pytest
 
-from sau.rag.embed import ClienteEmbedding
-from sau.rag.retrieve import Indice, Secao, montar_indice
+from sau.rag.embed import MODELO_EMBEDDING_PADRAO, ClienteEmbedding
+from sau.rag.retrieve import Indice, Secao, montar_indice, ultimo_indice
 
 _RAIZ = Path(__file__).resolve().parent.parent
 
@@ -83,6 +83,24 @@ def test_exposicao_devolve_exatamente_as_secoes_indexadas(tmp_path: Path) -> Non
     titulos = [s.titulo for s in indice.secoes]
     assert "Prazo de entrega do relatório de atividades" in titulos
     assert "Número de protocolo na assinatura do Termo" in titulos
+
+
+def test_montar_indice_guarda_o_modelo_de_embedding_usado(tmp_path: Path) -> None:
+    """A rodada declara qual modelo embutiu: o índice carrega o nome."""
+    corpus = _copiar_corpus(tmp_path)
+
+    indice = montar_indice(corpus, _cliente_falso())
+
+    assert indice.modelo_embedding == MODELO_EMBEDDING_PADRAO
+
+
+def test_ultimo_indice_e_o_que_a_montagem_guardou(tmp_path: Path) -> None:
+    """O módulo guarda o índice que montou e o expõe: é daqui que o harness lê."""
+    corpus = _copiar_corpus(tmp_path)
+
+    indice = montar_indice(corpus, _cliente_falso())
+
+    assert ultimo_indice() is indice
 
 
 def test_indice_com_vetores_a_menos_falha_alto() -> None:

@@ -29,6 +29,8 @@ from typing import Any
 
 import httpx
 
+from sau.rag.embed import MODELO_EMBEDDING_PADRAO, ClienteEmbedding
+
 logger = logging.getLogger("sau.inference.ollama")
 
 NUM_CTX_PADRAO = 4096
@@ -163,12 +165,40 @@ class ClienteOllama:
         timeout: float = TIMEOUT_PADRAO,
         num_ctx: int = NUM_CTX_PADRAO,
         client: httpx.Client | None = None,
+        modelo_embedding: str = MODELO_EMBEDDING_PADRAO,
     ) -> None:
-        self._url = f"{base_url.rstrip('/')}/api/generate"
+        self._base_url = base_url.rstrip("/")
+        self._url = f"{self._base_url}/api/generate"
         self._modelo = modelo
         self._timeout = timeout
         self._num_ctx = num_ctx
         self._client = client
+        self._modelo_embedding = modelo_embedding
+
+    @property
+    def modelo_embedding(self) -> str:
+        """O modelo que produz os vetores da recuperação, para a rodada declarar o que usou.
+
+        É parâmetro com padrão — e não argumento obrigatório — pelo mesmo motivo
+        que o `historico` do turno: quem chama sem ele continua funcionando com
+        o modelo medido no ADR-0003 em vez de quebrando.
+        """
+        return self._modelo_embedding
+
+    def embutir(self, textos: list[str]) -> list[list[float]]:
+        """Embute a lista de textos no `/api/embed` e devolve um vetor por texto.
+
+        É o que permite ao nó de recuperação montar o índice e embutir a
+        pergunta do Aluno sem parâmetro novo no grafo: o cliente do turno
+        carrega o embedding junto da geração. A conversa com o Ollama é a do
+        `ClienteEmbedding`, com o mesmo transporte falso nos testes.
+        """
+        return ClienteEmbedding(
+            self._base_url,
+            self._modelo_embedding,
+            timeout=self._timeout,
+            client=self._client,
+        ).embutir(textos)
 
     def responder(self, prompt: str, *, opcoes: dict[str, Any] | None = None) -> Resposta:
         """Manda o prompt ao modelo e devolve a resposta com os tempos.
