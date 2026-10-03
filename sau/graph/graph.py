@@ -3,10 +3,10 @@
 O grafo é a espinha do projeto: a recuperação da 1.2 entra aqui dentro, como um nó
 novo e sem aresta condicional — ela roda em todo turno, e não há classificação de
 intenção ([ADR-0008](../../docs/adr/0008-recuperacao-sem-classificacao-de-intencao.md)).
-A #8 monta o menor grafo que prova o caminho ponta a ponta — um único nó,
-`responder`:
+A #8 montou o menor grafo que prova o caminho ponta a ponta — um único nó,
+`responder` — e a 1.2 somou o único nó que o grafo ganha, `recuperar`:
 
-    START → responder → END
+    START → recuperar → responder → END
 
 A entrada e a saída do grafo ficam logadas, que é o critério da #8 e o que deixa
 a resposta rastreável quando alguém depura uma conversa. As regras de
@@ -28,11 +28,24 @@ from typing import Any, cast
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
-from sau.graph.nodes import EstadoTurno, criar_no_responder
+from sau.graph.nodes import EstadoTurno, criar_no_recuperar, criar_no_responder
 from sau.graph.state import Mensagem
 from sau.inference.ollama import ClienteOllama
 
 logger = logging.getLogger("sau.graph.graph")
+
+TEXTO_ENCAMINHAMENTO = (
+    "Não tenho esse dado aqui, e não quero te passar nada pela metade. "
+    "Procure a Coordenação de Estágios, que ela confirma para você."
+)
+"""O Encaminhamento determinístico: o que o Aluno lê quando não há material.
+
+Mora no grafo — e não na persona — para que o `sha256_do_prompt` continue
+reportando a persona e não a topologia: mudar este texto não muda o hash, e
+mudar a persona não muda o encerramento. É resposta fixa em código, e não
+exemplo no prompt, porque sem trecho recuperado não há o que o modelo dizer —
+levar a pergunta a ele seria pedir forma onde falta conteúdo.
+"""
 
 
 GrafoDoTurno = CompiledStateGraph[EstadoTurno, None, EstadoTurno, EstadoTurno]
@@ -50,8 +63,16 @@ def construir_grafo(cliente: ClienteOllama) -> GrafoDoTurno:
 
     O grafo é remontado a cada turno. Parece desperdício e não é: o compilado é
     barato comparado à inferência, e um grafo por turno é o que mantém o cliente
-    do modelo como dependência da chamada, e não estado global do módulo. O estado
-    da conversa entra pela chamada, pelo `historico`, e nunca pelo grafo montado.
+    do modelo como dependência da chamada, e não estado global do módulo. O índice
+    da recuperação não paga essa remontagem: ele vive no cache do módulo
+    (`sau.graph.nodes`), por (diretório, modelo de embedding), então o Corpus é
+    embutido uma vez por processo e cada turno embute só a pergunta do Aluno.
+    O estado da conversa entra pela chamada, pelo `historico`, e nunca pelo
+    grafo montado.
+
+    O caminho é `START → recuperar → responder → END`: a recuperação roda em
+    todo turno, sem classificação de intenção e sem aresta condicional
+    ([ADR-0008](../../docs/adr/0008-recuperacao-sem-classificacao-de-intencao.md)).
     """
     construtor = StateGraph(EstadoTurno)
     # O `cast` é só de tipo, e ele é estreito de propósito: o que desliga é a
@@ -66,8 +87,11 @@ def construir_grafo(cliente: ClienteOllama) -> GrafoDoTurno:
     # direta possível. O grafo aceito em tempo de execução é o mesmo, e
     # `test_grafo_tem_um_caminho_so` prova a topologia e
     # `test_turno_devolve_o_texto_do_modelo` prova a execução.
-    construtor.add_node("responder", cast(Any, criar_no_responder(cliente)))
-    construtor.add_edge(START, "responder")
+    construtor.add_node("recuperar", cast(Any, criar_no_recuperar(cliente)))
+    responder = criar_no_responder(cliente, texto_encaminhamento=TEXTO_ENCAMINHAMENTO)
+    construtor.add_node("responder", cast(Any, responder))
+    construtor.add_edge(START, "recuperar")
+    construtor.add_edge("recuperar", "responder")
     construtor.add_edge("responder", END)
     return construtor.compile()
 

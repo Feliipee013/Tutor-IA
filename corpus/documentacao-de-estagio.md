@@ -22,3 +22,7 @@ O relatório de acompanhamento é preenchido pelo Supervisor(a) de Estágio sobr
 ## Relatório parcial vs. relatório final
 
 O relatório parcial acompanha o andamento do Estágio e o relatório final encerra a etapa: os dois seguem o formato do relatório de atividades, e o Aluno confere com a Coordenação de Estágios qual dos dois é o pedido da vez.
+
+## Documentações necessárias para iniciar o Estágio
+
+Para iniciar o Estágio, o Aluno apresenta o Termo de Compromisso de Estágio assinado pelo Aluno, pela Empresa e pela Instituição, com período, carga horária e obrigações das partes, e confere com a Coordenação de Estágios a cobertura exigida e o relatório de atividades da etapa, sem adiantar número, data ou contato que não esteja confirmado.

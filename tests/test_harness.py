@@ -25,6 +25,7 @@ import pytest
 from harness.run import (
     IDS_DA_CADEIA,
     IDS_ESPERADOS,
+    MOTIVO_ENCAMINHAMENTO_DETERMINISTICO,
     ORDEM_DA_BATERIA,
     ORDEM_DA_CADEIA,
     SEED_PADRAO,
@@ -33,20 +34,24 @@ from harness.run import (
     ClienteMedido,
     CondicoesDaRodada,
     PerguntaTeste,
+    RecuperacaoDaRodada,
     RegistroDoPassoDaCadeia,
     carregar_cadeia,
     carregar_perguntas_teste,
     descrever_alocacao,
+    descrever_recuperacao,
     executar_bateria,
     executar_cadeia,
     gravar_rodada,
     main,
     montar_argumentos,
+    resposta_deterministica,
     sha256_do_prompt,
 )
 from sau.graph.state import Mensagem
 from sau.inference.ollama import ClienteOllama, ErroDeInferencia, Resposta
 from sau.prereqs import CpuNaoAutorizadaError, OllamaIndisponivelError
+from sau.rag.retrieve import Indice, Secao
 
 RAIZ = Path(__file__).resolve().parent.parent
 ARQUIVO_PERGUNTAS = RAIZ / "perguntas-teste" / "perguntas-teste.md"
@@ -532,6 +537,59 @@ def test_main_devolve_0_quando_alguma_execucao_responde(tmp_path: Path, monkeypa
     assert len(respostas) == 9
 
 
+def test_resposta_deterministica_marca_que_o_modelo_nem_foi_chamado() -> None:
+    """O Encaminhamento sem geração leva motivo próprio, não o da rodada anterior."""
+    resposta = resposta_deterministica("Procure a Coordenação de Estágios.")
+
+    assert resposta.texto == "Procure a Coordenação de Estágios."
+    assert resposta.motivo_de_parada == MOTIVO_ENCAMINHAMENTO_DETERMINISTICO
+    assert resposta.tokens_gerados is None
+    assert resposta.tokens_por_segundo is None
+
+
+def test_turno_deterministico_nao_reaproveita_a_geracao_anterior(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """Sem geração no turno, a rodada grava o texto entregue — nunca o anterior.
+
+    É o defeito que o protocolo de zerar a `ultima` fecha: antes, o turno
+    determinístico lia a `Resposta` que o turno anterior deixou no cliente e
+    gravava motivo, tokens e tempos de uma geração que nem rodou desta vez.
+    Aqui só a primeira execução gera; as outras 14 encerram sem chamar o
+    modelo, e nenhuma pode carregar o "stop" e os 27 tokens da primeira.
+    """
+    import harness.run
+
+    alocacao_falsa = AlocacaoDoModelo(size=2_000, size_vram=2_000, em_cpu=False)
+    monkeypatch.setattr(harness.run, "_checar_pre_requisitos", lambda *_a, **_k: alocacao_falsa)
+
+    chamadas: list[str] = []
+
+    def _turno_sem_geracao(cliente: Any, texto: str, _historico: Any) -> str:
+        """Só a primeira execução gera; as demais encerram sem tocar na `ultima`."""
+        chamadas.append(texto)
+        if len(chamadas) == 1:
+            cliente.ultima = _resposta_falsa("resposta gerada")
+            return "resposta gerada"
+        return "Não tenho esse dado aqui."
+
+    monkeypatch.setattr(harness.run, "executar_turno", _turno_sem_geracao)
+    destino = tmp_path / "rodada.json"
+
+    codigo = main(["--saida", str(destino), "--repeticoes", "1"])
+
+    assert codigo == 0
+    rodada = json.loads(destino.read_text(encoding="utf-8"))
+    execucoes = rodada["execucoes"]
+    assert execucoes[0]["resposta_bruta"] == "resposta gerada"
+    assert execucoes[0]["motivo_de_parada"] == "stop"
+    for execucao in execucoes[1:]:
+        assert execucao["erro"] is None
+        assert execucao["resposta_bruta"] == "Não tenho esse dado aqui."
+        assert execucao["motivo_de_parada"] == MOTIVO_ENCAMINHAMENTO_DETERMINISTICO
+        assert execucao["tokens_gerados"] is None
+
+
 def test_main_usa_a_url_do_host_e_nao_o_padrao_do_container(
     tmp_path: Path, monkeypatch: Any
 ) -> None:
@@ -675,3 +733,113 @@ def test_gravacao_sem_cadeia_grava_bloco_vazio(tmp_path: Path) -> None:
 
     rodada = json.loads(destino.read_text(encoding="utf-8"))
     assert rodada["cadeia"] == []
+
+
+# --- Recuperação: o bloco declara o que a recuperação realmente usou ---
+
+
+def _indice_falso() -> Indice:
+    return Indice(
+        secoes=[
+            Secao(documento="prazos.md", titulo="Prazo de entrega", texto="corpo"),
+            Secao(documento="prazos.md", titulo="Prazo de devolução", texto="corpo"),
+        ],
+        vetores=[[1.0, 0.0], [0.0, 1.0]],
+        modelo_embedding="nomic-embed-text",
+    )
+
+
+def test_descrever_recuperacao_ligada_le_o_indice_montado() -> None:
+    bloco = descrever_recuperacao(_indice_falso())
+
+    assert bloco == RecuperacaoDaRodada(
+        ligada=True, secoes_indexadas=2, modelo_embedding="nomic-embed-text"
+    )
+
+
+def test_descrever_recuperacao_desligada_quando_o_indice_nunca_montou() -> None:
+    bloco = descrever_recuperacao(None)
+
+    assert bloco == RecuperacaoDaRodada(ligada=False, secoes_indexadas=0, modelo_embedding=None)
+
+
+def test_gravacao_traz_bloco_de_recuperacao_ligada(tmp_path: Path) -> None:
+    """A rodada declara quantas seções foram indexadas e com qual modelo de embedding."""
+    bateria = executar_bateria(
+        [_pergunta_falsa("a1")], lambda texto: _resposta_falsa("bruto"), repeticoes=1
+    )
+
+    destino = tmp_path / "rodada.json"
+    bloco_ligado = descrever_recuperacao(_indice_falso())
+    gravar_rodada(bateria, _condicoes_falsas(), destino, recuperacao=bloco_ligado)
+
+    bloco = json.loads(destino.read_text(encoding="utf-8"))["recuperacao"]
+    assert bloco == {
+        "ligada": True,
+        "secoes_indexadas": 2,
+        "modelo_embedding": "nomic-embed-text",
+    }
+
+
+def test_gravacao_sem_recuperacao_declara_desligada(tmp_path: Path) -> None:
+    """Sem índice, o bloco declara que a recuperação nem estava ligada.
+
+    É o que separa "o RAG mudou" de "o RAG nem estava ligado": um JSON que
+    declarasse o esperado em vez do usado não separaria nada.
+    """
+    bateria = executar_bateria(
+        [_pergunta_falsa("a1")], lambda texto: _resposta_falsa("bruto"), repeticoes=1
+    )
+
+    destino = tmp_path / "rodada.json"
+    gravar_rodada(bateria, _condicoes_falsas(), destino)
+
+    bloco = json.loads(destino.read_text(encoding="utf-8"))["recuperacao"]
+    assert bloco == {"ligada": False, "secoes_indexadas": 0, "modelo_embedding": None}
+
+
+def test_main_grava_o_bloco_lido_do_indice_real(tmp_path: Path, monkeypatch: Any) -> None:
+    """O `main` lê o índice que o nó guardou depois da bateria, não o esperado."""
+    import harness.run
+
+    alocacao_falsa = AlocacaoDoModelo(size=2_000, size_vram=2_000, em_cpu=False)
+    monkeypatch.setattr(harness.run, "_checar_pre_requisitos", lambda *_a, **_k: alocacao_falsa)
+
+    def _turno(cliente: Any, texto: str, _historico: Any) -> str:
+        cliente.ultima = _resposta_falsa("resposta")
+        return "resposta"
+
+    monkeypatch.setattr(harness.run, "executar_turno", _turno)
+    monkeypatch.setattr(harness.run, "ultimo_indice", _indice_falso)
+    destino = tmp_path / "rodada.json"
+
+    codigo = main(["--saida", str(destino), "--repeticoes", "1"])
+
+    assert codigo == 0
+    bloco = json.loads(destino.read_text(encoding="utf-8"))["recuperacao"]
+    assert bloco["ligada"] is True
+    assert bloco["secoes_indexadas"] == 2
+    assert bloco["modelo_embedding"] == "nomic-embed-text"
+
+
+def test_main_declara_desligada_quando_a_recuperacao_nao_rodou(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    import harness.run
+
+    alocacao_falsa = AlocacaoDoModelo(size=2_000, size_vram=2_000, em_cpu=False)
+    monkeypatch.setattr(harness.run, "_checar_pre_requisitos", lambda *_a, **_k: alocacao_falsa)
+
+    def _turno(cliente: Any, texto: str, _historico: Any) -> str:
+        cliente.ultima = _resposta_falsa("resposta")
+        return "resposta"
+
+    monkeypatch.setattr(harness.run, "executar_turno", _turno)
+    monkeypatch.setattr(harness.run, "ultimo_indice", lambda: None)
+    destino = tmp_path / "rodada.json"
+
+    codigo = main(["--saida", str(destino), "--repeticoes", "1"])
+
+    assert codigo == 0
+    bloco = json.loads(destino.read_text(encoding="utf-8"))["recuperacao"]
+    assert bloco == {"ligada": False, "secoes_indexadas": 0, "modelo_embedding": None}

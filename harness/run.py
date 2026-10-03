@@ -65,11 +65,11 @@ from sau.inference.ollama import (
     NUM_CTX_PADRAO,
     TIMEOUT_PADRAO,
     ClienteOllama,
-    ErroDeInferencia,
     Resposta,
 )
 from sau.persona import PERSONA
 from sau.prereqs import PreRequisitoError, executar_checagens, modelo_servido_em_cpu
+from sau.rag.retrieve import Indice, ultimo_indice
 
 RAIZ_DO_PROJETO: Final = Path(__file__).resolve().parent.parent
 ARQUIVO_PERGUNTAS_PADRAO: Final = RAIZ_DO_PROJETO / "perguntas-teste" / "perguntas-teste.md"
@@ -244,6 +244,71 @@ class RegistroDoPassoDaCadeia:
     duracao_segundos: float
 
 
+@dataclass(frozen=True)
+class RecuperacaoDaRodada:
+    """O que a recuperação realmente usou nesta rodada, lido do índice montado.
+
+    É o mesmo papel que já cumprem o modelo, a alocação e o `sha256` do
+    prompt: separar "o RAG mudou" de "o RAG nem estava ligado". `ligada` é
+    falsa quando o índice nunca foi montado — a verdade, e é o que dá valor
+    ao campo —, e `modelo_embedding` é `None` nesse caso pelo mesmo motivo.
+    """
+
+    ligada: bool
+    secoes_indexadas: int
+    modelo_embedding: str | None
+
+
+def descrever_recuperacao(indice: Indice | None) -> RecuperacaoDaRodada:
+    """Lê o bloco de recuperação do índice que o nó guardou, depois da bateria.
+
+    Índice vazio — ou nunca montado — declara recuperação desligada: gravar o
+    que deveria ter acontecido não separaria nada, e um JSON que declara o
+    esperado em vez do usado é o buraco que este bloco existe para fechar.
+    """
+    if indice is None or not indice.secoes:
+        return RecuperacaoDaRodada(ligada=False, secoes_indexadas=0, modelo_embedding=None)
+    return RecuperacaoDaRodada(
+        ligada=True,
+        secoes_indexadas=len(indice.secoes),
+        modelo_embedding=indice.modelo_embedding,
+    )
+
+
+MOTIVO_ENCAMINHAMENTO_DETERMINISTICO = "deterministico"
+"""O `motivo_de_parada` gravado quando o turno encerrou sem gerar.
+
+Sem material recuperado o grafo devolve o Encaminhamento determinístico sem
+chamar o modelo, então não há `done_reason` do Ollama para registrar — e
+reaproveitar o motivo da geração anterior diria que o modelo parou onde ele
+nem rodou. O valor é uma constante pelo mesmo motivo que
+`MOTIVO_PARADA_NO_LIMITE` é: quem lê a rodada compara contra um nome
+declarado, e não lembra de um literal. `length` diz "o modelo cortou";
+`deterministico` diz "o modelo nem foi chamado".
+"""
+
+
+def resposta_deterministica(texto: str) -> Resposta:
+    """Monta a `Resposta` de um turno que encerrou sem chamar o modelo.
+
+    O texto é o que o Aluno de fato leu — o Encaminhamento determinístico do
+    grafo — e os números são ausência, não zero medido: sem geração não há
+    tokens, tempos nem parada do Ollama, e gravar zero diria que o modelo foi
+    rápido em vez de dizer que ele não rodou.
+    """
+    return Resposta(
+        texto=texto,
+        primeiro_token_segundos=0.0,
+        carga_segundos=0.0,
+        avaliacao_prompt_segundos=0.0,
+        segundos_totais=0.0,
+        tokens_por_segundo=None,
+        tokens_gerados=None,
+        concluida=True,
+        motivo_de_parada=MOTIVO_ENCAMINHAMENTO_DETERMINISTICO,
+    )
+
+
 class ClienteMedido(ClienteOllama):
     """O cliente do Ollama com as travas da medição aplicadas, e que guarda a `Resposta`.
 
@@ -253,10 +318,15 @@ class ClienteMedido(ClienteOllama):
     quente do Telegram. `sau/inference/ollama.py` diz que quem mede passa as
     condições em `opcoes`, e esta classe é o "quem mede" do harness.
 
-    `ultima` é a `Resposta` da última geração. Com o grafo de um nó só, cada
-    execução gera exatamente uma, e ela é a resposta do turno. É o único
-    ponto deste módulo que depende do grafo ter um nó: quando a 1.2 somar nós
-    que também geram, é aqui que se revê.
+    `ultima` é a `Resposta` da última geração **deste turno**. Quem chama zera
+    antes de rodar o turno e lê depois: com o grafo de um caminho só, cada
+    execução gera exatamente uma — a do `responder` — porque a recuperação
+    não gera, só embute. A exceção é o Encaminhamento determinístico: sem
+    material recuperado o turno encerra sem chamar o modelo, e `ultima` segue
+    `None` — ler sem zerar devolveria a geração do turno anterior como se
+    fosse a atual, que é o defeito que o protocolo de zerar existe para
+    fechar. É o ponto que o ADR-0008 marcou para rever "quando a 1.2 somar
+    nós que também geram", revisto aqui.
     """
 
     def __init__(
@@ -552,14 +622,18 @@ def gravar_rodada(
     condicoes: CondicoesDaRodada,
     destino: Path,
     cadeia: Sequence[RegistroDoPassoDaCadeia] = (),
+    recuperacao: RecuperacaoDaRodada | None = None,
 ) -> Path:
     """Grava o JSON de uma rodada: as condições, a máquina, as execuções e a cadeia.
 
     `condicoes` vem antes dos registros porque é ele que dá sentido aos
     registros: os números só se comparam com os mesmos números. A `cadeia` vai
     em bloco separado porque roda com histórico acumulado, e não isolada como
-    a bateria.
+    a bateria. A `recuperacao` declara o que a recuperação realmente usou —
+    lida do índice montado, depois da bateria — e ausente declara desligada,
+    que é a verdade quando o grafo nunca rodou.
     """
+    bloco = recuperacao if recuperacao is not None else descrever_recuperacao(None)
     rodada = {
         "modelo": condicoes.modelo,
         "url": condicoes.url,
@@ -571,6 +645,7 @@ def gravar_rodada(
             "num_ctx": condicoes.num_ctx,
             "sha256_do_prompt": condicoes.sha256_do_prompt,
         },
+        "recuperacao": asdict(bloco),
         "alocacao": asdict(condicoes.alocacao) if condicoes.alocacao is not None else None,
         "inicio": condicoes.inicio,
         "fim": condicoes.fim,
@@ -722,34 +797,32 @@ def main(argumentos: Sequence[str] | None = None) -> int:
     )
 
     def turno(texto: str) -> Resposta:
-        # `executar_turno` devolve o texto e o `ClienteMedido` guarda a
-        # `Resposta` que produziu esse texto. O texto não é usado aqui: quem
-        # interessa à rodada é a `Resposta` inteira, com o motivo de parada e os
-        # tempos, e é ela que vai para o registro.
-        executar_turno(cliente, texto, ())
+        # `ultima` é zerada antes porque ela vale por turno: sem o zero, um
+        # Encaminhamento determinístico — que encerra sem chamar o modelo —
+        # devolveria a geração do turno anterior como se fosse a atual, e a
+        # rodada gravaria dado obsoleto. Com o zero, `None` depois do turno
+        # significa "o modelo nem foi chamado", e o registro leva o texto que
+        # o Aluno de fato leu, marcado como determinístico.
+        cliente.ultima = None
+        texto_entregue = executar_turno(cliente, texto, ())
         if cliente.ultima is None:
-            raise ErroDeInferencia(
-                "FALHA CRÍTICA: o turno rodou e não deixou registro de geração. "
-                "O grafo deixou de chamar o cliente, e um turno sem geração não "
-                "produz resposta nenhuma."
-            )
+            return resposta_deterministica(texto_entregue)
         return cliente.ultima
 
     def turno_com_historico(texto: str, historico: Sequence[Mensagem]) -> Resposta:
         # O mesmo caminho do turno isolado, mas com o histórico acumulado da
         # cadeia: é assim que o `webhook` chama em produção, e é o que prova
-        # que o S.A.U. retoma o dado em vez de repedir a pergunta.
-        executar_turno(cliente, texto, historico)
+        # que o S.A.U. retoma o dado em vez de repedir a pergunta. O zero e o
+        # determinístico valem aqui pelo mesmo motivo do turno isolado.
+        cliente.ultima = None
+        texto_entregue = executar_turno(cliente, texto, historico)
         if cliente.ultima is None:
-            raise ErroDeInferencia(
-                "FALHA CRÍTICA: o turno rodou e não deixou registro de geração. "
-                "O grafo deixou de chamar o cliente, e um turno sem geração não "
-                "produz resposta nenhuma."
-            )
+            return resposta_deterministica(texto_entregue)
         return cliente.ultima
 
     registros = executar_bateria(perguntas, turno, opcoes.repeticoes)
     registros_da_cadeia = executar_cadeia(cadeia_passos, turno_com_historico, opcoes.repeticoes)
+    recuperacao = descrever_recuperacao(ultimo_indice())
 
     condicoes = CondicoesDaRodada(
         modelo=modelo,
@@ -765,7 +838,7 @@ def main(argumentos: Sequence[str] | None = None) -> int:
         fim=datetime.now(timezone.utc).isoformat(),
     )
     destino = opcoes.saida or _nome_padrao_de_saida()
-    gravar_rodada(registros, condicoes, destino, registros_da_cadeia)
+    gravar_rodada(registros, condicoes, destino, registros_da_cadeia, recuperacao)
 
     com_resposta = sum(1 for registro in registros if registro.resposta_bruta is not None)
     com_resposta_cadeia = sum(

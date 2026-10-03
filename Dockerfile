@@ -10,8 +10,9 @@ WORKDIR /app
 COPY pyproject.toml README.md ./
 RUN pip install --no-cache-dir .
 
-# Copia código fonte do serviço
+# Copia código fonte do serviço e o Corpus versionado que a recuperação lê
 COPY sau/ ./sau/
+COPY corpus/ ./corpus/
 
 # 8000 é o serviço do bot (health check); 8080 é o webhook do Telegram, que é
 # outro container com outro entrypoint. As duas portas ficam declaradas porque

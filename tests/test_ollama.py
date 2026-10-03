@@ -369,3 +369,40 @@ def test_campos_ausentes_viram_n_d_e_nao_none(caplog: pytest.LogCaptureFixture) 
     assert "n/d tok/s" in caplog.text
     assert "n/d tokens" in caplog.text
     assert "None" not in caplog.text
+
+
+# --- Embedding pelo cliente do turno: a recuperação sem parâmetro novo ---
+
+
+def test_embutir_pede_vetores_no_api_embed_como_lista() -> None:
+    """O transporte de mock responde também `/api/embed`: nenhum teste fala com o Ollama real."""
+    enviados: list[dict[str, Any]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        corpo = json.loads(request.content.decode("utf-8"))
+        enviados.append(corpo)
+        total = len(corpo["input"])
+        return httpx.Response(
+            200,
+            json={"embeddings": [[3.0, 4.0] for _ in range(total)]},
+            request=request,
+        )
+
+    cliente = ClienteOllama(
+        _BASE_URL, _MODELO, client=httpx.Client(transport=httpx.MockTransport(handler))
+    )
+
+    vetores = cliente.embutir(["prazo de entrega", "formato do relatório"])
+
+    assert len(enviados) == 1
+    assert enviados[0]["input"] == ["prazo de entrega", "formato do relatório"]
+    assert len(vetores) == 2
+    for vetor in vetores:
+        assert vetor == pytest.approx([0.6, 0.8])
+
+
+def test_modelo_de_embedding_padrao_e_o_medido_no_host() -> None:
+    """O nome não é escolhido antes: é o que o ADR-0003 registra por medição."""
+    cliente = ClienteOllama(_BASE_URL, _MODELO)
+
+    assert cliente.modelo_embedding == "nomic-embed-text"

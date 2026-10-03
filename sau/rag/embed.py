@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import logging
 import math
-from typing import Any
+from typing import Any, Protocol
 
 import httpx
 
@@ -46,6 +46,24 @@ na mão, fora do turno do Aluno.
 
 class ErroDeEmbedding(RuntimeError):
     """Falha ao pedir embeddings ao Ollama."""
+
+
+class ProtocoloEmbedding(Protocol):
+    """O que o índice precisa de quem embute: vetores e o nome do modelo.
+
+    Existe para que `montar_indice` receba tanto o `ClienteEmbedding` quanto
+    o `ClienteOllama` sem parâmetro novo no grafo: o cliente do turno carrega
+    o embedding junto da geração, e a recuperação entra sem assinatura nova.
+    """
+
+    @property
+    def modelo_embedding(self) -> str:
+        """O modelo que produziu os vetores, para a rodada declarar o que usou."""
+        ...
+
+    def embutir(self, textos: list[str]) -> list[list[float]]:
+        """Embute a lista de textos e devolve um vetor normalizado por texto."""
+        ...
 
 
 def normalizar(vetor: list[float]) -> list[float]:
@@ -94,6 +112,11 @@ class ClienteEmbedding:
         self._modelo = modelo
         self._timeout = timeout
         self._client = client
+
+    @property
+    def modelo_embedding(self) -> str:
+        """O modelo que produz os vetores: o que a rodada declara como usado."""
+        return self._modelo
 
     def embutir(self, textos: list[str]) -> list[list[float]]:
         """Embute a lista de textos e devolve um vetor normalizado por texto.
