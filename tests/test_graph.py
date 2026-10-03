@@ -216,10 +216,10 @@ def test_turno_chama_o_modelo_uma_vez_so(fazer_cliente: FabricaCliente) -> None:
 def test_turno_embute_o_corpus_e_a_consulta(fazer_cliente: FabricaCliente) -> None:
     """A recuperação embute as seções do índice e a pergunta do Aluno.
 
-    O grafo é remontado a cada turno e o índice mora no fecho do nó: cada
-    turno embute o Corpus uma vez — a lista inteira, numa chamada só — e a
-    consulta uma vez. Sem essas duas chamadas, o turno responderia sem
-    material e sem que nenhum teste notasse.
+    O índice mora no cache do módulo, e não no fecho do nó que morre com o
+    grafo remontado: no primeiro turno o Corpus vai inteiro — a lista toda,
+    numa chamada só — e a consulta vai uma vez. Sem essas duas chamadas, o
+    turno responderia sem material e sem que nenhum teste notasse.
     """
     rotas: list[str] = []
     corpos: list[list[str]] = []
@@ -236,6 +236,32 @@ def test_turno_embute_o_corpus_e_a_consulta(fazer_cliente: FabricaCliente) -> No
     assert rotas == ["/api/embed", "/api/embed"]
     assert len(corpos[0]) == len(carregar_corpus(_CORPUS))
     assert corpos[1] == [_MENSAGEM]
+
+
+def test_o_indice_e_reaproveitado_entre_turnos(fazer_cliente: FabricaCliente) -> None:
+    """O segundo turno embute só a pergunta: o Corpus já está no cache.
+
+    É o que "montado na primeira vez" compra em produção, onde o `webhook`
+    monta um cliente novo por turno: sem o cache do módulo, cada pergunta do
+    Aluno reembutiria as seções inteiras, e a latência do turno pagaria o
+    Corpus de novo a cada mensagem.
+    """
+    corpos: list[list[str]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if _e_rota_de_embed(request):
+            corpos.append(json.loads(request.content.decode("utf-8"))["input"])
+            return _resposta_embed(request)
+        return httpx.Response(200, json=_payload(_RESPOSTA))
+
+    cliente = fazer_cliente(handler)
+    executar_turno(cliente, _MENSAGEM)
+    executar_turno(cliente, _MENSAGEM)
+
+    assert len(corpos) == 3
+    assert len(corpos[0]) == len(carregar_corpus(_CORPUS))
+    assert corpos[1] == [_MENSAGEM]
+    assert corpos[2] == [_MENSAGEM]
 
 
 # --- O que o grafo devolve ---

@@ -65,7 +65,6 @@ from sau.inference.ollama import (
     NUM_CTX_PADRAO,
     TIMEOUT_PADRAO,
     ClienteOllama,
-    ErroDeInferencia,
     Resposta,
 )
 from sau.persona import PERSONA
@@ -276,6 +275,40 @@ def descrever_recuperacao(indice: Indice | None) -> RecuperacaoDaRodada:
     )
 
 
+MOTIVO_ENCAMINHAMENTO_DETERMINISTICO = "deterministico"
+"""O `motivo_de_parada` gravado quando o turno encerrou sem gerar.
+
+Sem material recuperado o grafo devolve o Encaminhamento determinístico sem
+chamar o modelo, então não há `done_reason` do Ollama para registrar — e
+reaproveitar o motivo da geração anterior diria que o modelo parou onde ele
+nem rodou. O valor é uma constante pelo mesmo motivo que
+`MOTIVO_PARADA_NO_LIMITE` é: quem lê a rodada compara contra um nome
+declarado, e não lembra de um literal. `length` diz "o modelo cortou";
+`deterministico` diz "o modelo nem foi chamado".
+"""
+
+
+def resposta_deterministica(texto: str) -> Resposta:
+    """Monta a `Resposta` de um turno que encerrou sem chamar o modelo.
+
+    O texto é o que o Aluno de fato leu — o Encaminhamento determinístico do
+    grafo — e os números são ausência, não zero medido: sem geração não há
+    tokens, tempos nem parada do Ollama, e gravar zero diria que o modelo foi
+    rápido em vez de dizer que ele não rodou.
+    """
+    return Resposta(
+        texto=texto,
+        primeiro_token_segundos=0.0,
+        carga_segundos=0.0,
+        avaliacao_prompt_segundos=0.0,
+        segundos_totais=0.0,
+        tokens_por_segundo=None,
+        tokens_gerados=None,
+        concluida=True,
+        motivo_de_parada=MOTIVO_ENCAMINHAMENTO_DETERMINISTICO,
+    )
+
+
 class ClienteMedido(ClienteOllama):
     """O cliente do Ollama com as travas da medição aplicadas, e que guarda a `Resposta`.
 
@@ -285,12 +318,15 @@ class ClienteMedido(ClienteOllama):
     quente do Telegram. `sau/inference/ollama.py` diz que quem mede passa as
     condições em `opcoes`, e esta classe é o "quem mede" do harness.
 
-    `ultima` é a `Resposta` da última geração. Com o grafo de um caminho só,
-    cada execução gera exatamente uma — a do `responder` — porque a recuperação
+    `ultima` é a `Resposta` da última geração **deste turno**. Quem chama zera
+    antes de rodar o turno e lê depois: com o grafo de um caminho só, cada
+    execução gera exatamente uma — a do `responder` — porque a recuperação
     não gera, só embute. A exceção é o Encaminhamento determinístico: sem
     material recuperado o turno encerra sem chamar o modelo, e `ultima` segue
-    valendo a geração anterior. É o ponto que o ADR-0008 marcou para rever
-    "quando a 1.2 somar nós que também geram", revisto aqui.
+    `None` — ler sem zerar devolveria a geração do turno anterior como se
+    fosse a atual, que é o defeito que o protocolo de zerar existe para
+    fechar. É o ponto que o ADR-0008 marcou para rever "quando a 1.2 somar
+    nós que também geram", revisto aqui.
     """
 
     def __init__(
@@ -761,30 +797,27 @@ def main(argumentos: Sequence[str] | None = None) -> int:
     )
 
     def turno(texto: str) -> Resposta:
-        # `executar_turno` devolve o texto e o `ClienteMedido` guarda a
-        # `Resposta` que produziu esse texto. O texto não é usado aqui: quem
-        # interessa à rodada é a `Resposta` inteira, com o motivo de parada e os
-        # tempos, e é ela que vai para o registro.
-        executar_turno(cliente, texto, ())
+        # `ultima` é zerada antes porque ela vale por turno: sem o zero, um
+        # Encaminhamento determinístico — que encerra sem chamar o modelo —
+        # devolveria a geração do turno anterior como se fosse a atual, e a
+        # rodada gravaria dado obsoleto. Com o zero, `None` depois do turno
+        # significa "o modelo nem foi chamado", e o registro leva o texto que
+        # o Aluno de fato leu, marcado como determinístico.
+        cliente.ultima = None
+        texto_entregue = executar_turno(cliente, texto, ())
         if cliente.ultima is None:
-            raise ErroDeInferencia(
-                "FALHA CRÍTICA: o turno rodou e não deixou registro de geração. "
-                "O grafo deixou de chamar o cliente, e um turno sem geração não "
-                "produz resposta nenhuma."
-            )
+            return resposta_deterministica(texto_entregue)
         return cliente.ultima
 
     def turno_com_historico(texto: str, historico: Sequence[Mensagem]) -> Resposta:
         # O mesmo caminho do turno isolado, mas com o histórico acumulado da
         # cadeia: é assim que o `webhook` chama em produção, e é o que prova
-        # que o S.A.U. retoma o dado em vez de repedir a pergunta.
-        executar_turno(cliente, texto, historico)
+        # que o S.A.U. retoma o dado em vez de repedir a pergunta. O zero e o
+        # determinístico valem aqui pelo mesmo motivo do turno isolado.
+        cliente.ultima = None
+        texto_entregue = executar_turno(cliente, texto, historico)
         if cliente.ultima is None:
-            raise ErroDeInferencia(
-                "FALHA CRÍTICA: o turno rodou e não deixou registro de geração. "
-                "O grafo deixou de chamar o cliente, e um turno sem geração não "
-                "produz resposta nenhuma."
-            )
+            return resposta_deterministica(texto_entregue)
         return cliente.ultima
 
     registros = executar_bateria(perguntas, turno, opcoes.repeticoes)

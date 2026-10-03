@@ -63,8 +63,12 @@ def construir_grafo(cliente: ClienteOllama) -> GrafoDoTurno:
 
     O grafo é remontado a cada turno. Parece desperdício e não é: o compilado é
     barato comparado à inferência, e um grafo por turno é o que mantém o cliente
-    do modelo como dependência da chamada, e não estado global do módulo. O estado
-    da conversa entra pela chamada, pelo `historico`, e nunca pelo grafo montado.
+    do modelo como dependência da chamada, e não estado global do módulo. O índice
+    da recuperação não paga essa remontagem: ele vive no cache do módulo
+    (`sau.graph.nodes`), por (diretório, modelo de embedding), então o Corpus é
+    embutido uma vez por processo e cada turno embute só a pergunta do Aluno.
+    O estado da conversa entra pela chamada, pelo `historico`, e nunca pelo
+    grafo montado.
 
     O caminho é `START → recuperar → responder → END`: a recuperação roda em
     todo turno, sem classificação de intenção e sem aresta condicional

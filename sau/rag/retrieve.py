@@ -193,10 +193,15 @@ def buscar(
 def resolver_fonte(titulo: str, secoes: list[Secao]) -> Secao | None:
     """Resolve a Fonte citada para a seção do Corpus, por correspondência exata.
 
-    O título é único no Corpus inteiro, então não há par para parsear nem
-    separador que o modelo possa errar: ou o título é exatamente um título do
-    Corpus, ou a citação não resolve. Maiúscula trocada não resolve — a Fonte
-    é copiada verbatim do trecho recuperado, e cópia fiel não muda letra.
+    É o verificador mecânico da Fonte — o que a spec chama de "Fonte
+    verificável ... conferida por script": dado um título citado, diz se ele
+    é exatamente um título do Corpus e qual seção ele sustenta. Por isso vive
+    aqui e é exercitado por teste de tabela sobre fixture (`test_busca.py`):
+    quem o chama é o script que confere a rodada, e não o turno — o turno não
+    parseia a própria resposta, e obediência do modelo à instrução de citar
+    continua veredito de pessoa (confabulação com Fonte). Maiúscula trocada
+    não resolve — a Fonte é copiada verbatim do trecho recuperado, e cópia
+    fiel não muda letra.
     """
     for secao in secoes:
         if secao.titulo == titulo:

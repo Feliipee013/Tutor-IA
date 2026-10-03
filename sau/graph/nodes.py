@@ -25,9 +25,34 @@ from typing import Any, Callable, NotRequired, TypedDict
 from sau.graph.state import Mensagem
 from sau.inference.ollama import MOTIVO_PARADA_NO_LIMITE, ClienteOllama, Resposta
 from sau.persona import montar_prompt as montar_prompt
-from sau.rag.retrieve import K_PADRAO, TrechoRecuperado, buscar, montar_indice
+from sau.rag.retrieve import K_PADRAO, Indice, TrechoRecuperado, buscar, montar_indice
 
 logger = logging.getLogger("sau.graph.nodes")
+
+_INDICES: dict[tuple[str, str], Indice] = {}
+"""O índice por (diretório do Corpus, modelo de embedding), além dos turnos.
+
+O grafo é remontado a cada turno (`construir_grafo` em `graph.py`), então um
+fecho por grafo morreria no fim do turno e o Corpus seria reembutido toda
+vez — uma chamada `/api/embed` com as seções inteiras por pergunta do Aluno.
+O cache em módulo mantém "montado na primeira vez" de verdade entre turnos e
+entre clientes recriados (o `webhook` monta um `ClienteOllama` novo por turno),
+sem parâmetro novo no grafo: a chave é o que identifica o material, e não
+quem o pediu. Corpus em disco muda com rebuild/restart, que é quando o
+processo nasce e o cache nasce vazio junto.
+"""
+
+
+def limpar_cache_recuperacao() -> None:
+    """Esvazia o cache do índice da recuperação, para os testes.
+
+    Sem isto, turnos de testes diferentes no mesmo processo reaproveitariam o
+    índice do primeiro, e o teste que conta as chamadas de embedding contaria
+    o turno errado. Produção nunca chama isto: lá o cache vive enquanto o
+    processo.
+    """
+    _INDICES.clear()
+
 
 DIRETORIO_CORPUS_PADRAO = Path(__file__).resolve().parent.parent.parent / "corpus"
 """O Corpus versionado de onde o índice é montado: a fonte, nunca um artefato."""
@@ -64,8 +89,10 @@ def criar_no_recuperar(
 
     O cliente é o mesmo da geração: ele carrega o embedding junto, e por isso
     a recuperação entra sem parâmetro novo no grafo. O índice é montado na
-    primeira vez e guardado no fecho do nó, para que o grafo continue
-    autossuficiente — montado da fonte versionada, nunca de artefato em disco.
+    primeira vez e guardado no cache do módulo por (diretório, modelo de
+    embedding) — e não no fecho do nó, que morreria com o grafo remontado a
+    cada turno — para que o grafo continue autossuficiente: montado da fonte
+    versionada, nunca de artefato em disco, e embutido uma vez por processo.
 
     Quando a recuperação falha — índice que não monta, embedding que não
     responde — o nó degrada para contexto vazio em vez de derrubar o turno:
@@ -73,14 +100,13 @@ def criar_no_recuperar(
     `responder`, com o texto determinístico do grafo.
     """
 
-    guarda: dict[str, Any] = {}
-
     def recuperar(estado: EstadoTurno) -> dict[str, Any]:
         try:
-            indice = guarda.get("indice")
+            chave = (str(diretorio), cliente.modelo_embedding)
+            indice = _INDICES.get(chave)
             if indice is None:
                 indice = montar_indice(diretorio, cliente)
-                guarda["indice"] = indice
+                _INDICES[chave] = indice
             (vetor_consulta,) = cliente.embutir([estado["mensagem"]])
             trechos = buscar(indice, vetor_consulta, k=K_PADRAO)
         except Exception as exc:
