@@ -206,9 +206,9 @@ EXEMPLO_DE_ENCAMINHAMENTO = (
     "respondida de ponta a ponta. É o único texto de resposta ditado neste prompt; "
     "fora dele, escreva com as suas palavras.\n"
     "Aluno: Vocês oferecem curso de inglês nas férias? Queria me inscrever.\n"
-    "S.A.U.: Que bom que você quer aproveitar as férias para estudar! Isso está "
+    "S.A.U.: Isso está "
     "fora do que eu oriento — eu acompanho o processo de estágio. Procure a "
-    "Coordenação de Estágios, que ela te diz o que está disponível e como se inscrever."
+    "Coordenação de Estágios."
 )
 """O turno completo de fora de escopo que mostra a forma do Encaminhamento.
 

@@ -35,8 +35,8 @@ from sau.inference.ollama import ClienteOllama
 logger = logging.getLogger("sau.graph.graph")
 
 TEXTO_ENCAMINHAMENTO = (
-    "Não tenho esse dado aqui, e não quero te passar nada pela metade. "
-    "Procure a Coordenação de Estágios, que ela confirma para você."
+    "Erro no servidor "
+    "Procure a Coordenação de Estágios."
 )
 """O Encaminhamento determinístico: o que o Aluno lê quando não há material.
 
