@@ -108,8 +108,14 @@ def test_extracao_nao_normaliza_o_titulo() -> None:
     assert citacoes == ["Prazo de entrega do relatório de atividades"]
 
 
+@pytest.mark.skip(reason="suspensa na #40: sem `.md` no corpus; a #38 reconstrói a bateria")
 def test_todo_titulo_do_corpus_e_unico_e_resolve() -> None:
-    """A invariante que permite a correspondência exata, lida do Corpus versionado."""
+    """A invariante que permite a correspondência exata, lida do Corpus versionado.
+
+    Suspensa na #40 (ADR-0011): media os títulos dos `.md` sintéticos, que
+    saíram do `corpus/` — a base passou a ser o PDF do Manual. A #38
+    reconstrói a bateria sobre o Manual e reativa esta invariante lá.
+    """
     titulos, documentos = titulos_do_corpus(_RAIZ / "corpus")
     assert len(titulos) >= 13
     assert len(set(titulos)) == len(titulos)

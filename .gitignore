@@ -39,10 +39,12 @@ outputs/*
 # Rascunho temporário de agente
 .scratch/
 
-# Manual de Estágio Obrigatório do Polo 2026/2 (issue #38).
-#
-# O PDF é a base da bateria nova, mas fica só na máquina: o versionamento dele é
-# decisão da #40, não desta issue. Enquanto isso, ele fica ignorado (seja na
-# raiz ou em corpus/) para não entrar no commit por engano.
+# Manual de Estágio Obrigatório do Polo (issue #40, ADR-0011 / issue #38).
+# O PDF nunca entra no git: ele é colocado à mão em `corpus/` (ver
+# `corpus/README.md`) e chega ao container por bind mount. Só o README e o
+# `.gitkeep` são versionados. O índice Chroma do host também fica de fora: em
+# container ele vive no volume nomeado, e no host é diretório local.
+corpus/*.pdf
 /manual_estagio.pdf
 /corpus/manual_estagio.pdf
+/manual-chroma/

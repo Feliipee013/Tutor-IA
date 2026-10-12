@@ -5,6 +5,14 @@ partir das seções do Corpus, que o módulo de recuperação guarda o índice q
 montou e o expõe — e a exposição devolve exatamente as seções indexadas —, e
 que nada é persistido em disco.
 
+Justificativa do ajuste (issue #40, ADR-0011): o `corpus/` do repositório não
+tem mais `.md` — a base passou a ser o PDF do Manual, e a #40 removeu os
+sintéticos. Estes testes copiavam aquele diretório; agora cada teste escreve
+a sua fixture mínima em `tmp_path`, e o contrato do `retrieve.py` segue
+provado sem depender do material versionado. A persistência nova mora em
+`sau/manual/indice.py` e é provada em `tests/test_manual.py`: este módulo
+continua sem escrever em disco, e os dois testes finais seguem valendo.
+
 Nenhum teste deste arquivo fala com o Ollama, e nenhum grava em `outputs/`:
 o embedding é falso, e as fixtures de arquivo moram em `tmp_path`. O último
 teste confere o outro lado da mesma regra: se algum teste escrevesse em
@@ -44,12 +52,21 @@ def _cliente_falso(dimensoes: int = 3) -> ClienteEmbedding:
 
 
 def _copiar_corpus(destino: Path) -> Path:
-    origem = _RAIZ / "corpus"
+    """Escreve uma fixture mínima de Corpus em `tmp_path`, sem ler o repositório."""
     corpus = destino / "corpus"
     corpus.mkdir()
-    for documento in origem.glob("*.md"):
-        conteudo = documento.read_text(encoding="utf-8")
-        (corpus / documento.name).write_text(conteudo, encoding="utf-8")
+    (corpus / "prazos.md").write_text(
+        "## Prazo de entrega do relatório de atividades\n"
+        "O relatório sai até a segunda sexta-feira.\n"
+        "## Prazo de devolução do Termo assinado pela Empresa\n"
+        "A Empresa devolve o Termo assinado em dias úteis.\n",
+        encoding="utf-8",
+    )
+    (corpus / "seguro-de-acidentes-pessoais.md").write_text(
+        "## Número de protocolo na assinatura do Termo\n"
+        "O protocolo é conferido na assinatura.\n",
+        encoding="utf-8",
+    )
     return corpus
 
 
@@ -61,12 +78,10 @@ def test_indice_monta_das_secoes_do_corpus(tmp_path: Path) -> None:
 
     indice = montar_indice(corpus, _cliente_falso())
 
-    assert len(indice.secoes) == 14
-    assert len(indice.vetores) == 14
+    assert len(indice.secoes) == 3
+    assert len(indice.vetores) == 3
     assert {s.documento for s in indice.secoes} == {
         "prazos.md",
-        "documentacao-de-estagio.md",
-        "termo-de-compromisso.md",
         "seguro-de-acidentes-pessoais.md",
     }
 
@@ -131,6 +146,27 @@ def test_corpus_vazio_nao_monta_indice(tmp_path: Path) -> None:
     vazio.mkdir()
     with pytest.raises(ValueError, match="Nenhuma seção"):
         montar_indice(vazio, _cliente_falso())
+
+
+def test_readme_do_corpus_nunca_e_material(tmp_path: Path) -> None:
+    """O `README.md` do `corpus/` não vira Fonte: produção degrada para desligada.
+
+    Regressão da #45: com os sintéticos removidos na #40, os `##` do README
+    casavam com `ler_secoes_corpus` e virariam Fonte citável em produção.
+    """
+    from sau.rag.retrieve import carregar_corpus
+
+    corpus = _copiar_corpus(tmp_path)
+    (corpus / "README.md").write_text(
+        "## Qual arquivo colocar aqui\nCorpo.\n## Limitação conhecida\nCorpo.\n",
+        encoding="utf-8",
+    )
+
+    titulos = [s.titulo for s in carregar_corpus(corpus)]
+
+    assert "Qual arquivo colocar aqui" not in titulos
+    assert "Limitação conhecida" not in titulos
+    assert len(titulos) == 3
 
 
 # --- Nada em disco ---

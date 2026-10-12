@@ -48,7 +48,7 @@ agente Implementar localizar o ponto de impacto sem varrer o repositório inteir
 | `docs/adr/0004-vram-por-maquina.md` | a VRAM é declarada por máquina: o contrato, como descobrir o valor e o que fazer sem GPU dedicada — **issue #7** | sim |
 | `docs/adr/0005-estado-da-conversa.md` | o estado da conversa vive num arquivo, isolado por `chat_id`, com TTL e ordem FIFO por conversa — **issue #9** | sim |
 | `docs/adr/0006-denominador-das-taxas.md` | as duas taxas da 1.1 saem por execução e por pergunta, e as duas são publicadas: o denominador de cada uma, e quando uma Pergunta-teste conta como acerto. Emenda: o veredito é responsabilidade de uma pessoa, pode ser redigido por um agente, e a folha nomeia **quem ratificou** — **issue #13** | sim |
-| `docs/adr/0007-corpus-derivado-do-instrumento.md` | o Corpus tem quatro documentos (três do instrumento + Seguro por emenda), com cobertura de blocos reais do processo. Seguro de Acidentes Pessoais é coberto no documento próprio | sim |
+| `docs/adr/0007-corpus-derivado-do-instrumento.md` | o Corpus tinha quatro documentos (três do instrumento + Seguro por emenda); emenda na #40 aposenta os `.md` sintéticos e a base passa a ser o PDF do Manual ([ADR-0011](./adr/0011-pipeline-de-ocr-com-mascara-de-dados-ilustrativos.md)) | sim |
 | `docs/adr/0008-recuperacao-sem-classificacao-de-intencao.md` | a recuperação entra como **nó único, em todo turno**, sem classificação de intenção nem roteamento; a topologia de três rotas que a 1.1.2 desenhava foi abandonada | sim |
 | `docs/adr/0009-exemplo-de-encaminhamento-na-persona.md` | a persona ganha **um** exemplo de Encaminhamento completo, porque a linha de base mostra o modelo encerrando em 5 tokens. Reverte `10d9c56` e `3400b32` | sim |
 | `docs/sprints/` | plano legível da 1.1 e da 1.2 | sim |
@@ -99,21 +99,22 @@ classificação de intenção e sem aresta condicional
 | `sau/graph/nodes.py` | os nós do grafo. A #8 criou o `responder` e o `montar_prompt`, a costura onde a #10 injeta a persona; a recuperação é o único nó que a 1.2 soma, e o índice dela vive no cache do módulo por (diretório, modelo de embedding) — e não no fecho do nó, que morreria com o grafo remontado a cada turno. Desde a #9 o `montar_prompt` recebe as últimas mensagens do Aluno para que ele não precise repetir a pergunta a cada turno, e desde a #10 ele é o `montar_prompt` de `sau/persona.py`, reexportado aqui: quem monta o prompt mora no módulo da persona, e este só entrega o estado do turno a ele | #8, #9, #10, P4 | sim |
 | `sau/rag/embed.py` | embeddings locais via Ollama e indexação do Corpus. O modelo de embedding é **medido** aqui, com `ollama ps`, contra o orçamento de VRAM do ADR-0003 — não é escolhido antes | #29 | sim |
 | `sau/rag/retrieve.py` | busca os `k` trechos mais próximos, com a Fonte (`buscar`), a matriz de similaridade inspecionável (`similaridades`) e a resolução da Fonte por correspondência exata (`resolver_fonte`). `k` é 3 porque `num_ctx` é 4096 e não é tocado: três trechos curtos é o que cabe antes de a conversa perder contexto. A #29 entregou o mínimo do índice (montar das seções em memória, guardar e expor); a #30 soma a busca | #29, #30 | sim |
+| `sau/manual/` | a base do Manual de Estágio Obrigatório do Polo: `extrair.py` (texto nativo mais OCR em português por imagem, com ampliação das pequenas), `mascara.py` (dados ilustrativos viram marcador neutro, com a exceção do contato da Coordenação), `chunks.py` (um slide por chunk, Fonte título mais página) e `indice.py` (Chroma persistente, coleção dedicada, carga idempotente pelo `sha256` do PDF). A carga roda no boot do `webhook` | #40 | sim |
 
 ## Conteúdo do time
 
 | Caminho | O que é | Ticket | Existe |
 | --- | --- | --- | --- |
 | `perguntas-teste/` | os dois instrumentos de avaliação: a bateria congelada da 1.1 (`perguntas-teste.md`) e a bateria nova 10+20 sobre o Manual de Estágio Obrigatório 2026/2 (`bateria-manual.md`), com o comportamento esperado e a condição de conforme de cada pergunta | #6, #38 | sim |
-| `manual_estagio.pdf` | o Manual de Estágio Obrigatório do Polo 2026/2, na raiz ou em `corpus/`, base da bateria nova. Fica **local e ignorado** pelo git nesta #38; versioná-lo e o pipeline de OCR sobre ele é decisão da #40 | #38, #40 | não |
-| `corpus/` | os **quatro** documentos autorados — os três do instrumento mais o de Seguro, por emenda do ADR-0007 — com os defeitos plantados cada um nomeando o caso que ataca — [ADR-0007](./adr/0007-corpus-derivado-do-instrumento.md) | #29 | sim |
+| `manual_estagio.pdf` | o Manual de Estágio Obrigatório do Polo 2026/2, na raiz ou em `corpus/`, base da bateria nova. Fica **local e ignorado** pelo git; o pipeline de OCR e ingestão no Chroma é da #40 ([ADR-0011](./adr/0011-pipeline-de-ocr-com-mascara-de-dados-ilustrativos.md)) | #38, #40 | não |
+| `corpus/` | o PDF do **Manual de Estágio Obrigatório do Polo 2026/2** (fora do git, ver `corpus/README.md`) mais o README que diz qual arquivo colocar e o que acontece sem ele. Até a #40 eram quatro documentos `.md` sintéticos do instrumento ([ADR-0007](./adr/0007-corpus-derivado-do-instrumento.md)); a #40 os remove e o Manual passa a ser a base — [ADR-0011](./adr/0011-pipeline-de-ocr-com-mascara-de-dados-ilustrativos.md) | #29, #40 | sim |
 | `outputs/` | evidência bruta do harness: as rodadas são rascunho ignorado, as linhas de base entram no repositório. Desde a #13 a mesma exceção preserva os três artefatos da linha de base juntos: a rodada, o julgamento e o JSON das taxas | #12, #13 | sim |
 | `tests/` | suíte `pytest`, com `test_config.py` e `test_prereqs.py` da #4, `test_webhook.py` da #5 (o caminho do turno da #8, o isolamento por Aluno da #9, a sentinela que afasta a persona da conversa, que ele precisa desde que a persona entra em todo prompt na #10, e a fila e o semáforo da #11), `test_graph.py` da #8, `test_state.py` e `test_semaphore.py` da #9 e da #11, `test_ollama.py` e `test_fumaca.py` da #7, `test_persona.py` da #10, `test_harness.py` da #12 e `test_metrics.py` da #13 | #4, #5, #7, #8, #9, #10, #11, #12, #13 | sim |
 
-O `corpus/` é quebrado em unidades de recuperação pela própria equipe: cada
-`##` dentro de um documento responde a uma Pergunta Frequente, então **o trecho
-recuperado é a seção** e o chunking vira uma escolha da equipe, não uma heurística.
-As seções são **curtas de propósito**: `num_ctx` é 4096 e não é tocado
+O `corpus/` guarda o Manual em PDF, e a unidade de recuperação é o slide: um
+chunk por página (título mais corpo mais OCR, sem sobreposição), com Fonte
+citável de título mais página ([ADR-0011](./adr/0011-pipeline-de-ocr-com-mascara-de-dados-ilustrativos.md)).
+Os chunks são curtos de propósito: `num_ctx` é 4096 e não é tocado
 (`sau/inference/ollama.py:34`, `scripts/preparar-host.sh:40`,
 `tests/test_fumaca.py:1029`), e com uma persona de 852 tokens cada trecho
 recuperado custa contexto que a conversa não tem.

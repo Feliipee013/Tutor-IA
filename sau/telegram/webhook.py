@@ -32,6 +32,7 @@ import secrets
 import sys
 import threading
 import time
+from pathlib import Path
 from typing import Any, Callable
 
 import httpx
@@ -42,6 +43,8 @@ from sau.graph.graph import executar_turno
 from sau.graph.state import RegistroDeConversas
 from sau.inference.ollama import ClienteOllama, ErroDeInferencia
 from sau.inference.semaphore import FilaCheiaError, PosicaoNaFila, SemaforoDeInferencia
+from sau.manual.indice import carregar_ou_indexar
+from sau.rag.embed import ClienteEmbedding
 
 logger = logging.getLogger(__name__)
 
@@ -868,6 +871,51 @@ def criar_app(
     return app
 
 
+def inicializar_manual(config: Configuracao) -> None:
+    """Indexa o Manual de Estágio Obrigatório no boot, sem derrubar o canal.
+
+    A carga é idempotente (`sau/manual/indice.py`): reaproveita o índice
+    quando o PDF é o mesmo e re-ingere quando ele muda. Sem o PDF, registra
+    onde colocá-lo e segue sem índice — o canal do Telegram não pode sair do
+    ar por falta do material. Falha no Ollama ou no Chroma vira aviso pelo
+    mesmo motivo: o Aluno continua sendo acusejado.
+    """
+    caminho_pdf = Path(config.manual_pdf_caminho)
+    if not caminho_pdf.is_file():
+        logger.warning(
+            "Manual de Estágio ausente: coloque o PDF em `corpus/` — ver "
+            "`corpus/README.md` (esperado: %s). O serviço segue no ar sem índice.",
+            caminho_pdf,
+        )
+        return
+    try:
+        cliente = ClienteEmbedding(config.ollama_base_url)
+        estado = carregar_ou_indexar(
+            caminho_pdf,
+            Path(config.manual_chroma_caminho),
+            config.manual_colecao,
+            cliente,
+        )
+    except Exception as err:
+        logger.warning(
+            "Manual não indexado e o serviço segue sem índice (%s: %s).",
+            type(err).__name__,
+            err,
+        )
+        return
+    if estado.reaproveitado:
+        logger.info(
+            "Manual pronto: %d chunks reaproveitados do índice guardado.",
+            estado.total_chunks,
+        )
+    else:
+        logger.info(
+            "Manual pronto: %d chunks indexados do PDF %s.",
+            estado.total_chunks,
+            caminho_pdf.name,
+        )
+
+
 def main() -> None:
     """Sobe o servidor do webhook do Telegram."""
     # `configurar_logging` mora no entrypoint do serviço do bot porque foi ele
@@ -938,6 +986,8 @@ def main() -> None:
         "O Telegram só entrega em 443, 80, 88 e 8443, então o túnel precisa ser HTTPS."
     )
     logger.info("=" * 60)
+
+    inicializar_manual(config)
 
     # 0.0.0.0 porque o serviço roda em container, e é o bind que o torna
     # alcançável de fora da máquina que o do compose.

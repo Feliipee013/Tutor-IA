@@ -68,8 +68,14 @@ def test_obter_caso_falha_alto_em_identificador_desconhecido() -> None:
         obter_caso("c9")
 
 
+@pytest.mark.skip(reason="suspenso na #40: sem `.md` no corpus; a #38 reconstrói a bateria")
 def test_todo_caso_citado_no_corpus_corresponde_a_caso_declarado() -> None:
-    """Defeito plantado citando caso que não existe é ruído que ninguém explica depois."""
+    """Defeito plantado citando caso que não existe é ruído que ninguém explica depois.
+
+    Suspenso na #40 (ADR-0011): o `corpus/` não tem mais `.md` sintético — a
+    base passou a ser o PDF do Manual — então não há marcador a conferir. A
+    #38 reconstrói a bateria sobre o Manual e reativa esta invariante lá.
+    """
     declarados = {c.identificador for c in CASOS}
     citados: set[str] = set()
     for documento in (_RAIZ / "corpus").glob("*.md"):

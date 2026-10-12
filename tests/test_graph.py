@@ -30,7 +30,13 @@ from sau.graph.nodes import EstadoTurno, montar_prompt
 from sau.inference.ollama import MOTIVO_PARADA_NO_LIMITE, ClienteOllama, ErroDeInferencia
 from sau.persona import PERSONA
 from sau.rag.embed import ClienteEmbedding
-from sau.rag.retrieve import TrechoRecuperado, buscar, carregar_corpus, montar_indice
+from sau.rag.retrieve import (
+    Indice,
+    TrechoRecuperado,
+    buscar,
+    carregar_corpus,
+    montar_indice,
+)
 
 _BASE_URL = "http://host.docker.internal:11434"
 _MODELO = "qwen2.5:3b"
@@ -48,7 +54,39 @@ _RESPOSTA = "Esse prazo eu não sei."
 # em similaridade, e a busca devolve os três primeiros do índice em ordem.
 _VETOR_FALSO = [1.0, 0.0]
 
-_CORPUS = Path(__file__).resolve().parent.parent / "corpus"
+_CORPUS_FIXTURE_PRAZOS = """\
+## Prazo de entrega do relatório de atividades
+
+O relatório de atividades do Estágio é entregue até a segunda sexta-feira.
+
+## Prazo de devolução do Termo assinado pela Empresa
+
+A Empresa devolve o Termo de Compromisso de Estágio assinado em dias úteis.
+"""
+
+
+@pytest.fixture
+def diretorio_do_corpus(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Fixture mínima de Corpus e redirecionamento do caminho padrão do grafo.
+
+    Justificativa (issue #40, ADR-0011): o `corpus/` do repositório não tem
+    mais `.md` — a base passou a ser o PDF do Manual — e o grafo continua
+    lendo `.md` até a #36 religar o turno na base nova. Estes testes provam a
+    mecânica do grafo, não o material: o conteúdo vem desta fixture, e o
+    caminho padrão do módulo é redirecionado para ela. A #38 reconstrói a
+    bateria sobre o Manual.
+    """
+    diretorio = tmp_path / "corpus"
+    diretorio.mkdir()
+    (diretorio / "prazos.md").write_text(_CORPUS_FIXTURE_PRAZOS, encoding="utf-8")
+
+    montar_original = montar_indice
+
+    def montar_na_fixture(diretorio_alvo: Path, cliente: ClienteOllama) -> Indice:
+        return montar_original(diretorio, cliente)
+
+    monkeypatch.setattr("sau.graph.nodes.montar_indice", montar_na_fixture)
+    return diretorio
 
 LOGGER_GRAFO = "sau.graph.graph"
 LOGGER_NOS = "sau.graph.nodes"
@@ -127,9 +165,9 @@ def _cliente_embed_falso() -> ClienteEmbedding:
     )
 
 
-def _contexto_esperado() -> list[TrechoRecuperado]:
+def _contexto_esperado(diretorio: Path) -> list[TrechoRecuperado]:
     """Os 3 trechos que a recuperação encontra com o vetor falso, na ordem do índice."""
-    indice = montar_indice(_CORPUS, _cliente_embed_falso())
+    indice = montar_indice(diretorio, _cliente_embed_falso())
     return buscar(indice, list(_VETOR_FALSO))
 
 
@@ -196,7 +234,9 @@ def test_assinatura_do_turno_e_do_grafo_nao_muda() -> None:
     assert list(inspect.signature(construir_grafo).parameters) == ["cliente"]
 
 
-def test_turno_chama_o_modelo_uma_vez_so(fazer_cliente: FabricaCliente) -> None:
+def test_turno_chama_o_modelo_uma_vez_so(
+    fazer_cliente: FabricaCliente, diretorio_do_corpus: Path
+) -> None:
     """Um caminho só na topologia e uma geração só na prática.
 
     A topologia do teste anterior é a estrutura; esta é o comportamento. Uma
@@ -213,7 +253,9 @@ def test_turno_chama_o_modelo_uma_vez_so(fazer_cliente: FabricaCliente) -> None:
     assert corpos[0]["stream"] is False
 
 
-def test_turno_embute_o_corpus_e_a_consulta(fazer_cliente: FabricaCliente) -> None:
+def test_turno_embute_o_corpus_e_a_consulta(
+    fazer_cliente: FabricaCliente, diretorio_do_corpus: Path
+) -> None:
     """A recuperação embute as seções do índice e a pergunta do Aluno.
 
     O índice mora no cache do módulo, e não no fecho do nó que morre com o
@@ -234,11 +276,13 @@ def test_turno_embute_o_corpus_e_a_consulta(fazer_cliente: FabricaCliente) -> No
     executar_turno(fazer_cliente(handler), _MENSAGEM)
 
     assert rotas == ["/api/embed", "/api/embed"]
-    assert len(corpos[0]) == len(carregar_corpus(_CORPUS))
+    assert len(corpos[0]) == len(carregar_corpus(diretorio_do_corpus))
     assert corpos[1] == [_MENSAGEM]
 
 
-def test_o_indice_e_reaproveitado_entre_turnos(fazer_cliente: FabricaCliente) -> None:
+def test_o_indice_e_reaproveitado_entre_turnos(
+    fazer_cliente: FabricaCliente, diretorio_do_corpus: Path
+) -> None:
     """O segundo turno embute só a pergunta: o Corpus já está no cache.
 
     É o que "montado na primeira vez" compra em produção, onde o `webhook`
@@ -259,7 +303,7 @@ def test_o_indice_e_reaproveitado_entre_turnos(fazer_cliente: FabricaCliente) ->
     executar_turno(cliente, _MENSAGEM)
 
     assert len(corpos) == 3
-    assert len(corpos[0]) == len(carregar_corpus(_CORPUS))
+    assert len(corpos[0]) == len(carregar_corpus(diretorio_do_corpus))
     assert corpos[1] == [_MENSAGEM]
     assert corpos[2] == [_MENSAGEM]
 
@@ -267,11 +311,15 @@ def test_o_indice_e_reaproveitado_entre_turnos(fazer_cliente: FabricaCliente) ->
 # --- O que o grafo devolve ---
 
 
-def test_turno_devolve_o_texto_do_modelo(fazer_cliente: FabricaCliente) -> None:
+def test_turno_devolve_o_texto_do_modelo(
+    fazer_cliente: FabricaCliente, diretorio_do_corpus: Path
+) -> None:
     assert executar_turno(fazer_cliente(_responde(_RESPOSTA)), _MENSAGEM) == _RESPOSTA
 
 
-def test_mensagem_do_aluno_chega_ao_modelo_verbatim(fazer_cliente: FabricaCliente) -> None:
+def test_mensagem_do_aluno_chega_ao_modelo_verbatim(
+    fazer_cliente: FabricaCliente, diretorio_do_corpus: Path
+) -> None:
     """A mensagem do Aluno chega ao modelo como ele a escreveu.
 
     Sem esta afirmação, um grafo que mandasse o prompt fixo e ignorasse a
@@ -290,7 +338,7 @@ def test_mensagem_do_aluno_chega_ao_modelo_verbatim(fazer_cliente: FabricaClient
 
 
 def test_o_prompt_que_chega_ao_modelo_e_o_montar_prompt(
-    fazer_cliente: FabricaCliente,
+    fazer_cliente: FabricaCliente, diretorio_do_corpus: Path
 ) -> None:
     """`montar_prompt` é o caminho único do prompt até o modelo.
 
@@ -307,14 +355,16 @@ def test_o_prompt_que_chega_ao_modelo_e_o_montar_prompt(
     três primeiros trechos do índice, na mesma ordem em que `buscar` devolve.
     """
     prompts: list[str] = []
-    contexto = _contexto_esperado()
+    contexto = _contexto_esperado(diretorio_do_corpus)
 
     executar_turno(fazer_cliente(_espelhando(prompts, "prompt")), _MENSAGEM)
 
     assert prompts == [montar_prompt(_MENSAGEM, [], contexto)]
 
 
-def test_os_titulos_recuperados_chegam_ao_prompt(fazer_cliente: FabricaCliente) -> None:
+def test_os_titulos_recuperados_chegam_ao_prompt(
+    fazer_cliente: FabricaCliente, diretorio_do_corpus: Path
+) -> None:
     """Cada Fonte do turno está no prompt que o modelo recebeu, pelo título.
 
     Sem esta afirmação, um grafo que recuperasse e não entregasse passaria por
@@ -327,7 +377,7 @@ def test_os_titulos_recuperados_chegam_ao_prompt(fazer_cliente: FabricaCliente) 
     executar_turno(fazer_cliente(_espelhando(prompts, "prompt")), _MENSAGEM)
 
     assert len(prompts) == 1
-    for trecho in _contexto_esperado():
+    for trecho in _contexto_esperado(diretorio_do_corpus):
         assert trecho.titulo in prompts[0], f"a Fonte {trecho.titulo!r} não chegou ao modelo"
         assert trecho.texto in prompts[0]
 
@@ -350,7 +400,7 @@ def test_montar_prompt_carrega_a_mensagem_e_mais_nada(fazer_cliente: FabricaClie
 
 
 def test_o_grafo_entra_somente_com_a_mensagem_e_devolve_os_quatro_campos(
-    fazer_cliente: FabricaCliente,
+    fazer_cliente: FabricaCliente, diretorio_do_corpus: Path
 ) -> None:
     """O grafo entra com a mensagem e devolve mensagem, material, Fontes e resposta.
 
@@ -362,7 +412,7 @@ def test_o_grafo_entra_somente_com_a_mensagem_e_devolve_os_quatro_campos(
     `from`, não o estado.
     """
     grafo = construir_grafo(fazer_cliente(_responde(_RESPOSTA)))
-    contexto = _contexto_esperado()
+    contexto = _contexto_esperado(diretorio_do_corpus)
 
     entrada: EstadoTurno = {"mensagem": _MENSAGEM}
     estado = grafo.invoke(entrada)
@@ -376,7 +426,7 @@ def test_o_grafo_entra_somente_com_a_mensagem_e_devolve_os_quatro_campos(
 
 
 def test_as_fontes_resolvem_por_correspondencia_exata_no_corpus(
-    fazer_cliente: FabricaCliente,
+    fazer_cliente: FabricaCliente, diretorio_do_corpus: Path
 ) -> None:
     """Toda Fonte do turno é exatamente um título do Corpus, sem parsear nada.
 
@@ -389,7 +439,7 @@ def test_as_fontes_resolvem_por_correspondencia_exata_no_corpus(
     entrada: EstadoTurno = {"mensagem": _MENSAGEM}
     estado = grafo.invoke(entrada)
 
-    titulos = {secao.titulo for secao in carregar_corpus(_CORPUS)}
+    titulos = {secao.titulo for secao in carregar_corpus(diretorio_do_corpus)}
     assert estado["fontes"]
     for fonte in estado["fontes"]:
         assert fonte in titulos, f"a Fonte {fonte!r} não é um título do Corpus"
@@ -438,7 +488,7 @@ def test_o_encaminhamento_deterministico_nao_mora_na_persona() -> None:
 
 
 def test_entrada_e_saida_do_grafo_vao_no_log(
-    fazer_cliente: FabricaCliente, caplog: pytest.LogCaptureFixture
+    fazer_cliente: FabricaCliente, diretorio_do_corpus: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     """A mensagem que entra e a resposta que sai estão no log do grafo.
 
@@ -458,7 +508,7 @@ def test_entrada_e_saida_do_grafo_vao_no_log(
 
 
 def test_o_no_registra_o_prompt_que_manda_ao_modelo(
-    fazer_cliente: FabricaCliente, caplog: pytest.LogCaptureFixture
+    fazer_cliente: FabricaCliente, diretorio_do_corpus: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     """O nó registra o prompt que ele monta, que é o registro mais perto do modelo.
 
@@ -503,7 +553,7 @@ def _parada_no_limite(request: httpx.Request) -> httpx.Response:
 
 
 def test_o_no_avisa_quando_a_geracao_para_no_limite(
-    fazer_cliente: FabricaCliente, caplog: pytest.LogCaptureFixture
+    fazer_cliente: FabricaCliente, diretorio_do_corpus: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     """O corte de geração vira `WARNING` no log, e não um turno qualquer.
 
@@ -522,7 +572,7 @@ def test_o_no_avisa_quando_a_geracao_para_no_limite(
 
 
 def test_o_no_nao_avisa_quando_a_geracao_para_normalmente(
-    fazer_cliente: FabricaCliente, caplog: pytest.LogCaptureFixture
+    fazer_cliente: FabricaCliente, diretorio_do_corpus: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     """Só o corte avisa: uma resposta que chegou ao fim é turno sem novidade.
 
@@ -547,7 +597,9 @@ def _avisos_do_no(caplog: pytest.LogCaptureFixture) -> list[str]:
 # --- A falha do modelo sobe do grafo, e é o `webhook` quem a vira mensagem ---
 
 
-def test_erro_de_inferencia_do_ollama_sobe_do_grafo(fazer_cliente: FabricaCliente) -> None:
+def test_erro_de_inferencia_do_ollama_sobe_do_grafo(
+    fazer_cliente: FabricaCliente, diretorio_do_corpus: Path
+) -> None:
     """O grafo não engole a falha da geração.
 
     Quem vira a falha em mensagem para o Aluno é o `webhook`, no seu executor de
