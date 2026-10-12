@@ -12,3 +12,10 @@ outputs/
 .scratch/
 docs/
 tests/
+# O PDF do Manual nunca entra na imagem (issue #40, ADR-0011): ele chega ao
+# container por bind mount (`./corpus:/app/corpus:ro`), e o Dockerfile copia
+# só o README e o `.gitkeep` de `corpus/`. Sem esta linha, o PDF iria no
+# contexto de build mesmo sem ir na imagem.
+corpus/*.pdf
+# Índice Chroma do host nunca entra no build: em container ele é volume nomeado.
+manual-chroma/

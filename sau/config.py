@@ -39,6 +39,9 @@ class Configuracao:
     conversa_ttl_minutos: int
     inferencia_k: int
     inferencia_fila_teto: int
+    manual_pdf_caminho: str = "corpus/manual-estagio-obrigatorio-polo-2026-2.pdf"
+    manual_chroma_caminho: str = "manual-chroma"
+    manual_colecao: str = "manual-estagio-obrigatorio"
     telegram_public_url: str | None = None
     ngrok_api_url: str | None = None
 
@@ -197,6 +200,21 @@ def carregar_configuracao(origem: Mapping[str, str] | None = None) -> Configurac
             "a fila de espera existir."
         )
 
+    # O Manual de Estágio Obrigatório do Polo (issue #40, ADR-0011). O PDF fica
+    # em `corpus/` fora do git (ver `corpus/README.md`), e o índice Chroma
+    # vive no volume nomeado em container ou no diretório local no host.
+    # String vazia do compose cai no padrão, pelo mesmo motivo da VRAM acima.
+    manual_pdf_caminho = (
+        env.get("MANUAL_PDF_CAMINHO", "corpus/manual-estagio-obrigatorio-polo-2026-2.pdf")
+        or "corpus/manual-estagio-obrigatorio-polo-2026-2.pdf"
+    ).strip() or "corpus/manual-estagio-obrigatorio-polo-2026-2.pdf"
+    manual_chroma_caminho = (
+        env.get("MANUAL_CHROMA_CAMINHO", "manual-chroma") or "manual-chroma"
+    ).strip() or "manual-chroma"
+    manual_colecao = (
+        env.get("MANUAL_COLECAO", "manual-estagio-obrigatorio") or "manual-estagio-obrigatorio"
+    ).strip() or "manual-estagio-obrigatorio"
+
     return Configuracao(
         ollama_base_url=ollama_base_url,
         ollama_model=ollama_model,
@@ -214,6 +232,9 @@ def carregar_configuracao(origem: Mapping[str, str] | None = None) -> Configurac
         conversa_ttl_minutos=conversa_ttl_minutos,
         inferencia_k=inferencia_k,
         inferencia_fila_teto=inferencia_fila_teto,
+        manual_pdf_caminho=manual_pdf_caminho,
+        manual_chroma_caminho=manual_chroma_caminho,
+        manual_colecao=manual_colecao,
         telegram_public_url=telegram_public_url,
         ngrok_api_url=ngrok_api_url,
     )

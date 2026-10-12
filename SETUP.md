@@ -380,6 +380,16 @@ sim o `CONVERSA_CAMINHO` — cujo padrão é `conversas.db`, relativo a onde voc
 está. O `.gitignore` cobre `*.db`, então o arquivo não sobe para o Git por
 acidente, mas ele fica ali e some com ele o histórico.
 
+### O Manual de Estágio (issue #40)
+
+O `webhook` indexa o Manual de Estágio Obrigatório do Polo no boot, sozinho:
+subir do zero indexa, subir de novo reaproveita, trocar o PDF re-ingere no
+próximo boot. O arquivo esperado é
+`corpus/manual-estagio-obrigatorio-polo-2026-2.pdf` — como colocar, o que
+acontece sem ele e a limitação conhecida estão em
+[`corpus/README.md`](./corpus/README.md). O PDF nunca entra no git, e o índice
+Chroma vive no volume nomeado `manual-chroma`.
+
 ### Pré-requisitos de host: o Ollama
 
 O compose **não sobe o Ollama**. Ele sobe dois serviços, `bot` e `webhook` (issue

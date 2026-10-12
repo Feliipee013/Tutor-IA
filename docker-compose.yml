@@ -68,8 +68,17 @@ services:
       # tem inferência para limitar nem fila para fechar.
       - INFERENCIA_K=${INFERENCIA_K:-2}
       - INFERENCIA_FILA_TETO=${INFERENCIA_FILA_TETO:-10}
+      # O Manual de Estágio Obrigatório do Polo (issue #40, ADR-0011): o
+      # `webhook` indexa o PDF no boot porque é quem roda o turno. O índice
+      # Chroma vive no volume nomeado e o PDF chega por bind mount, ambos só
+      # neste serviço porque o `bot` não consulta o Manual.
+      - MANUAL_PDF_CAMINHO=/app/corpus/manual-estagio-obrigatorio-polo-2026-2.pdf
+      - MANUAL_CHROMA_CAMINHO=/var/lib/sau/manual-chroma
+      - MANUAL_COLECAO=${MANUAL_COLECAO:-manual-estagio-obrigatorio}
     volumes:
       - conversas:/var/lib/sau
+      - manual-chroma:/var/lib/sau/manual-chroma
+      - ./corpus:/app/corpus:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
@@ -77,3 +86,6 @@ volumes:
   # Nomeado, e não um bind de diretório do repositório: o arquivo do SQLite fica
   # sob controle do Docker, não entre os arquivos que o git enxerga.
   conversas:
+  # O índice vetorial do Manual (issue #40): sobrevive ao `down` como o
+  # histórico, e é re-ingerido sozinho quando o PDF muda.
+  manual-chroma:

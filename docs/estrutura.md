@@ -99,20 +99,21 @@ classificação de intenção e sem aresta condicional
 | `sau/graph/nodes.py` | os nós do grafo. A #8 criou o `responder` e o `montar_prompt`, a costura onde a #10 injeta a persona; a recuperação é o único nó que a 1.2 soma, e o índice dela vive no cache do módulo por (diretório, modelo de embedding) — e não no fecho do nó, que morreria com o grafo remontado a cada turno. Desde a #9 o `montar_prompt` recebe as últimas mensagens do Aluno para que ele não precise repetir a pergunta a cada turno, e desde a #10 ele é o `montar_prompt` de `sau/persona.py`, reexportado aqui: quem monta o prompt mora no módulo da persona, e este só entrega o estado do turno a ele | #8, #9, #10, P4 | sim |
 | `sau/rag/embed.py` | embeddings locais via Ollama e indexação do Corpus. O modelo de embedding é **medido** aqui, com `ollama ps`, contra o orçamento de VRAM do ADR-0003 — não é escolhido antes | #29 | sim |
 | `sau/rag/retrieve.py` | busca os `k` trechos mais próximos, com a Fonte (`buscar`), a matriz de similaridade inspecionável (`similaridades`) e a resolução da Fonte por correspondência exata (`resolver_fonte`). `k` é 3 porque `num_ctx` é 4096 e não é tocado: três trechos curtos é o que cabe antes de a conversa perder contexto. A #29 entregou o mínimo do índice (montar das seções em memória, guardar e expor); a #30 soma a busca | #29, #30 | sim |
+| `sau/manual/` | a base do Manual de Estágio Obrigatório do Polo: `extrair.py` (texto nativo mais OCR em português por imagem, com ampliação das pequenas), `mascara.py` (dados ilustrativos viram marcador neutro, com a exceção do contato da Coordenação), `chunks.py` (um slide por chunk, Fonte título mais página) e `indice.py` (Chroma persistente, coleção dedicada, carga idempotente pelo `sha256` do PDF). A carga roda no boot do `webhook` | #40 | sim |
 
 ## Conteúdo do time
 
 | Caminho | O que é | Ticket | Existe |
 | --- | --- | --- | --- |
 | `perguntas-teste/` | as 10 Perguntas-teste, com o comportamento esperado de cada uma | #6 | sim |
-| `corpus/` | os **quatro** documentos autorados — os três do instrumento mais o de Seguro, por emenda do ADR-0007 — com os defeitos plantados cada um nomeando o caso que ataca — [ADR-0007](./adr/0007-corpus-derivado-do-instrumento.md) | #29 | sim |
+| `corpus/` | o PDF do **Manual de Estágio Obrigatório do Polo 2026/2** (fora do git, ver `corpus/README.md`) mais o README que diz qual arquivo colocar e o que acontece sem ele. Até a #40 eram quatro documentos `.md` sintéticos do instrumento ([ADR-0007](./adr/0007-corpus-derivado-do-instrumento.md)); a #40 os remove e o Manual passa a ser a base — [ADR-0011](./adr/0011-pipeline-de-ocr-com-mascara-de-dados-ilustrativos.md) | #29, #40 | sim |
 | `outputs/` | evidência bruta do harness: as rodadas são rascunho ignorado, as linhas de base entram no repositório. Desde a #13 a mesma exceção preserva os três artefatos da linha de base juntos: a rodada, o julgamento e o JSON das taxas | #12, #13 | sim |
 | `tests/` | suíte `pytest`, com `test_config.py` e `test_prereqs.py` da #4, `test_webhook.py` da #5 (o caminho do turno da #8, o isolamento por Aluno da #9, a sentinela que afasta a persona da conversa, que ele precisa desde que a persona entra em todo prompt na #10, e a fila e o semáforo da #11), `test_graph.py` da #8, `test_state.py` e `test_semaphore.py` da #9 e da #11, `test_ollama.py` e `test_fumaca.py` da #7, `test_persona.py` da #10, `test_harness.py` da #12 e `test_metrics.py` da #13 | #4, #5, #7, #8, #9, #10, #11, #12, #13 | sim |
 
-O `corpus/` é quebrado em unidades de recuperação pela própria equipe: cada
-`##` dentro de um documento responde a uma Pergunta Frequente, então **o trecho
-recuperado é a seção** e o chunking vira uma escolha da equipe, não uma heurística.
-As seções são **curtas de propósito**: `num_ctx` é 4096 e não é tocado
+O `corpus/` guarda o Manual em PDF, e a unidade de recuperação é o slide: um
+chunk por página (título mais corpo mais OCR, sem sobreposição), com Fonte
+citável de título mais página ([ADR-0011](./adr/0011-pipeline-de-ocr-com-mascara-de-dados-ilustrativos.md)).
+Os chunks são curtos de propósito: `num_ctx` é 4096 e não é tocado
 (`sau/inference/ollama.py:34`, `scripts/preparar-host.sh:40`,
 `tests/test_fumaca.py:1029`), e com uma persona de 852 tokens cada trecho
 recuperado custa contexto que a conversa não tem.
