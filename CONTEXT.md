@@ -58,10 +58,44 @@ Entidade que recebe o Aluno durante o Estágio e que contrai o Termo de Compromi
 de Estágio. É contraparte do vínculo, não um contratante genérico.
 _Evite_: empresa parceira, cliente, empregador
 
+**Campo de Estágio**:
+Local, setor ou unidade da Empresa/Concedente onde o Aluno realiza as atividades do
+Estágio. Diferencia-se do Convênio e do Cadastro de Empresa.
+_Evite_: local de trabalho genérico
+
+**Convênio**:
+Instrumento ou etapa que formaliza a viabilidade ou o vínculo entre a Instituição/Polo
+e a Empresa/Concedente para a realização do Estágio, conforme o processo institucional.
+Não é sinônimo de Cadastro de Empresa.
+_Evite_: contrato de estágio, termo de compromisso
+
+**Cadastro de Empresa**:
+Processo de registro da Empresa/Concedente no sistema institucional (Colaborar),
+necessário para viabilizar o vínculo no Fluxo de Estágio. Diferencia-se do Convênio.
+_Evite_: convênio
+
+**Supervisor(a) de Campo**:
+Responsável pela supervisão prática e diária do Aluno no Campo de Estágio, do lado da
+Empresa/Concedente. Atua no campo e valida o que o Aluno entrega durante o Estágio.
+_Evite_: tutor do estágio, gestor
+
+**Supervisor(a) Acadêmico(a)**:
+Responsável pela orientação acadêmica do processo de Estágio, vinculado à Instituição ou ao Polo.
+_Evite_: coordenador, tutor do estágio
+
+**Preceptor(a)**:
+Responsável pela supervisão/orientação em cursos da área da Saúde (Biomedicina,
+Enfermagem, Farmácia, Fisioterapia, Nutrição, Serviço Social), conforme a nomenclatura
+específica de cada curso. Quando aplicável, complementa ou substitui a denominação
+usada pelo curso. A nomenclatura correta pode variar por curso; quando incerta, não
+se inventa — faz-se o Encaminhamento.
+_Evite_: supervisor genérico
+
 **Supervisor(a) de Estágio**:
-Responsável pela supervisão do Aluno no campo, do lado da Empresa. É quem valida o
-que o Aluno entrega durante o Estágio.
-_Evite_: tutor do estágio, gestor, preceptor
+Termo guarda-chuva para os papéis de supervisão (Supervisor(a) de Campo, Supervisor(a)
+Acadêmico(a) e, quando couber, Preceptor(a)). O S.A.U. distingue esses papéis por
+curso sem ambiguidade quando o material permite; caso contrário, não inventa.
+_Evite_: uso genérico quando o material especifica o papel correto
 
 **Termo de Compromisso de Estágio**:
 Documento base do vínculo entre o Aluno, a Instituição e a Empresa. É ele que
@@ -78,7 +112,30 @@ _Evite_: convênio, TCE, contrato de estágio obrigatório
 **Instituição**:
 A universidade que mantém o curso e a cujo processo de Estágio o Aluno está vinculado.
 É ela que assina o Termo de Compromisso de Estágio com a Empresa.
-_Evite_: faculdade, centro, polo
+_Evite_: faculdade, centro
+
+**Polo**:
+Unidade da Instituição (universidade) à qual o Aluno está vinculado e por meio da qual
+o processo de Estágio é conduzido. Quando o material distingue Polo de Instituição, o
+S.A.U. faz essa distinção; quando não distingue, não inventa.
+_Evite_: campus, filial
+
+**Colaborar**:
+Plataforma/sistema institucional utilizado no processo de Estágio (por exemplo, para o
+Cadastro de Empresa e acompanhamento das etapas). Só é citado quando consta no material
+institucional.
+_Evite_: sistema genérico
+
+**AVA**:
+Ambiente Virtual de Aprendizagem utilizado no contexto do processo de Estágio, quando
+aplicável ao fluxo institucional. Só é citado quando consta no material.
+_Evite_: plataforma genérica
+
+**Time de Estágios**:
+Equipe responsável pelo acompanhamento e apoio ao processo de Estágio. Pode apoiar a
+Coordenação de Estágios; não substitui a Coordenação de Estágios como destino de
+Encaminhamento, salvo se o material institucional definir explicitamente outro destino.
+_Evite_: setor genérico
 
 **Seguro de Acidentes Pessoais**:
 Cobertura exigida para o Aluno durante o Estágio, com apólice e comprovante
