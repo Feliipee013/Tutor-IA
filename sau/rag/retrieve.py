@@ -71,9 +71,17 @@ def ler_secoes_corpus(caminho: Path) -> list[Secao]:
 
 
 def carregar_corpus(diretorio: Path) -> list[Secao]:
-    """Lê os documentos `*.md` do diretório, em ordem de nome, e devolve as seções."""
+    """Lê os documentos `*.md` do diretório, em ordem de nome, e devolve as seções.
+
+    O `README.md` nunca é material: desde a #40 a base é o PDF do Manual
+    (ADR-0011) e o `corpus/` não tem mais `.md` sintético. Sem este filtro,
+    os títulos `##` do README virariam Fonte citável em produção — que agora
+    degrada para recuperação desligada até a #36 religar o turno no Chroma.
+    """
     secoes: list[Secao] = []
     for caminho in sorted(diretorio.glob("*.md")):
+        if caminho.name.upper() == "README.MD":
+            continue
         secoes.extend(ler_secoes_corpus(caminho))
     return secoes
 

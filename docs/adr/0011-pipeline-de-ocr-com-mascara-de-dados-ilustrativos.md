@@ -17,3 +17,29 @@ O Manual de Estágio Obrigatório do Polo (PDF) é ingerido com pipeline que com
 - Garante que números e nomes de captura não sejam citados como fato, mesmo com Fonte.
 - Preserva a capacidade de responder com trechos procedimentais e normativos extraídos de imagens.
 - Mantém a rastreabilidade (Fonte + página) para toda afirmação baseada no manual.
+
+## Emenda: PDF externo fora do git (decisão de equipe na #40)
+
+O PDF do Manual é material institucional e não se sabe se pode ser exposto:
+por isso nunca entra no git nem na imagem. O `.gitignore` cobre `corpus/*.pdf`,
+o `Dockerfile` copia só `corpus/README.md` e `.gitkeep`, e o PDF chega ao
+container por bind mount (`./corpus:/app/corpus:ro` no serviço `webhook`,
+ver `corpus/README.md`).
+
+Com isso o aceite “subir o container do zero indexa o manual sem passo manual”
+vale **depois** do PDF colocado: com o arquivo no caminho de
+`MANUAL_PDF_CAMINHO`, o boot indexa (ou reaproveita pelo `sha256`); sem ele,
+o serviço sobe sem índice com o aviso `coloque o PDF em corpus/` e segue no ar.
+
+## Emenda: exceção do contato da Coordenação de Estágios
+
+Telefone e e-mail seguem mascarados por padrão, mas trecho normativo ou de
+Encaminhamento que nomeia a Coordenação **e** indica contato (`contato`,
+`fale conosco`, `canal`) preserva telefone e e-mail — regra de
+`e_contato_da_coordenacao` em `sau/manual/mascara.py`, decidida por chunk em
+`sau/manual/chunks.py` via `preservar_contato`.
+
+O Manual 2026/2 não tem seção assim (só Encaminhamento via chamado no
+ServiceNow, sem telefone nem e-mail), então na prática atual a máscara cobre
+tudo. A exceção existe para o Manual futuro não perder o contato normativo,
+sem inventar contato onde não há.

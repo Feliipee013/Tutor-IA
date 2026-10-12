@@ -56,6 +56,20 @@ marcadores existentes (`c1`, `c2`, `c4`, `c5`, `c5`) ficam como estão. O que
 muda é só a cobertura: o relatório da 1.2 passa a dizer que o Corpus cobre
 os blocos do processo, e a visita técnica vira ampliação, não fundação.
 
+## Emenda: Corpus `.md` aposentado na #40 (base passa a ser o PDF)
+
+Decisão de equipe na #40: os quatro `.md` sintéticos saem do `corpus/` e o
+Manual de Estágio Obrigatório do Polo em PDF vira a base (ADR-0011). O
+`corpus/` passa a guardar só o PDF externo (fora do git), o `README.md` e o
+`.gitkeep`.
+
+O caminho antigo (`sau/rag/retrieve.py` lendo `*.md` via
+`DIRETORIO_CORPUS_PADRAO`) segue existindo até a #36 religar o turno no Chroma,
+mas o `README.md` nunca é material: `carregar_corpus` o ignora, então produção
+degrada para recuperação desligada (Encaminhamento determinístico) em vez de
+citar o README. Fixtures de `.md` em `tests/` provam só a mecânica, não o
+material.
+
 ## Referências
 
 - [`CONTEXT.md`](../../CONTEXT.md) — o escopo que este Corpus deliberadamente não

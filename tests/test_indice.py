@@ -148,6 +148,27 @@ def test_corpus_vazio_nao_monta_indice(tmp_path: Path) -> None:
         montar_indice(vazio, _cliente_falso())
 
 
+def test_readme_do_corpus_nunca_e_material(tmp_path: Path) -> None:
+    """O `README.md` do `corpus/` não vira Fonte: produção degrada para desligada.
+
+    Regressão da #45: com os sintéticos removidos na #40, os `##` do README
+    casavam com `ler_secoes_corpus` e virariam Fonte citável em produção.
+    """
+    from sau.rag.retrieve import carregar_corpus
+
+    corpus = _copiar_corpus(tmp_path)
+    (corpus / "README.md").write_text(
+        "## Qual arquivo colocar aqui\nCorpo.\n## Limitação conhecida\nCorpo.\n",
+        encoding="utf-8",
+    )
+
+    titulos = [s.titulo for s in carregar_corpus(corpus)]
+
+    assert "Qual arquivo colocar aqui" not in titulos
+    assert "Limitação conhecida" not in titulos
+    assert len(titulos) == 3
+
+
 # --- Nada em disco ---
 
 
