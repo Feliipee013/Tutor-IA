@@ -38,3 +38,10 @@ outputs/*
 
 # Rascunho temporário de agente
 .scratch/
+
+# Manual de Estágio Obrigatório do Polo 2026/2 (issue #38).
+#
+# O PDF é a base da bateria nova, mas fica só na máquina: o versionamento dele é
+# decisão da #40, não desta issue. Enquanto isso, ele fica ignorado (só o da
+# raiz) para não entrar no commit por engano.
+/manual_estagio.pdf
