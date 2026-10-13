@@ -42,6 +42,8 @@ class Configuracao:
     manual_pdf_caminho: str = "corpus/manual-estagio-obrigatorio-polo-2026-2.pdf"
     manual_chroma_caminho: str = "manual-chroma"
     manual_colecao: str = "manual-estagio-obrigatorio"
+    manual_limiar_similaridade: float = 0.35
+    manual_k_padrao: int = 4
     telegram_public_url: str | None = None
     ngrok_api_url: str | None = None
 
@@ -215,6 +217,35 @@ def carregar_configuracao(origem: Mapping[str, str] | None = None) -> Configurac
         env.get("MANUAL_COLECAO", "manual-estagio-obrigatorio") or "manual-estagio-obrigatorio"
     ).strip() or "manual-estagio-obrigatorio"
 
+    # Limiar mínimo de similaridade de cosseno e quantidade padrão de trechos (issue #36, ADR-0012).
+    limiar_raw = env.get("MANUAL_LIMIAR_SIMILARIDADE", "0.35") or "0.35"
+    try:
+        manual_limiar_similaridade = float(limiar_raw)
+    except ValueError as err:
+        raise ValueError(
+            f"Valor inválido para MANUAL_LIMIAR_SIMILARIDADE: '{limiar_raw}'. "
+            "Esperado número de ponto flutuante (ex: 0.35)."
+        ) from err
+    if not 0.0 <= manual_limiar_similaridade <= 1.0:
+        raise ValueError(
+            f"Valor inválido para MANUAL_LIMIAR_SIMILARIDADE: '{limiar_raw}'. "
+            "Esperado valor entre 0.0 e 1.0."
+        )
+
+    k_raw = env.get("MANUAL_K_PADRAO", "4") or "4"
+    try:
+        manual_k_padrao = int(k_raw)
+    except ValueError as err:
+        raise ValueError(
+            f"Valor inválido para MANUAL_K_PADRAO: '{k_raw}'. "
+            "Esperado número inteiro positivo (ex: 4)."
+        ) from err
+    if manual_k_padrao <= 0:
+        raise ValueError(
+            f"Valor inválido para MANUAL_K_PADRAO: '{k_raw}'. "
+            "Esperado número inteiro positivo (k >= 1)."
+        )
+
     return Configuracao(
         ollama_base_url=ollama_base_url,
         ollama_model=ollama_model,
@@ -235,6 +266,8 @@ def carregar_configuracao(origem: Mapping[str, str] | None = None) -> Configurac
         manual_pdf_caminho=manual_pdf_caminho,
         manual_chroma_caminho=manual_chroma_caminho,
         manual_colecao=manual_colecao,
+        manual_limiar_similaridade=manual_limiar_similaridade,
+        manual_k_padrao=manual_k_padrao,
         telegram_public_url=telegram_public_url,
         ngrok_api_url=ngrok_api_url,
     )

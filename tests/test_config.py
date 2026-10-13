@@ -221,3 +221,36 @@ def test_configuracao_semaforo_aceita_espaco_em_branco() -> None:
     config = carregar_configuracao({"INFERENCIA_K": " 3 ", "INFERENCIA_FILA_TETO": " 25 "})
     assert config.inferencia_k == 3
     assert config.inferencia_fila_teto == 25
+
+
+# --- Configuração do Manual (issue #40 e #36, ADR-0011, ADR-0012) ---
+
+
+def test_configuracao_manual_valores_padrao() -> None:
+    config = carregar_configuracao({})
+    assert config.manual_limiar_similaridade == 0.35
+    assert config.manual_k_padrao == 4
+    assert config.manual_colecao == "manual-estagio-obrigatorio"
+
+
+def test_configuracao_manual_lido_do_ambiente() -> None:
+    config = carregar_configuracao({
+        "MANUAL_LIMIAR_SIMILARIDADE": "0.42",
+        "MANUAL_K_PADRAO": "5",
+        "MANUAL_COLECAO": "colecao-custom",
+    })
+    assert config.manual_limiar_similaridade == 0.42
+    assert config.manual_k_padrao == 5
+    assert config.manual_colecao == "colecao-custom"
+
+
+@pytest.mark.parametrize("bruto", ["-0.1", "1.1", "abc", ""])
+def test_configuracao_limiar_similaridade_invalido(bruto: str) -> None:
+    with pytest.raises(ValueError, match="Valor inválido para MANUAL_LIMIAR_SIMILARIDADE"):
+        carregar_configuracao({"MANUAL_LIMIAR_SIMILARIDADE": bruto})
+
+
+@pytest.mark.parametrize("bruto", ["0", "-1", "abc", "1.5", ""])
+def test_configuracao_manual_k_invalido(bruto: str) -> None:
+    with pytest.raises(ValueError, match="Valor inválido para MANUAL_K_PADRAO"):
+        carregar_configuracao({"MANUAL_K_PADRAO": bruto})
