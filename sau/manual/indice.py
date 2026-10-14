@@ -26,7 +26,8 @@ from typing import Any, cast
 
 from sau.manual.chunks import montar_chunks
 from sau.manual.extrair import extrair_paginas
-from sau.rag.embed import ProtocoloEmbedding
+from sau.manual.hibrido import fundir_ranque_reciproco, ordenar_lexical, tokenizar
+from sau.rag.embed import ProtocoloEmbedding, cosseno
 
 logger = logging.getLogger("sau.manual.indice")
 
@@ -189,3 +190,60 @@ def buscar_no_indice(
             )
         )
     return trechos
+
+
+def buscar_hibrida_no_indice(
+    diretorio_chroma: Path,
+    nome_colecao: str,
+    consulta: str,
+    cliente: ProtocoloEmbedding,
+    k: int = K_PADRAO,
+) -> list[TrechoDoManual]:
+    """Devolve até `k` trechos fundindo a via vetorial e a lexical por RRF.
+
+    A via vetorial e a lexical são montadas sobre o índice inteiro, lido de
+    uma vez com `colecao.get`: nenhum artefato novo é escrito em disco, e o
+    índice lexical nasce e morre a cada busca, do próprio Chroma. O RRF
+    decide **quem entra** nos `k` candidatos — a via lexical resgata um chunk
+    que o vetorial sozinho deixaria de fora —, e o cosseno vetorial decide a
+    ordem final e a pontuação exposta. Coleção ausente ou vazia devolve [].
+    """
+    import chromadb
+
+    if k < 1:
+        raise ValueError(f"A busca precisa de ao menos um trecho: k foi {k}.")
+    banco = chromadb.PersistentClient(path=str(diretorio_chroma))
+    if nome_colecao not in {colecao.name for colecao in banco.list_collections()}:
+        return []
+    colecao = banco.get_collection(nome_colecao)
+    total = colecao.count()
+    if total == 0:
+        return []
+    guardado: Any = colecao.get(include=["documents", "metadatas", "embeddings"])
+    documentos = guardado["documents"] or []
+    metadados = guardado["metadatas"] or []
+    vetores_guardados = guardado["embeddings"]
+    if len(documentos) == 0 or vetores_guardados is None:
+        return []
+    vetores = [[float(valor) for valor in vetor] for vetor in vetores_guardados]
+    (vetor_consulta,) = cliente.embutir([consulta])
+    similaridades = [cosseno(vetor_consulta, vetor) for vetor in vetores]
+    vetorial = sorted(
+        range(len(documentos)), key=lambda posicao: similaridades[posicao], reverse=True
+    )
+    lexical = ordenar_lexical(
+        [tokenizar(str(documento)) for documento in documentos],
+        tokenizar(consulta),
+    )
+    candidatos = fundir_ranque_reciproco([vetorial, lexical])[:k]
+    candidatos.sort(key=lambda posicao: similaridades[posicao], reverse=True)
+    return [
+        TrechoDoManual(
+            titulo=str(metadados[posicao]["titulo"]),
+            pagina=int(metadados[posicao]["pagina"]),
+            texto=str(documentos[posicao]),
+            fonte=str(metadados[posicao]["fonte"]),
+            pontuacao=similaridades[posicao],
+        )
+        for posicao in candidatos
+    ]

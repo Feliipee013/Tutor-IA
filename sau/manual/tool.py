@@ -31,7 +31,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from sau.manual.indice import TrechoDoManual, buscar_no_indice
+from sau.manual.indice import TrechoDoManual, buscar_hibrida_no_indice
 from sau.rag.embed import ProtocoloEmbedding
 
 logger = logging.getLogger("sau.manual.tool")
@@ -85,7 +85,7 @@ def buscar_no_manual(
         )
         return []
 
-    trechos_brutos: list[TrechoDoManual] = buscar_no_indice(
+    trechos_brutos: list[TrechoDoManual] = buscar_hibrida_no_indice(
         diretorio_chroma=diretorio_chroma,
         nome_colecao=nome_colecao,
         consulta=consulta_limpa,
