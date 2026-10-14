@@ -1,18 +1,23 @@
 """Grafo LangGraph do turno de resposta do S.A.U.
 
 A recuperação deixou de ser etapa obrigatória e virou ferramenta opcional da
-LLM, conforme o ADR-0010. O grafo tem agora o ciclo de um agente com uma
-ferramenta:
+LLM, conforme o ADR-0010. Desde a #36 o ciclo é dividido em dois papéis, porque
+o modelo pequeno não sustenta decisão e redação num prompt só:
 
-    START → agente → (chamou a ferramenta?) → ferramentas → agente ... → finalizar → END
+    START → roteador → (chamou a ferramenta?) → ferramentas → roteador … → redator → finalizar → END
 
-O nó `agente` leva a conversa ao modelo por `/api/chat` com o schema de
-`buscar_no_manual` declarado. Quando o modelo responde direto — saudação,
-agradecimento, pergunta fora do escopo —, o `finalizar` encerra. Quando ele
-pede a ferramenta, o nó `ferramentas` busca no Manual, devolve o resultado como
-mensagem `tool` e o agente decide de novo. O `finalizar` carrega a guarda
-determinística: ferramenta chamada sem evidência vira o literal de ausência,
-mesmo que o modelo tenha respondido outra coisa.
+O nó `roteador` leva a conversa ao modelo por `/api/chat` com o schema de
+`buscar_no_manual` declarado e a persona enxuta do roteamento. Ele **decide**:
+quando o modelo responde direto — saudação, agradecimento, pergunta fora do
+escopo —, o ciclo não abre; quando pede a ferramenta, o nó `ferramentas` busca
+no Manual, devolve o resultado como mensagem `tool` e o roteador decide de novo.
+O nó `redator` é quem escreve a resposta ao Aluno: leva a persona completa
+**sem declarar `tools`** e recebe os pares de ferramenta do roteador. O
+`finalizar` carrega a guarda determinística: ferramenta chamada sem evidência
+vira o literal de ausência, mesmo que o modelo tenha respondido outra coisa.
+
+Sem `manual`, não há ferramenta nem decisão a tomar: o grafo vira
+`START → redator → finalizar → END`, e o redator escreve direto da persona.
 
 A entrada e a saída do grafo ficam logadas, que é o critério da #8 e o que deixa
 a resposta rastreável quando alguém depura uma conversa. O turno recebe o
@@ -34,12 +39,14 @@ from langgraph.graph.state import CompiledStateGraph
 from sau.graph.nodes import (
     EstadoTurno,
     OpcoesDoManual,
-    criar_no_agente,
     criar_no_ferramentas,
     criar_no_finalizar,
+    criar_no_redator,
+    criar_no_roteador,
     rota_das_ferramentas,
 )
 from sau.graph.nodes import montar_prompt as montar_prompt
+from sau.graph.nodes import montar_prompt_de_roteamento as montar_prompt_de_roteamento
 from sau.graph.state import Mensagem
 from sau.inference.ollama import ClienteOllama
 from sau.manual.tool import LITERAL_NAO_ENCONTREI, esquema_da_ferramenta
@@ -68,7 +75,7 @@ direcionada. Escrever o tipo inteiro aqui é o que permite nomear o retorno de
 def construir_grafo(
     cliente: ClienteOllama, *, manual: OpcoesDoManual | None = None
 ) -> GrafoDoTurno:
-    """Monta e compila o grafo do turno, com o ciclo do agente e a ferramenta.
+    """Monta e compila o grafo do turno: o roteador, as ferramentas e o redator.
 
     O grafo é remontado a cada turno. Parece desperdício e não é: o compilado é
     barato comparado à inferência, e um grafo por turno é o que mantém o cliente
@@ -78,33 +85,40 @@ def construir_grafo(
     conversa entra pela chamada, pelo `historico`, e nunca pelo grafo montado.
 
     `manual` são as opções de consulta ao Manual (onde, quanto e com que corte).
-    Quando é `None`, o agente conversa sem declarar a ferramenta e o ciclo nunca
-    abre — o modo dos testes que medem o prompt sem tocar no índice.
+    Quando é `None`, não há ferramenta a declarar nem decisão a tomar: o grafo
+    vira `START → redator → finalizar → END`, sem o roteador — o modo dos testes
+    que medem o prompt sem tocar no índice.
     """
     construtor = StateGraph(EstadoTurno)
 
     ferramentas = (
         [esquema_da_ferramenta(k_padrao=manual.k_padrao)] if manual is not None else None
     )
-    agente = criar_no_agente(cliente, ferramentas=ferramentas)
-    construtor.add_node(
-        "agente", cast(Any, agente)
-    )  # O `cast` é só de tipo: o nó casa em execução.
+    roteador = criar_no_roteador(cliente, ferramentas=ferramentas)
+    redator = criar_no_redator(cliente)
     finalizar = criar_no_finalizar(texto_ausencia=TEXTO_AUSENCIA)
+
+    construtor.add_node("redator", cast(Any, redator))
     construtor.add_node("finalizar", cast(Any, finalizar))
-    construtor.add_edge(START, "agente")
+    construtor.add_edge("redator", "finalizar")
     construtor.add_edge("finalizar", END)
 
     if manual is not None:
-        construtor.add_node("ferramentas", cast(Any, criar_no_ferramentas(cliente, manual=manual)))
-        construtor.add_edge("ferramentas", "agente")
+        construtor.add_node(
+            "roteador", cast(Any, roteador)
+        )  # O `cast` é só de tipo: o nó casa em execução.
+        construtor.add_node(
+            "ferramentas", cast(Any, criar_no_ferramentas(cliente, manual=manual))
+        )
+        construtor.add_edge(START, "roteador")
+        construtor.add_edge("ferramentas", "roteador")
         construtor.add_conditional_edges(
-            "agente",
+            "roteador",
             rota_das_ferramentas,
-            {"ferramentas": "ferramentas", "finalizar": "finalizar"},
+            {"ferramentas": "ferramentas", "redator": "redator"},
         )
     else:
-        construtor.add_edge("agente", "finalizar")
+        construtor.add_edge(START, "redator")
 
     return construtor.compile()
 
@@ -126,13 +140,23 @@ def executar_turno(
     porque quem chama é o `webhook`, e o vazio porque é o estado de antes da #9.
     `manual` são as opções da ferramenta; sem elas o turno roda sem consulta ao
     Manual.
+
+    A entrada é o prompt do **roteador** quando há Manual — é ele quem abre o
+    turno decidindo se consulta; o `redator` reconstrói o próprio prompt a partir
+    de `mensagem` e `historico`. Sem Manual não há roteador, e a entrada é o
+    prompt do redator.
     """
     grafo = construir_grafo(cliente, manual=manual)
     logger.info("Entrada do grafo: mensagem do Aluno:\n%s", mensagem)
+    prompt = (
+        montar_prompt_de_roteamento(mensagem, historico)
+        if manual is not None
+        else montar_prompt(mensagem, historico)
+    )
     entrada: EstadoTurno = {
         "mensagem": mensagem,
         "historico": list(historico),
-        "mensagens": [{"role": "user", "content": montar_prompt(mensagem, historico)}],
+        "mensagens": [{"role": "user", "content": prompt}],
         "rodadas": 0,
     }
     resultado = grafo.invoke(entrada)

@@ -16,9 +16,9 @@ comida por formatação.
 O transporte do modelo é um `httpx.MockTransport`, o mesmo tipo que
 `test_graph.py` usa. O corpo de `/api/chat` é reescrito aqui em vez de
 importado: cada arquivo de teste declara o contrato que ele precisa, e ninguém
-depende do texto de outro. O turno roda sem `OpcoesDoManual`, então o agente
-conversa sem declarar ferramenta e o prompt que ele recebe é o objeto destes
-testes — a ferramenta tem testes próprios, em `test_graph.py`.
+depende do texto de outro. O turno roda sem `OpcoesDoManual`, então o grafo
+chama só o `redator` e o prompt que ele recebe é o objeto destes testes — a
+ferramenta tem testes próprios, em `test_graph.py`.
 
 O teste do conjunto (`test_o_prompt_tem_exatamente_as_regras_da_issue`) é o
 último a ficar verde por construção: ele afirma as regras todas de uma vez, e
@@ -55,11 +55,12 @@ from sau.persona import (
     ORIENTACAO_DE_FONTE,
     ORIENTACAO_PROCEDURAL,
     PERSONA,
+    PERSONA_DE_ROTEAMENTO,
     REGRAS,
     TOM,
     USAR_HISTORICO,
-    USO_DA_FERRAMENTA,
     montar_prompt,
+    montar_prompt_de_roteamento,
 )
 
 _BASE_URL = "http://host.docker.internal:11434"
@@ -146,7 +147,6 @@ def test_o_prompt_tem_exatamente_as_regras_da_issue() -> None:
         "escopo_de_estagio",
         "tom",
         "orientacao_procedural",
-        "uso_da_ferramenta",
         "nao_inventar",
         "encaminhamento",
         "usar_historico",
@@ -220,23 +220,6 @@ def test_a_regra_de_orientacao_procedural_chega_ao_modelo(
 
     assert ORIENTACAO_PROCEDURAL.instrucao in prompt
     assert prompt.count(ORIENTACAO_PROCEDURAL.instrucao) == 1
-
-
-def test_a_regra_de_uso_da_ferramenta_chega_ao_modelo(
-    fazer_cliente: FabricaCliente,
-) -> None:
-    """A política de quando consultar o Manual está no prompt recebido.
-
-    É esta instrução que diz ao modelo que a ferramenta `buscar_no_manual` é
-    opcional — chamá-la só quando precisar de um fato do processo, responder
-    saudação e cortesia direto, e poder consultar mais de uma vez numa pergunta
-    que cruza assuntos (ADR-0010). Sem ela, o modelo ou consulta sempre, ou
-    nunca consulta; é a política explícita que orienta a decisão.
-    """
-    prompt = _prompt_do_turno(fazer_cliente)
-
-    assert USO_DA_FERRAMENTA.instrucao in prompt
-    assert prompt.count(USO_DA_FERRAMENTA.instrucao) == 1
 
 
 def test_a_regra_de_nao_inventar_chega_ao_modelo(
@@ -575,7 +558,7 @@ def test_nenhuma_resposta_ditada_fora_do_exemplo_declarado(
     assert "Coordenação de Estágios" in EXEMPLO_DE_ENCAMINHAMENTO
 
 
-# --- O grounding: responder só do recuperado, citar a Fonte, Encaminhar sem trecho ---
+# --- O grounding: responder só do material, abrir com "Segundo o material da UNOPAR" ---
 
 
 def test_a_orientacao_de_fonte_chega_ao_modelo(fazer_cliente: FabricaCliente) -> None:
@@ -585,13 +568,73 @@ def test_a_orientacao_de_fonte_chega_ao_modelo(fazer_cliente: FabricaCliente) ->
     menos recusador para de dizer "não sei" e passa a dizer algo vindo do
     próprio conhecimento dele. Quem observa a obediência é a pessoa, lendo o
     output; o que este teste segura é que a ordem chegou — responder só do
-    recuperado, citar a Fonte de toda afirmação factual, e dizer que não tem o
-    dado e Encaminhar quando nenhum trecho sustentar.
+    recuperado, abrir com "Segundo o material da UNOPAR" quando responder do
+    material, e dizer que não encontrou e Encaminhar quando nenhum trecho
+    sustentar. O critério é a abertura declarada, e não a citação da Fonte pelo
+    título: a decisão de consultar saiu do prompt do redator na #36, e com ela
+    a menção a `buscar_no_manual`.
     """
     prompt = _prompt_do_turno(fazer_cliente)
 
     assert ORIENTACAO_DE_FONTE in prompt
     assert prompt.count(ORIENTACAO_DE_FONTE) == 1
+
+
+# --- A persona do roteador: o prompt enxuto que decide se consulta o Manual ---
+
+
+def test_o_prompt_do_roteador_abre_pela_persona_enxuta() -> None:
+    """O prompt do roteador abre pela `PERSONA_DE_ROTEAMENTO`, e não pela do redator.
+
+    A separação da #36 existe para que o roteador não carregue as regras de
+    redação nem a `ORIENTACAO_DE_FONTE`: é o prompt enxuto que faz o modelo
+    pequeno chamar a ferramenta, medido contra a persona inteira no ADR-0010. Um
+    roteador aberto pela `PERSONA` voltaria ao defeito que a medição apontou.
+    """
+    prompt = montar_prompt_de_roteamento(_MENSAGEM)
+
+    assert prompt.startswith(PERSONA_DE_ROTEAMENTO)
+    assert PERSONA not in prompt
+    assert ORIENTACAO_DE_FONTE not in prompt
+    assert EXEMPLO_DE_ENCAMINHAMENTO not in prompt
+
+
+def test_o_prompt_do_roteador_cerca_a_conversa_como_o_do_redator() -> None:
+    """A cerca, a ordem da conversa e o sufixo do roteador são os mesmos do redator.
+
+    É a extração `_montar_com_cerca` que impede os dois prompts de divergirem: o
+    roteador precisa do mesmo contexto cercado para decidir, e o teste de cerca
+    do redator passa a valer para ele. O sufixo `S.A.U.:` continua induzindo onde
+    o modelo começa a gerar.
+    """
+    falas = [
+        Mensagem(papel="aluno", texto="qual o prazo do termo de compromisso?", em=1.0),
+        Mensagem(papel="sau", texto="Antes: a assinatura já saiu?", em=2.0),
+    ]
+
+    prompt = montar_prompt_de_roteamento(_MENSAGEM, falas)
+
+    assert AVISO_CONVERSA in prompt
+    assert prompt.index(INICIO_CONVERSA) > prompt.index(PERSONA_DE_ROTEAMENTO)
+    assert prompt.index("a assinatura já saiu?") > prompt.index(INICIO_CONVERSA)
+    assert prompt.index("a assinatura já saiu?") < prompt.index(_MENSAGEM)
+    assert prompt.index(_MENSAGEM) < prompt.index(FIM_CONVERSA)
+    assert prompt.endswith("S.A.U.:")
+
+
+def test_o_historico_vazio_do_roteador_ganha_o_marcador_de_primeira_mensagem() -> None:
+    """Sem histórico, o roteador recebe o mesmo marcador fixo do redator.
+
+    O roteador decide a partir da mensagem de agora; na estreia, o lugar do
+    histórico tem o mesmo marcador, para que ele leia "primeira mensagem" em vez
+    de "bloco faltando". E a mensagem do turno continua rotulada mesmo sem nada
+    antes dela.
+    """
+    prompt = montar_prompt_de_roteamento(_MENSAGEM)
+
+    assert HISTORICO_VAZIO in prompt
+    assert prompt.splitlines()[-3] == f"Aluno: {_MENSAGEM}"
+    assert prompt.splitlines()[-2] == FIM_CONVERSA
 
 
 def _normalizar(texto: str) -> str:

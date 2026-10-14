@@ -1,28 +1,34 @@
 """Nós do grafo de resposta do turno do S.A.U.
 
 A recuperação deixou de ser etapa obrigatória do turno e virou ferramenta
-opcional da LLM (`buscar_no_manual`), conforme o ADR-0010. O grafo deixa de ter
-um nó `recuperar` que roda em todo turno e passa a ter um ciclo de agente:
+opcional da LLM (`buscar_no_manual`), conforme o ADR-0010. Desde a #36 o ciclo do
+agente é dividido em dois papéis, porque o modelo pequeno não sustenta decisão e
+redação num prompt só:
 
-    agente → (chamou ferramenta?) → ferramentas → agente ... → finalizar
+    roteador → (chamou ferramenta?) → ferramentas → roteador … → redator → finalizar
 
-O nó `agente` leva as mensagens ao modelo por `/api/chat`, com o schema da
-ferramenta declarado em `tools`. Quando o modelo responde direto — saudação,
-agradecimento, pergunta fora do escopo —, o ciclo não abre. Quando ele pede a
-ferramenta, o nó `ferramentas` busca no Manual, devolve o resultado como
-mensagem `tool` e o agente volta a decidir; uma pergunta que cruza assuntos
-pode chamar a ferramenta mais de uma vez.
+O nó `roteador` leva as mensagens ao modelo por `/api/chat`, com o schema da
+ferramenta declarado em `tools`, e a persona enxuta do roteamento
+(`sau.persona.montar_prompt_de_roteamento`). Ele **decide**: quando o modelo
+responde direto — saudação, agradecimento, pergunta fora do escopo —, o ciclo
+não abre; quando pede a ferramenta, o nó `ferramentas` busca no Manual, devolve o
+resultado como mensagem `tool` e o roteador decide de novo.
+
+O nó `redator` é quem escreve a resposta ao Aluno: monta o prompt com a persona
+completa (`sau.persona.montar_prompt`) **sem declarar `tools`** e recebe os pares
+de ferramenta do roteador como mensagens `tool`. Um redator que recebe os trechos
+sem tool calling escreve ancorado e fluente — era a tentativa de o modelo fazer
+tool-call e persona ao mesmo tempo que produzia a resposta quebrada.
 
 O nó `finalizar` carrega a **guarda determinística** da ausência de evidência:
-se o modelo chamou a ferramenta e nada passou pelo limiar, a resposta vira o
+se o roteador chamou a ferramenta e nada passou pelo limiar, a resposta vira o
 literal "não encontrei no material" com Encaminhamento, sem depender de o
-modelo obedecer ao prompt. É a metade em código do critério do ADR-0012, que o
+redator obedecer ao prompt. É a metade em código do critério do ADR-0012, que o
 prompt pede e o grafo garante.
 
-O prompt do turno vem de `sau.persona.montar_prompt`, reexportado aqui para que
-quem importa o caminho do prompt continue resolvendo a partir deste módulo. A
-persona entra como a primeira mensagem `user` da conversa; o histórico e a
-mensagem do Aluno vão dentro dela, com a cerca de sempre.
+Os prompts do turno vêm de `sau.persona`, reexportados aqui para que quem importa
+o caminho do prompt continue resolvendo a partir deste módulo: o do roteador
+(`montar_prompt_de_roteamento`) e o do redator (`montar_prompt`).
 """
 
 from __future__ import annotations
@@ -47,6 +53,7 @@ from sau.manual.tool import (
     formatar_para_o_modelo,
 )
 from sau.persona import montar_prompt as montar_prompt
+from sau.persona import montar_prompt_de_roteamento as montar_prompt_de_roteamento
 
 logger = logging.getLogger("sau.graph.nodes")
 
@@ -90,20 +97,24 @@ class EstadoTurno(TypedDict):
     """O estado de um turno: as mensagens da conversa com o modelo e a resposta.
 
     `mensagem` e `historico` são a entrada do turno — o que veio do Aluno —, e
-    existem aqui para o log e para os testes. O que o ciclo do agente usa de
+    existem aqui para o log e para os testes. O que o ciclo do roteador usa de
     fato é `mensagens`: a lista no formato do `/api/chat`, que começa com a
-    persona mais a conversa, ganha a resposta do modelo, ganha as mensagens
-    `tool` dos resultados e volta ao agente até o modelo responder direto.
+    persona do roteamento mais a conversa, ganha a resposta do modelo, ganha as
+    mensagens `tool` dos resultados e volta ao roteador até o modelo responder
+    direto. O `redator` reconstrói o próprio prompt a partir de `mensagem` e
+    `historico`, então não depende dessa lista: ele só colhe dela os pares de
+    ferramenta.
 
-    `pendentes` são as chamadas de ferramenta que o último `agente` pediu e
+    `pendentes` são as chamadas de ferramenta que o último `roteador` pediu e
     `ferramentas` ainda não executou; é o que a aresta condicional lê para
-    decidir entre voltar ao agente e encerrar. `houve_ferramenta` e
+    decidir entre voltar ao roteador e passar ao redator. `houve_ferramenta` e
     `houve_evidencia` são o que a guarda do `finalizar` lê: chamou a ferramenta
     e nada voltou acima do limiar vira o literal de ausência.
 
-    `resposta` é `NotRequired` porque o estado nasce sem ela e é o `agente` ou
-    o `finalizar` que a preenche. `rodadas` conta quantas vezes o modelo já foi
-    consultado, e é o teto que impede o ciclo infinito.
+    `resposta` é `NotRequired` porque o estado nasce sem ela e é o `redator` que
+    a preenche (o `finalizar` pode trocá-la pelo literal de ausência). `rodadas`
+    conta quantas vezes o roteador já foi consultado, e é o teto que impede o
+    ciclo infinito.
     """
 
     mensagem: str
@@ -117,36 +128,39 @@ class EstadoTurno(TypedDict):
     resposta: NotRequired[str]
 
 
-def criar_no_agente(
+def criar_no_roteador(
     cliente: ClienteOllama,
     *,
     ferramentas: list[dict[str, Any]] | None,
 ) -> Callable[[EstadoTurno], dict[str, Any]]:
-    """Cria o nó `agente`, que leva as mensagens ao modelo.
+    """Cria o nó `roteador`, que decide se consulta o Manual antes de responder.
 
     O cliente é injetado para que o grafo não saiba onde o modelo roda: em
     serviço é o `ClienteOllama` do ADR-0002, e nos testes é o mesmo cliente com
     um transporte falso. `ferramentas` é o schema declarado em `tools`; quando é
-    `None`, o agente conversa sem tool calling e o ciclo nunca abre — o modo dos
-    testes de persona, que medem o prompt e não a ferramenta.
+    `None`, o roteador conversa sem tool calling e o ciclo nunca abre — o modo
+    dos testes de persona, que medem o prompt e não a ferramenta.
 
     A resposta do modelo entra na lista de mensagens como a fala dele: quando é
-    uma chamada de ferramenta, a mensagem carrega `tool_calls` para que o modelo,
-    na rodada seguinte, veja o que ele mesmo pediu e interprete o resultado.
+    uma chamada de ferramenta, a mensagem carrega `tool_calls` para que o
+    roteador, na rodada seguinte, veja o que ele mesmo pediu e interprete o
+    resultado. A decisão sai no log — consultou o Manual ou respondeu sem
+    consultar —, porque é ela o que esta persona foi separada para medir.
     """
 
-    def agente(estado: EstadoTurno) -> dict[str, Any]:
+    def roteador(estado: EstadoTurno) -> dict[str, Any]:
         mensagens = list(estado.get("mensagens", []))
         logger.info("Prompt do turno enviado ao modelo:\n%s", _ultima_mensagem(mensagens))
         resposta: Resposta = cliente.conversar(mensagens, ferramentas=ferramentas)
         mensagens.append(_mensagem_do_assistente(resposta))
-        if resposta.motivo_de_parada == MOTIVO_PARADA_NO_LIMITE:
-            logger.warning(
-                "A geração parou por falta de espaço e saiu cortada: o Aluno "
-                "recebeu uma resposta incompleta, e nenhuma falha foi lançada. "
-                "Motivo informado: %s.",
-                resposta.motivo_de_parada,
+        if resposta.chamadas:
+            logger.info(
+                "Roteador decidiu consultar o Manual: %s.",
+                [chamada.nome for chamada in resposta.chamadas],
             )
+        else:
+            logger.info("Roteador decidiu responder sem consultar o Manual.")
+        _avisar_se_cortado(resposta)
         return {
             "mensagens": mensagens,
             "resposta": resposta.texto,
@@ -154,7 +168,54 @@ def criar_no_agente(
             "rodadas": estado.get("rodadas", 0) + 1,
         }
 
-    return agente
+    return roteador
+
+
+def criar_no_redator(cliente: ClienteOllama) -> Callable[[EstadoTurno], dict[str, Any]]:
+    """Cria o nó `redator`, que escreve a resposta ao Aluno **sem** tool calling.
+
+    O redator reconstrói o próprio prompt a partir de `mensagem` e `historico` —
+    não depende das `mensagens` que o roteador acumulou — e recebe os pares de
+    ferramenta daquele acúmulo como mensagens `tool`. O ponto central da #36 é a
+    ausência de `ferramentas`: `cliente.conversar(mensagens, ferramentas=None)`.
+    Um redator que declarasse `tools` voltaria a tentar tool-call e persona ao
+    mesmo tempo, que é o defeito que a separação veio fechar.
+
+    Quando não há resultado de ferramenta — saudação, resposta direta —, a lista
+    tem só o próprio prompt: não há material a ancorar, e a resposta sai da
+    persona.
+    """
+
+    def redator(estado: EstadoTurno) -> dict[str, Any]:
+        mensagem = estado["mensagem"]
+        historico = estado.get("historico", [])
+        mensagens = [
+            {"role": "user", "content": montar_prompt(mensagem, historico)},
+            *_pares_de_ferramenta(estado.get("mensagens", [])),
+        ]
+        logger.info("Prompt do turno enviado ao modelo:\n%s", _ultima_mensagem(mensagens))
+        resposta: Resposta = cliente.conversar(mensagens, ferramentas=None)
+        _avisar_se_cortado(resposta)
+        return {"resposta": resposta.texto}
+
+    return redator
+
+
+def _pares_de_ferramenta(mensagens: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Extrai o histórico de consulta do roteador: os pares `tool_calls`/`tool`.
+
+    Devolve, na ordem em que foram acumuladas, só as mensagens `assistant` que
+    carregam `tool_calls` e as mensagens `role == "tool"` — o que o roteador
+    consultou e o que a ferramenta respondeu. Os prompts `user` e as mensagens
+    de texto ficam de fora: o redator reconstrói o próprio prompt, e reenviar a
+    conversa inteira duplicaria a persona no corpo da requisição.
+    """
+    pares: list[dict[str, Any]] = []
+    for mensagem in mensagens:
+        papel = mensagem.get("role")
+        if papel == "tool" or (papel == "assistant" and mensagem.get("tool_calls")):
+            pares.append(mensagem)
+    return pares
 
 
 def criar_no_ferramentas(
@@ -162,7 +223,7 @@ def criar_no_ferramentas(
 ) -> Callable[[EstadoTurno], dict[str, Any]]:
     """Cria o nó `ferramentas`, que executa o que o modelo pediu.
 
-    O cliente é o mesmo do agente: ele carrega o embedding junto, e é ele que
+    O cliente é o mesmo do roteador: ele carrega o embedding junto, e é ele que
     `buscar_no_manual` usa para embutir a consulta. O Manual é o índice
     persistente do ADR-0011, acessado pelo diretório e pela coleção das opções.
 
@@ -231,16 +292,16 @@ def criar_no_finalizar(*, texto_ausencia: str) -> Callable[[EstadoTurno], dict[s
 
 
 def rota_das_ferramentas(estado: EstadoTurno) -> str:
-    """A aresta condicional: executar a ferramenta pedida ou encerrar o turno.
+    """A aresta condicional: executar a ferramenta pedida ou passar ao redator.
 
-    Volta ao `agente` enquanto houver chamada pendente e o teto de rodadas não
-    foi atingido. Sem chamada pendente — resposta direta do modelo —, encerra.
-    Ao atingir o teto, encerra com o que o modelo já escreveu em vez de girar
-    para sempre.
+    Vai às `ferramentas` enquanto houver chamada pendente e o teto de rodadas não
+    foi atingido. Sem chamada pendente — resposta direta do roteador —, passa ao
+    `redator`, que é quem escreve a resposta. Ao atingir o teto, também passa ao
+    `redator` em vez de girar para sempre.
     """
     if estado.get("pendentes") and estado.get("rodadas", 0) < LIMITE_DE_RODADAS:
         return "ferramentas"
-    return "finalizar"
+    return "redator"
 
 
 def _executar_chamada_segura(
@@ -273,6 +334,22 @@ def _executar_chamada_segura(
             exc,
         )
         return []
+
+
+def _avisar_se_cortado(resposta: Resposta) -> None:
+    """Registra o aviso quando a geração parou por falta de espaço.
+
+    O corte silencioso é o pior caso: nenhuma falha é lançada e o Aluno recebe
+    uma resposta truncada. Roteador e redator geram pelo mesmo caminho e sofrem
+    o mesmo corte, então o aviso mora aqui, num lugar só.
+    """
+    if resposta.motivo_de_parada == MOTIVO_PARADA_NO_LIMITE:
+        logger.warning(
+            "A geração parou por falta de espaço e saiu cortada: o Aluno "
+            "recebeu uma resposta incompleta, e nenhuma falha foi lançada. "
+            "Motivo informado: %s.",
+            resposta.motivo_de_parada,
+        )
 
 
 def _mensagem_do_assistente(resposta: Resposta) -> dict[str, Any]:

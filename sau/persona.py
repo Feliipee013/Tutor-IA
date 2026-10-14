@@ -1,9 +1,18 @@
-"""A persona do S.A.U.: o prompt versionado, com todas as regras de comportamento.
+"""As personas do S.A.U.: os prompts versionados, com todas as regras de comportamento.
 
 Este módulo é um artefato: quem muda o comportamento do S.A.U. edita o texto
 das regras abaixo, e nada mais no código precisa mudar. As regras moram aqui e
 só aqui — `test_as_regras_moram_so_em_sau_persona` varre o pacote e quebra se
 um texto de regra aparecer em outro arquivo.
+
+São **duas** personas versionadas, e a separação é da #36. O **redator**
+(`PERSONA`) é quem escreve a resposta ao Aluno: leva as regras de comportamento
+e a `ORIENTACAO_DE_FONTE`, e **não** declara `tools` — ele redige a partir do
+material que o roteador trouxe. O **roteador** (`PERSONA_DE_ROTEAMENTO`) é um
+prompt enxuto que só decide se consulta o Manual antes de responder; é ele que
+recebe o schema de `buscar_no_manual` em `tools`. O modelo pequeno não sustenta
+as duas coisas num prompt só: com a persona inteira ele não chamava a
+ferramenta (medido 0/6), e com o prompt enxuto passou a chamar.
 
 O que mora aqui é o *prompt inteiro*, não só as regras. A persona é montada
 neste módulo desde a #10, e o histórico da conversa também entra por aqui desde
@@ -105,18 +114,6 @@ ORIENTACAO_PROCEDURAL = Regra(
     ),
 )
 
-USO_DA_FERRAMENTA = Regra(
-    id="uso_da_ferramenta",
-    titulo="Quando consultar o Manual",
-    instrucao=(
-        "Consulte a ferramenta buscar_no_manual apenas quando precisar de um fato do "
-        "processo de estágio — prazos, documentos, assinaturas, seguro ou cadastro. "
-        "Saudação, despedida, agradecimento e perguntas fora do escopo respondem sem "
-        "consulta. Uma pergunta que cruza assuntos pode exigir mais de uma consulta: "
-        "faça quantas precisar antes de responder."
-    ),
-)
-
 NAO_INVENTAR = Regra(
     id="nao_inventar",
     titulo="Não inventar prazo, documento ou contato",
@@ -168,7 +165,6 @@ REGRAS: tuple[Regra, ...] = (
     ESCOPO_DE_ESTAGIO,
     TOM,
     ORIENTACAO_PROCEDURAL,
-    USO_DA_FERRAMENTA,
     NAO_INVENTAR,
     ENCAMINHAMENTO,
     USAR_HISTORICO,
@@ -199,21 +195,47 @@ no prompt, texto fixo vira a resposta.
 
 ORIENTACAO_DE_FONTE = (
     "Resposta ancorada no Manual\n"
-    "Busque os fatos do processo de estágio na ferramenta buscar_no_manual, que "
-    "devolve trechos do Manual de Estágio Obrigatório. Responda somente a partir "
-    "dos trechos que ela devolver e cite a Fonte de toda afirmação factual pelo "
-    "título, copiado como está no trecho. Quando a ferramenta não devolver "
-    "trecho válido, comece a resposta com \"não encontrei no material\" e "
-    "encerre dizendo ao Aluno que procure a Coordenação de Estágios, sem "
-    "inventar telefone, canal ou prazo."
+    "Os trechos do Manual de Estágio Obrigatório, quando houver, chegam na "
+    "mensagem seguinte, cada um com a sua Fonte. Responda somente a partir deles. "
+    "Quando responder com esse material, comece a resposta dizendo "
+    "\"Segundo o material da UNOPAR\". Quando nenhum trecho responder à pergunta, "
+    "comece a resposta com \"não encontrei no material\" e encerre dizendo ao "
+    "Aluno que procure a Coordenação de Estágios, sem inventar telefone, canal "
+    "ou prazo."
 )
-"""A instrução de grounding: responder só do Manual, citar a Fonte, Encaminhar sem trecho.
+"""A instrução de grounding: responder só do Manual, ancorar a resposta, Encaminhar sem trecho.
 
-Entra em todo prompt, junto das regras, e por isso entra no `sha256_do_prompt`:
-é persona, não topologia. Desde o ADR-0010 o material não acompanha o prompt —
-ele chega como mensagem `tool`, depois de o modelo chamar a ferramenta —, e o
-literal "não encontrei no material" é pedido aqui e garantido pela guarda
-determinística do grafo (`sau/graph/graph.py`), não só pela obediência do modelo.
+Entra em todo prompt do redator, junto das regras, e por isso entra no
+`sha256_do_prompt`: é persona, não topologia. Desde o ADR-0010 o material não
+acompanha o prompt — ele chega como mensagem `tool`, depois de o roteador chamar
+a ferramenta —, e o literal "não encontrei no material" é pedido aqui e
+garantido pela guarda determinística do grafo (`sau/graph/graph.py`), não só
+pela obediência do modelo. O critério de resposta com material é a abertura
+"Segundo o material da UNOPAR", e não a citação da Fonte pelo título: a decisão
+de consultar saiu do prompt do redator na #36, e com ela a menção a
+`buscar_no_manual`.
+"""
+
+PERSONA_DE_ROTEAMENTO: str = (
+    "Você decide se precisa consultar o Manual de Estágio Obrigatório antes de "
+    "responder ao Aluno.\n"
+    "Chame a ferramenta buscar_no_manual quando a mensagem do Aluno pedir um fato "
+    "do processo de estágio — prazos, documentos, assinaturas, seguro, cadastro ou "
+    "entrega —, escrevendo a consulta com as palavras-chave do assunto.\n"
+    "Quando a mensagem for saudação, despedida, agradecimento ou assunto fora do "
+    "processo de estágio, não chame a ferramenta: responda apenas com as palavras "
+    "\"sem busca\"."
+)
+"""A persona do roteador: o prompt enxuto que decide se consulta o Manual.
+
+É a primeira persona **separada** da de redação, e a separação é o que a #36
+mede: com a persona inteira o `qwen2.5:3b` não chamava a ferramenta (0/6), e com
+este prompt enxuto passou a chamar. Ele não leva as regras nem a
+`ORIENTACAO_DE_FONTE` — o roteador não escreve a resposta, só decide se há
+consulta a fazer —, e o único texto de resposta ditado nele é o "sem busca" do
+caminho sem ferramenta, que o redator não lê. Quem declara o schema de
+`buscar_no_manual` em `tools` é o nó do roteador
+(`sau/graph/nodes.criar_no_roteador`), não este texto.
 """
 
 EXEMPLO_DE_ENCAMINHAMENTO = (
@@ -255,16 +277,21 @@ APRESENTACAO_DA_MENSAGEM = "Mensagem atual do Aluno (responda somente a esta):"
 HISTORICO_VAZIO = "(Primeira mensagem do Aluno)"
 
 
-def montar_prompt(
+def _montar_com_cerca(
+    persona: str,
     mensagem: str,
-    historico: Sequence[Mensagem] = (),
+    historico: Sequence[Mensagem],
 ) -> str:
-    """Monta o prompt do turno: persona, histórico e mensagem do Aluno.
+    """A composição comum às duas personas: persona, conversa cercada e sufixo.
 
-    O material não entra mais por aqui: desde o ADR-0010 ele chega ao modelo
-    como mensagem `tool`, depois de ele chamar `buscar_no_manual`. O que o
-    prompt carrega é a persona (com a instrução de usar a ferramenta e citar a
-    Fonte) e a conversa cercada.
+    O prefixo é a persona inteira, e a conversa — histórico e mensagem do Aluno —
+    vem cercada pelos mesmos marcadores nos dois prompts, o do redator e o do
+    roteador. O corte da janela e o rótulo de cada fala também são os mesmos: o
+    roteador precisa do contexto para decidir se consulta o Manual.
+
+    A extração existe para que os dois prompts não divirjam: um roteador com uma
+    cerca própria seria uma segunda definição de "onde a fala do Aluno começa",
+    e o teste de cerca não passaria a valer para ele.
     """
     recentes = list(historico)[-MENSAGENS_NO_PROMPT:]
     if recentes:
@@ -273,7 +300,7 @@ def montar_prompt(
         bloco = f"{HISTORICO_VAZIO}\n\n"
 
     return (
-        f"{PERSONA}\n\n"
+        f"{persona}\n\n"
         f"{AVISO_CONVERSA}\n"
         f"{INICIO_CONVERSA}\n"
         f"{APRESENTACAO_DO_HISTORICO}\n{bloco}"
@@ -281,3 +308,31 @@ def montar_prompt(
         f"{FIM_CONVERSA}\n"
         f"S.A.U.:"  # Indução de prefixo para garantir onde o modelo deve continuar gerando
     )
+
+
+def montar_prompt(
+    mensagem: str,
+    historico: Sequence[Mensagem] = (),
+) -> str:
+    """Monta o prompt do redator: a persona, o histórico e a mensagem do Aluno.
+
+    O material não entra mais por aqui: desde o ADR-0010 ele chega ao modelo
+    como mensagem `tool`. E desde a #36 quem traz esse material é o roteador — o
+    redator não declara ferramenta nenhuma —, e o que o prompt carrega é a
+    persona (com a `ORIENTACAO_DE_FONTE`) e a conversa cercada.
+    """
+    return _montar_com_cerca(PERSONA, mensagem, historico)
+
+
+def montar_prompt_de_roteamento(
+    mensagem: str,
+    historico: Sequence[Mensagem] = (),
+) -> str:
+    """Monta o prompt do roteador: a persona enxuta e a conversa cercada.
+
+    Reusa a mesma cerca, o mesmo corte de janela e o mesmo sufixo `S.A.U.:` do
+    `montar_prompt` — a única diferença é a persona que abre o prompt. O roteador
+    decide o que fazer com a mensagem; ele não recebe as regras de redação nem a
+    `ORIENTACAO_DE_FONTE`.
+    """
+    return _montar_com_cerca(PERSONA_DE_ROTEAMENTO, mensagem, historico)

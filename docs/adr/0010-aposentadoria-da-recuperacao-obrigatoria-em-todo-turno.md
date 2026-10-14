@@ -40,3 +40,41 @@ implementação fixou:
   opções do Manual (onde, quanto e com que corte) chegam de `sau/config.py` —
   `MANUAL_LIMIAR_SIMILARIDADE` (padrão 0,35) e `MANUAL_K_PADRAO` (padrão 4) —,
   fonte única também para o harness.
+
+## Emenda: roteador e redator na #36
+
+A implementação acima pôs a decisão e a redação no **mesmo** prompt: o nó `agente`
+levava a persona inteira (as dez regras, a `ORIENTACAO_DE_FONTE` e o exemplo de
+Encaminhamento) **e** o schema de `buscar_no_manual`. A medição mostrou que o
+`qwen2.5:3b` não sustenta as duas coisas juntas: com a persona inteira ele não
+chamava a ferramenta (0/6), e com um prompt enxuto dedicado passou a chamar (3/4
+nas perguntas factuais; 3/3 nas saudações, corretamente sem chamar). Também ficou
+medido o outro lado: um redator que recebe os trechos como mensagem `tool` e
+**não** declara `tools` escreve ancorado e fluente — a resposta quebrada era o
+modelo tentando tool-call e persona ao mesmo tempo.
+
+O turno passa a ter dois papéis, e a separação é o que a #36 fixa:
+
+- **Decisão separada da redação.** O `roteador` leva a persona enxuta
+  (`PERSONA_DE_ROTEAMENTO`, sem as regras nem a `ORIENTACAO_DE_FONTE`) e o schema
+  de `buscar_no_manual` em `tools`; é ele quem decide consultar. O `redator` leva
+  a persona completa (`PERSONA`) e **não** declara `tools`: ele só redige a partir
+  do material que o roteador trouxe. A topologia vira `START → roteador →
+  (cond.) → {ferramentas, redator}`; `ferramentas → roteador`; `redator →
+  finalizar → END`. Sem Manual, não há decisão a tomar e o grafo vira
+  `START → redator → finalizar → END`.
+- **A política de uso da ferramenta sai da persona do redator.** A regra
+  `uso_da_ferramenta` deixa de existir em `REGRAS`; a decisão mora no roteador, e
+  o redator não fala de `buscar_no_manual`.
+- **O critério de resposta com material é a abertura, não a citação da Fonte.**
+  A `ORIENTACAO_DE_FONTE` passa a pedir "Segundo o material da UNOPAR" quando a
+  resposta vem do Manual, no lugar de "cite a Fonte ... pelo título". O literal
+  "não encontrei no material" e o Encaminhamento sem trecho continuam, e a guarda
+  determinística do `finalizar` continua garantindo os dois em código.
+- **O fallback determinístico fica de fora desta rodada.** O que decidiria a
+  consulta sem o modelo, quando ele não chama a ferramenta, foi deliberadamente
+  deixado para depois: esta rodada mede a separação de papéis, e somar um segundo
+  mecanismo de decisão mediria duas coisas ao mesmo tempo.
+
+O `sha256_do_prompt` do harness passa a cobrir as duas personas versionadas
+(`PERSONA` e `PERSONA_DE_ROTEAMENTO`), porque um turno factual passa pelas duas.

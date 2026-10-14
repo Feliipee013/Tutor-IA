@@ -1,8 +1,9 @@
 """Testes do grafo do turno, `sau/graph/`.
 
-O que se prova aqui é o grafo do ADR-0010: o ciclo `agente → ferramentas →
-agente` com a ferramenta opcional, a costura do prompt, a guarda determinística
-de ausência de evidência e a entrada e a saída no log.
+O que se prova aqui é o grafo do ADR-0010, com a separação da #36: o ciclo
+`roteador → ferramentas → roteador` decide e busca, o `redator` escreve a
+resposta ao Aluno, e o `finalizar` fecha com a guarda determinística de ausência
+de evidência. A costura do prompt e a entrada e a saída no log também ficam aqui.
 
 O transporte do modelo é um `httpx.MockTransport`, o mesmo tipo que
 `test_ollama.py` usa, e o corpo de `/api/chat` é reescrito aqui em vez de
@@ -40,7 +41,7 @@ from sau.inference.ollama import (
 )
 from sau.manual.indice import TrechoDoManual
 from sau.manual.tool import LITERAL_NAO_ENCONTREI
-from sau.persona import PERSONA, montar_prompt
+from sau.persona import PERSONA, PERSONA_DE_ROTEAMENTO, montar_prompt, montar_prompt_de_roteamento
 
 _BASE_URL = "http://host.docker.internal:11434"
 _MODELO = "qwen2.5:3b"
@@ -184,38 +185,48 @@ def _manual() -> OpcoesDoManual:
     )
 
 
-# --- Topologia: o ciclo do agente, com a ferramenta opcional ---
+# --- Topologia: o roteador, a ferramenta opcional e o redator ---
 
 
-def test_grafo_tem_o_ciclo_do_agente_com_ferramenta(fazer_cliente: FabricaCliente) -> None:
-    """Com Manual, o grafo tem `agente`, `ferramentas` e `finalizar`.
+def test_grafo_tem_o_roteador_e_o_redator_com_ferramenta(fazer_cliente: FabricaCliente) -> None:
+    """Com Manual, o grafo tem `roteador`, `ferramentas`, `redator` e `finalizar`.
 
     A topologia é o critério de aceitação do grafo, e ela é afirmada pela visão
     que o LangGraph monta do grafo compilado — não pelo código que a construiu,
     que é a mesma coisa que se verificaria escrevendo o mesmo grafo de novo. É o
-    ciclo do ADR-0010: o agente decide, a ferramenta executa quando chamada, e o
-    finalizar encerra com a guarda de ausência.
+    ciclo do ADR-0010 com a separação da #36: o roteador decide e a ferramenta
+    executa quando chamada, o redator escreve a resposta ao Aluno, e o finalizar
+    encerra com a guarda de ausência.
     """
     visao = construir_grafo(fazer_cliente(_roteiro([], [])), manual=_manual()).get_graph()
 
-    assert sorted(visao.nodes) == ["__end__", "__start__", "agente", "ferramentas", "finalizar"]
+    assert sorted(visao.nodes) == [
+        "__end__",
+        "__start__",
+        "ferramentas",
+        "finalizar",
+        "redator",
+        "roteador",
+    ]
     arestas = {(aresta.source, aresta.target) for aresta in visao.edges}
-    assert ("__start__", "agente") in arestas
-    assert ("ferramentas", "agente") in arestas
+    assert ("__start__", "roteador") in arestas
+    assert ("ferramentas", "roteador") in arestas
+    assert ("redator", "finalizar") in arestas
     assert ("finalizar", "__end__") in arestas
 
 
-def test_grafo_sem_manual_nao_tem_no_de_ferramenta(fazer_cliente: FabricaCliente) -> None:
-    """Sem Manual, o agente conversa sem ferramenta e o ciclo nunca abre.
+def test_grafo_sem_manual_nao_tem_roteador_nem_ferramenta(fazer_cliente: FabricaCliente) -> None:
+    """Sem Manual, o redator escreve direto da persona e o ciclo nunca abre.
 
     É o modo dos testes de persona: o prompt é medido sem que o índice entre no
-    caminho. Um nó `ferramentas` aqui seria um caminho que nunca é percorrido.
+    caminho. Um roteador sem ferramenta a decidir seria um nó que não muda nada.
     """
     visao = construir_grafo(fazer_cliente(_roteiro([], []))).get_graph()
 
-    assert sorted(visao.nodes) == ["__end__", "__start__", "agente", "finalizar"]
+    assert sorted(visao.nodes) == ["__end__", "__start__", "finalizar", "redator"]
     arestas = {(aresta.source, aresta.target) for aresta in visao.edges}
-    assert ("agente", "finalizar") in arestas
+    assert ("__start__", "redator") in arestas
+    assert ("redator", "finalizar") in arestas
 
 
 def test_assinatura_do_turno_e_do_grafo_recebem_o_manual() -> None:
@@ -242,12 +253,12 @@ def test_assinatura_do_turno_e_do_grafo_recebem_o_manual() -> None:
 def test_rota_das_ferramentas_so_abre_o_ciclo_com_chamada_pendente() -> None:
     """A aresta condicional só volta à ferramenta com chamada pendente e rodada livre.
 
-    Sem chamada, o turno encerra — resposta direta do modelo. No teto de
-    rodadas, encerra com o que o modelo já escreveu em vez de girar para
-    sempre: é a trava contra o laço infinito de um modelo que peça a ferramenta
-    sem parar.
+    Sem chamada, o roteador passou ao redator — resposta direta. No teto de
+    rodadas, também passa ao redator, que escreve com o que o roteador já
+    trouxe, em vez de girar para sempre: é a trava contra o laço infinito de um
+    modelo que peça a ferramenta sem parar.
     """
-    assert rota_das_ferramentas({"mensagem": _MENSAGEM, "pendentes": []}) == "finalizar"
+    assert rota_das_ferramentas({"mensagem": _MENSAGEM, "pendentes": []}) == "redator"
     chamada = ChamadaDeFerramenta(nome="buscar_no_manual", argumentos={})
     com_chamada: EstadoTurno = {"mensagem": _MENSAGEM, "pendentes": [chamada], "rodadas": 1}
     assert rota_das_ferramentas(com_chamada) == "ferramentas"
@@ -256,59 +267,75 @@ def test_rota_das_ferramentas_so_abre_o_ciclo_com_chamada_pendente() -> None:
         "pendentes": [chamada],
         "rodadas": LIMITE_DE_RODADAS,
     }
-    assert rota_das_ferramentas(no_teto) == "finalizar"
+    assert rota_das_ferramentas(no_teto) == "redator"
 
 
 # --- O que o grafo devolve, com e sem ferramenta ---
 
 
 def test_turno_devolve_o_texto_do_modelo(fazer_cliente: FabricaCliente) -> None:
-    """Resposta direta do modelo — saudação, cortesia — sai como veio."""
+    """Resposta direta do redator — saudação, cortesia — sai como veio."""
     handler = _roteiro([_chat_com_texto(_RESPOSTA)], [])
 
     assert executar_turno(fazer_cliente(handler), _MENSAGEM) == _RESPOSTA
 
 
-def test_turno_com_ferramenta_executa_e_volta_ao_modelo(
+def test_turno_com_ferramenta_executa_e_o_redator_escreve(
     fazer_cliente: FabricaCliente, buscar_falsa: list[list[TrechoDoManual]]
 ) -> None:
-    """O modelo pede a ferramenta, o grafo executa e o modelo responde de novo.
+    """O roteador pede a ferramenta, o grafo executa e o redator escreve a resposta.
 
-    É o caminho do ADR-0010: a resposta factual sai da segunda rodada, e não da
-    primeira. A primeira mensagem ao modelo é o prompt do turno; a segunda
-    carrega o resultado da ferramenta como mensagem `tool`, com a Fonte que o
-    modelo cita. Sem esta mensagem, a segunda rodada responderia sem material.
+    É o caminho do ADR-0010 com a separação da #36: o roteador decide consultar,
+    a ferramenta traz o material, o roteador confirma que não precisa de mais
+    nada e o redator redige. O prompt que abre o turno é o do roteador; o do
+    redator chega ao modelo na terceira rodada, junto do resultado da ferramenta
+    como mensagem `tool`, com a Fonte que o redator cita. Sem esta mensagem, o
+    redator escreveria sem material.
     """
     buscar_falsa.append([_TRECHO])
     chats: list[dict[str, Any]] = []
-    passos = [_chat_com_chamada(consulta="prazo de entrega"), _chat_com_texto(_RESPOSTA_COM_FONTE)]
+    passos = [
+        _chat_com_chamada(consulta="prazo de entrega"),
+        _chat_com_texto("sem busca"),
+        _chat_com_texto(_RESPOSTA_COM_FONTE),
+    ]
     handler = _roteiro(passos, chats)
 
     resposta = executar_turno(fazer_cliente(handler), _MENSAGEM, manual=_manual())
 
     assert resposta == _RESPOSTA_COM_FONTE
-    assert len(chats) == 2
-    mensagens = chats[1]["messages"]
+    assert len(chats) == 3
+    # A terceira rodada é o redator: prompt do redator mais o par de ferramenta.
+    mensagens = chats[2]["messages"]
     assert mensagens[0]["role"] == "user"
+    assert mensagens[0]["content"] == montar_prompt(_MENSAGEM)
     assert mensagens[-1]["role"] == "tool"
     assert mensagens[-1]["tool_name"] == "buscar_no_manual"
     assert _TRECHO.fonte in mensagens[-1]["content"]
-    # O schema da ferramenta vai declarado ao modelo em toda rodada.
+    # O schema da ferramenta vai declarado ao roteador (as duas rodadas dele).
     assert chats[0]["tools"][0]["function"]["name"] == "buscar_no_manual"
+    assert chats[1]["tools"][0]["function"]["name"] == "buscar_no_manual"
+    # O redator **não** declara `tools`: é o ponto central da #36.
+    assert "tools" not in chats[2]
 
 
-def test_turno_sem_ferramenta_chama_o_modelo_uma_vez_so(fazer_cliente: FabricaCliente) -> None:
-    """Uma resposta direta é uma rodada só: o ciclo não abre sem chamada.
+def test_saudacao_passa_pelo_roteador_e_pelo_redator_sem_ferramenta(
+    fazer_cliente: FabricaCliente,
+) -> None:
+    """Uma resposta direta são duas rodadas — roteador e redator — e nenhuma `tool`.
 
-    Uma segunda chamada de geração no mesmo turno passaria pela topologia e
-    sairia daqui.
+    O roteador não abre o ciclo (não há chamada pendente) e o redator escreve da
+    persona, sem par de ferramenta no corpo. O que o teste protege é justamente
+    isso: a mensagem `tool` só existe quando houve consulta.
     """
     chats: list[dict[str, Any]] = []
-    handler = _roteiro([_chat_com_texto(_RESPOSTA)], chats)
+    handler = _roteiro([_chat_com_texto("sem busca"), _chat_com_texto(_RESPOSTA)], chats)
 
     executar_turno(fazer_cliente(handler), _MENSAGEM, manual=_manual())
 
-    assert len(chats) == 1
+    assert len(chats) == 2
+    assert all(mensagem["role"] != "tool" for mensagem in chats[1]["messages"])
+    assert "tools" not in chats[1]
 
 
 def test_a_ferramenta_sem_evidencia_vira_o_literal_de_ausencia(
@@ -316,13 +343,17 @@ def test_a_ferramenta_sem_evidencia_vira_o_literal_de_ausencia(
 ) -> None:
     """Chamou a ferramenta e nada passou pelo limiar: resposta é o literal.
 
-    O modelo pode ter respondido qualquer coisa na segunda rodada; a guarda do
+    O redator pode ter respondido qualquer coisa na terceira rodada; a guarda do
     `finalizar` troca pelo texto do grafo. É o critério do ADR-0012 que não
     depende de o modelo obedecer ao prompt.
     """
     buscar_falsa.append([])  # A busca não devolve trecho algum.
     chats: list[dict[str, Any]] = []
-    passos = [_chat_com_chamada(consulta="prazo de entrega"), _chat_com_texto("resposta inventada")]
+    passos = [
+        _chat_com_chamada(consulta="prazo de entrega"),
+        _chat_com_texto("sem busca"),
+        _chat_com_texto("resposta inventada"),
+    ]
     handler = _roteiro(passos, chats)
 
     resposta = executar_turno(fazer_cliente(handler), _MENSAGEM, manual=_manual())
@@ -333,13 +364,13 @@ def test_a_ferramenta_sem_evidencia_vira_o_literal_de_ausencia(
 
 
 def test_a_guarda_nao_dispara_quando_nao_houve_ferramenta(fazer_cliente: FabricaCliente) -> None:
-    """Sem chamada à ferramenta, a resposta do modelo passa intacta.
+    """Sem chamada à ferramenta, a resposta do redator passa intacta.
 
     Saudação e cortesia não buscam nada; não há ausência de evidência a
     declarar, e trocar a resposta pelo literal seria responder o que o Aluno não
     perguntou.
     """
-    handler = _roteiro([_chat_com_texto(_RESPOSTA)], [])
+    handler = _roteiro([_chat_com_texto("sem busca"), _chat_com_texto(_RESPOSTA)], [])
 
     assert executar_turno(fazer_cliente(handler), _MENSAGEM, manual=_manual()) == _RESPOSTA
 
@@ -349,25 +380,30 @@ def test_o_teto_de_rodadas_encerra_o_ciclo(
 ) -> None:
     """Um modelo que pede a ferramenta para sempre não trava o turno.
 
-    O teto encerra em `LIMITE_DE_RODADAS` rodadas; sem ele, o ciclo `agente →
+    O teto encerra o roteador em `LIMITE_DE_RODADAS` rodadas e passa ao redator,
+    que é a rodada extra depois do teto; sem ele, o ciclo `roteador →
     ferramentas` giraria indefinidamente. A busca devolve trecho válido para a
-    guarda de ausência não disparar e a resposta ser o texto do modelo.
+    guarda de ausência não disparar e a resposta ser o texto do redator.
     """
     buscar_falsa.extend([[_TRECHO] for _ in range(LIMITE_DE_RODADAS)])
     chats: list[dict[str, Any]] = []
-    passos = [_chat_com_chamada(consulta="prazo") for _ in range(LIMITE_DE_RODADAS + 2)]
+    passos = [_chat_com_chamada(consulta="prazo") for _ in range(LIMITE_DE_RODADAS)]
+    passos.append(_chat_com_texto(_RESPOSTA_COM_FONTE))
     handler = _roteiro(passos, chats)
 
-    executar_turno(fazer_cliente(handler), _MENSAGEM, manual=_manual())
+    resposta = executar_turno(fazer_cliente(handler), _MENSAGEM, manual=_manual())
 
-    assert len(chats) == LIMITE_DE_RODADAS
+    assert len(chats) == LIMITE_DE_RODADAS + 1
+    assert resposta == _RESPOSTA_COM_FONTE
 
 
 # --- A costura do prompt, que é onde a persona do S.A.U. entra ---
 
 
-def test_o_prompt_que_chega_ao_modelo_e_o_montar_prompt(fazer_cliente: FabricaCliente) -> None:
-    """`montar_prompt` é o caminho único do prompt até o modelo.
+def test_o_prompt_que_chega_ao_modelo_sem_manual_e_o_montar_prompt(
+    fazer_cliente: FabricaCliente,
+) -> None:
+    """Sem Manual, o prompt que chega ao modelo é o `montar_prompt` do redator.
 
     O `montar_prompt` deste módulo não é um: é o de `sau.persona`, reexportado em
     `nodes.py` com `from sau.persona import montar_prompt as montar_prompt`. É por
@@ -383,6 +419,25 @@ def test_o_prompt_que_chega_ao_modelo_e_o_montar_prompt(fazer_cliente: FabricaCl
     executar_turno(fazer_cliente(handler), _MENSAGEM)
 
     assert chats[0]["messages"][0]["content"] == montar_prompt(_MENSAGEM)
+
+
+def test_o_prompt_do_roteador_chega_ao_modelo_com_manual(
+    fazer_cliente: FabricaCliente,
+) -> None:
+    """Com Manual, o turno abre pelo prompt do roteador, e não pelo do redator.
+
+    É a mesma costura do teste anterior, do lado do roteador: o texto que abre o
+    turno é o de `montar_prompt_de_roteamento`. Uma troca acidental — abrir pelo
+    prompt do redator — tiraria do roteador a persona enxuta que faz o modelo
+    chamar a ferramenta, e as duas pontas ficariam diferentes sem que o conteúdo
+    da persona mudasse.
+    """
+    chats: list[dict[str, Any]] = []
+    handler = _roteiro([_chat_com_texto("sem busca"), _chat_com_texto(_RESPOSTA)], chats)
+
+    executar_turno(fazer_cliente(handler), _MENSAGEM, manual=_manual())
+
+    assert chats[0]["messages"][0]["content"] == montar_prompt_de_roteamento(_MENSAGEM)
 
 
 def test_mensagem_do_aluno_chega_ao_modelo_verbatim(fazer_cliente: FabricaCliente) -> None:
@@ -411,12 +466,16 @@ def test_as_fontes_do_turno_vem_da_ferramenta(
     """
     buscar_falsa.append([_TRECHO])
     chats: list[dict[str, Any]] = []
-    passos = [_chat_com_chamada(consulta="prazo"), _chat_com_texto(_RESPOSTA_COM_FONTE)]
+    passos = [
+        _chat_com_chamada(consulta="prazo"),
+        _chat_com_texto("sem busca"),
+        _chat_com_texto(_RESPOSTA_COM_FONTE),
+    ]
     grafo = construir_grafo(fazer_cliente(_roteiro(passos, chats)), manual=_manual())
 
     entrada: EstadoTurno = {
         "mensagem": _MENSAGEM,
-        "mensagens": [{"role": "user", "content": montar_prompt(_MENSAGEM)}],
+        "mensagens": [{"role": "user", "content": montar_prompt_de_roteamento(_MENSAGEM)}],
         "rodadas": 0,
     }
     estado = grafo.invoke(entrada)
@@ -438,6 +497,7 @@ def test_o_texto_de_ausencia_nao_mora_na_persona() -> None:
     topologia, e o `sha256_do_prompt` deixa de identificar o que ele promete.
     """
     assert TEXTO_AUSENCIA not in PERSONA
+    assert TEXTO_AUSENCIA not in PERSONA_DE_ROTEAMENTO
     assert sha256_do_prompt()
 
 

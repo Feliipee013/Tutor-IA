@@ -424,7 +424,27 @@ class ModeloFalso:
         O turno do ADR-0010 fala por `conversar`, e não por `responder`. Delegar
         faz com que todo falso desta suíte — que sobrescreve só o `responder` —
         continue valendo, e mantém num lugar só a construção da `Resposta`.
+
+        A chamada do **roteador** é a que leva `ferramentas`; ela é respondida
+        aqui mesmo, decidindo não consultar o Manual, e sem delegar ao
+        `responder`. Desde a #36 o turno abre pelo roteador, e o que esta suíte
+        mede é a redação: assim `prompts`, `turnos` e `maximo_simultaneo` contam
+        só a chamada do `redator` — uma por turno, como era antes da separação —
+        e um falso que segura a vaga continua segurando dentro do semáforo, que
+        é onde o redator roda.
         """
+        if ferramentas is not None:
+            return Resposta(
+                texto="sem busca",
+                primeiro_token_segundos=0.0,
+                carga_segundos=0.0,
+                avaliacao_prompt_segundos=0.0,
+                segundos_totais=0.0,
+                tokens_por_segundo=None,
+                tokens_gerados=None,
+                concluida=True,
+                motivo_de_parada="stop",
+            )
         prompt = mensagens[0]["content"] if mensagens else ""
         return self.responder(prompt, opcoes=opcoes)
 
@@ -919,10 +939,12 @@ def test_o_acuse_sai_antes_de_o_turno_comecar(
     contagem vista de dentro do turno. Aqui vão as três peças de verdade — o
     `ClienteOllama` real, o grafo real e o `sendMessage` real —, e a fixture
     registra toda URL que saiu do processo, venha de onde vier. A lista sai nesta
-    ordem: Telegram (acuse), chat, Telegram (resposta). Um turno disparado antes
-    do acuse a inverteria, e a lista inteira é a asserção — não só o seu primeiro
-    elemento. O embedding não aparece porque o modelo falso da fixture responde
-    direto, sem chamar a ferramenta — e sem ferramenta não há o que embutir.
+    ordem: Telegram (acuse), chat, chat, Telegram (resposta). São **dois** chats
+    desde a #36: o turno abre pelo roteador, que decide não consultar o Manual, e
+    o redator escreve a resposta — a fixture responde aos dois com a mesma
+    geração sem `tool_calls`, então a ferramenta nunca é chamada e o embedding
+    não aparece. Um turno disparado antes do acuse inverteria a lista, e a lista
+    inteira é a asserção — não só o seu primeiro elemento.
 
     A versão anterior desta guarda afirmava duas coisas que nada exercitava: que
     nenhum destino estava fora do Telegram, e que o acuse não esperou o modelo.
@@ -938,6 +960,7 @@ def test_o_acuse_sai_antes_de_o_turno_comecar(
 
     assert destinos_de_saida == [
         para_o_telegram,
+        para_o_modelo,
         para_o_modelo,
         para_o_telegram,
     ], (
@@ -1117,6 +1140,7 @@ def test_o_turno_roda_na_thread_de_producao(
     assert resposta.status_code == 200
     assert destinos_de_saida == [
         f"{config.telegram_api_base}/bot{_TOKEN}/sendMessage",
+        f"{config.ollama_base_url}/api/chat",
         f"{config.ollama_base_url}/api/chat",
         f"{config.telegram_api_base}/bot{_TOKEN}/sendMessage",
     ], f"o turno não rodou depois do acuse, ou rodou por outra via: {destinos_de_saida}"
