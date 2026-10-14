@@ -15,13 +15,13 @@ Quando não tem a informação, diz que não sabe e encaminha, nunca inventa.
 O Aluno conversa pelo Telegram.
 O S.A.U. confirma o recebimento de cada mensagem antes de qualquer inferência.
 Para responder, ele monta o prompt — persona, histórico da conversa e a mensagem —,
-busca no material autorado os trechos que sustentam a resposta e consulta o modelo local.
+busca no Corpus os trechos que sustentam a resposta e consulta o modelo local.
 Toda afirmação factual cita a Fonte;
-quando nada a sustenta, o S.A.U. não responde: diz que não encontrou e encaminha.
+quando nada a sustenta, o S.A.U. não responde: encaminha à Coordenação de Estágios.
 
 Três forças explicam o desenho:
 
-1. Fidelidade ao processo. A resposta vem de um material autorado, com Fonte conferível.
+1. Fidelidade ao processo. A resposta vem do Corpus, com Fonte conferível.
    O defeito central é a Alucinação, e a mitigação é _grounding_, não confiança no modelo.
 2. Escassez de inferência. O modelo roda local em GPU de pouca VRAM e atende poucas gerações ao mesmo tempo.
    O atendimento é 24/7 e confirma o recebimento antes de qualquer inferência.
@@ -32,11 +32,11 @@ Três forças explicam o desenho:
 
 ### Serviços
 
-O `compose` sobe dois serviços com a mesma imagem, independentes:
+O `compose` sobe dois serviços a partir do mesmo `Dockerfile`, independentes:
 
 - `bot` (`sau/main.py`): checagem de pré-requisitos e _health server_.
   Roda a checagem na subida e falha alto se o Ollama ou a GPU não estiverem prontos.
-- `webhook` (`sau/telegram/webhook.py`): canal do Telegram.
+- `webhook` (`sau/telegram/__main__.py`, handler em `sau/telegram/webhook.py`): canal do Telegram.
   Recebe o _update_, confere o `secret_token`,
   manda um aviso de recebimento fixo e dispara o turno em segundo plano.
 
@@ -61,13 +61,13 @@ para que o Ollama reaproveite o cache do início do prompt entre chamadas.
 
 ### Conhecimento
 
-O material de referência é autorado e versionado, e quebrado em unidades recuperáveis.
+O Corpus é autorado e versionado, e quebrado em unidades recuperáveis.
 A recuperação (`sau/rag/`) transforma as unidades e a pergunta em vetores, com o Ollama,
 e devolve os trechos mais próximos, com a Fonte do trecho.
 
-**Invariantes:** a resposta factual se ancora no material recuperado, nunca no conhecimento do modelo.
-Toda afirmação factual cita a Fonte, e a Fonte aponta para uma unidade que existe no material.
-Sem trecho que sustente, o S.A.U. não responde: diz que não encontrou e encaminha.
+**Invariantes:** a resposta factual se ancora no Corpus recuperado, nunca no conhecimento do modelo.
+Toda afirmação factual cita a Fonte, e a Fonte aponta para uma unidade que existe no Corpus.
+Sem trecho que sustente, o S.A.U. não responde: encaminha à Coordenação de Estágios.
 
 ### Inferência e concorrência
 
@@ -91,7 +91,7 @@ O `.env` é lido pelo `compose`, não pelo Python.
 e grava o output bruto com as condições da medição em `outputs/`.
 
 **Invariantes:** o julgamento é humano; o código só conta.
-A régua não importa nada de `sau/`, porque régua que conhece o pacote deixa de ser régua.
+`harness/metrics.py` não importa nada de `sau/`, porque régua que conhece o pacote deixa de ser régua.
 Toda afirmação numérica carrega as condições (modelo, alocação, hash do prompt) no próprio artefato.
 
 ### Governança
