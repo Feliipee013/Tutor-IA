@@ -156,7 +156,8 @@ o output de cada execução na linha a julgar e o `conforme quando` de cada
 Pergunta-teste no bloco `perguntas`, e quem decide é quem lê.
 
 O `harness/run.py` também é o único lugar do repositório que **mede**: ele trava
-`temperature 0`, uma `seed` fixa e `num_predict 256`, e registra o que usou.
+`temperature 0`, uma `seed` fixa e `num_predict 512` (256 até a rodada b1–b10,
+que cortou duas respostas no meio da frase), e registra o que usou.
 `sau/inference/ollama.py` segue sem amostragem travada de propósito — travar a
 seed ali daria a todo Aluno exatamente a mesma resposta, que é o oposto de
 atender alguém.

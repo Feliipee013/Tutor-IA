@@ -14,10 +14,12 @@ uma das duas respostas e conclui o oposto do que o modelo faz. O ADR-0003
 nomeia este harness e proíbe a execução única.
 
 As condições da medição são travadas e **gravadas na rodada**: `temperatura 0`,
-`seed` 20260926 e `num_predict` 256, as mesmas do ADR-0003, mais o `num_ctx`
-realmente enviado e o `sha256` do prompt versionado. Linha de base que não
-declara as condições não é comparável com nada — por isso elas vão dentro do
-JSON e não numa nota de rodapé.
+`seed` 20260926 e `num_predict` 512, mais o `num_ctx`
+realmente enviado e o `sha256` do prompt versionado. O teto era 256 (o do
+ADR-0003) e subiu para 512 depois que a rodada b1–b10 cortou duas respostas
+no meio da frase. As linhas de base antigas seguem com 256 no próprio JSON.
+Linha de base que não declara as condições não é comparável com nada — por
+isso elas vão dentro do JSON e não numa nota de rodapé.
 
 A máquina também vai no JSON. O ADR-0003 exige que toda afirmação qualitativa
 diga de qual máquina veio, e `sau.prereqs.executar_checagens` já leu `/api/ps`
@@ -102,13 +104,17 @@ que foi usado.
 
 TEMPERATURA_PADRAO: Final = 0.0
 SEED_PADRAO: Final = 20260926
-NUM_PREDICT_PADRAO: Final = 256
-"""As três condições que o ADR-0003 travou na medição do modelo.
+NUM_PREDICT_PADRAO: Final = 512
+"""As condições travadas na medição do modelo, com o teto de geração em 512.
 
-São valores de arquivo, não preferences de execução: a flag existe porque a
-varredura de temperatura do P7 da 1.2 precisa mexer nelas, e o padrão é o do
-ADR porque é o que torna a linha de base comparável com
-`docs/medicao-modelo/resultado-gpu.md`.
+`temperatura` e `seed` são as do ADR-0003. O `num_predict` era 256 (o do
+ADR-0003) e subiu para 512 porque a rodada b1–b10 de 2026-10-14 cortou duas
+respostas no meio da frase (b6 e b9, `done_reason=length`): as respostas
+ancoradas mais longas passam de 250 tokens, e um teto que corta resposta
+parece não-conformidade onde não há. 512 é folga de 2x sobre o medido, e
+continua sendo teto — geração sem teto seguraria a vaga do semáforo sem
+limite. As linhas de base antigas seguem gravadas com 256 no próprio JSON,
+então a comparação continua conferível pelo bloco `condicoes`.
 """
 
 SAIDA_OK: Final = 0
@@ -734,7 +740,7 @@ def montar_argumentos(argumentos: Sequence[str] | None = None) -> argparse.Names
         "--num-predict",
         type=int,
         default=NUM_PREDICT_PADRAO,
-        help=f"teto de tokens por geração (padrão: {NUM_PREDICT_PADRAO}, o do ADR-0003)",
+        help=f"teto de tokens por geração (padrão: {NUM_PREDICT_PADRAO}; 256 era o do ADR-0003)",
     )
     analisador.add_argument(
         "--perguntas",

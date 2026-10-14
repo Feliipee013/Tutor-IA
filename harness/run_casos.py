@@ -2,7 +2,7 @@
 
 Roda os Casos de `harness/casos.py` no S.A.U. pelo caminho real do turno, com
 as mesmas travas da bateria (`temperature 0`, `seed` 20260926, `num_predict`
-256) e grava a rodada dos Casos com o material que a recuperação devolveu em
+512) e grava a rodada dos Casos com o material que a recuperação devolveu em
 cada turno.
 
 É o mesmo harness da 1.1 nos dois lados que importam: o turno é o

@@ -26,6 +26,7 @@ from harness.run import (
     IDS_DA_CADEIA,
     IDS_ESPERADOS,
     MOTIVO_ENCAMINHAMENTO_DETERMINISTICO,
+    NUM_PREDICT_PADRAO,
     ORDEM_DA_BATERIA,
     ORDEM_DA_CADEIA,
     SEED_PADRAO,
@@ -88,7 +89,7 @@ def _condicoes_falsas(**mudancas: Any) -> CondicoesDaRodada:
         "repeticoes": 3,
         "temperatura": TEMPERATURA_PADRAO,
         "seed": SEED_PADRAO,
-        "num_predict": 256,
+        "num_predict": NUM_PREDICT_PADRAO,
         "num_ctx": 4096,
         "sha256_do_prompt": "abc123",
         "alocacao": AlocacaoDoModelo(size=1_900_000_000, size_vram=1_900_000_000, em_cpu=False),
@@ -290,7 +291,7 @@ def test_gravacao_declara_as_condicoes_da_medicao(tmp_path: Path) -> None:
     assert condicoes["repeticoes"] == 3
     assert condicoes["temperatura"] == 0.0
     assert condicoes["seed"] == SEED_PADRAO
-    assert condicoes["num_predict"] == 256
+    assert condicoes["num_predict"] == NUM_PREDICT_PADRAO
     assert condicoes["num_ctx"] == 4096
     assert condicoes["sha256_do_prompt"]
 
@@ -436,13 +437,14 @@ def test_flags_do_harness_sobrescrevem_o_env() -> None:
     assert opcoes.saida == Path("r.json")
 
 
-def test_default_do_cli_preserva_as_condicoes_do_adr() -> None:
+def test_default_do_cli_usa_teto_que_nao_corta_resposta() -> None:
+    """O teto saiu de 256 para 512: a rodada b1–b10 cortou b6 e b9 no meio da frase."""
     opcoes = montar_argumentos([])
 
     assert opcoes.repeticoes == 3
     assert opcoes.temperatura == 0.0
     assert opcoes.seed == SEED_PADRAO
-    assert opcoes.num_predict == 256
+    assert opcoes.num_predict == 512
 
 
 def test_main_recusa_rodar_com_zero_repeticao(tmp_path: Path) -> None:
