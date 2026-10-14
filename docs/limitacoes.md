@@ -18,9 +18,11 @@ no semáforo de inferência (`sau/inference/semaphore.py`), de modo que um
 Aluno nunca tem dois turnos concorrendo — e quando a fila passa do teto, o
 Aluno recebe recusa educada com a posição e a estimativa.
 
-O turno é o grafo LangGraph (`sau/graph/graph.py`), hoje num caminho só
-(`START → responder → END`); a recuperação da 1.2 entra como nó desse mesmo
-grafo, **sem classificação de intenção** ([ADR-0008](./adr/0008-recuperacao-sem-classificacao-de-intencao.md)).
+O turno é o grafo LangGraph (`sau/graph/graph.py`), hoje o ciclo de um agente
+com uma ferramenta (`START → agente → (ferramentas → agente) → finalizar → END`):
+a consulta ao Manual de Estágio é a ferramenta opcional `buscar_no_manual`, que o
+modelo chama quando precisa de um fato, **sem classificação de intenção**
+([ADR-0010](./adr/0010-aposentadoria-da-recuperacao-obrigatoria-em-todo-turno.md)).
 O prompt é montado por
 `sau/persona.py`: as regras da persona primeiro (prefixo fixo, que o
 Ollama mantém em cache), depois o histórico recente (até 6 mensagens) e a
