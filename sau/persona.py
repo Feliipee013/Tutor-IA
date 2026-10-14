@@ -126,6 +126,19 @@ ORIENTACAO_PROCEDURAL = Regra(
     ),
 )
 
+RESPOSTA_PARCIAL = Regra(
+    id="resposta_parcial",
+    titulo="Resposta parcial com o que há",
+    instrucao=(
+        "Quando os trechos sustentarem só parte da pergunta, responda a parte "
+        "sustentada citando a Fonte de cada trecho usado e diga sobre o restante "
+        "que não encontrou no material sobre aquele ponto, encerrando com "
+        "Encaminhamento. Nunca junte resposta ancorada com negação genérica no "
+        "fim: cada afirmação precisa da sua Fonte, e cada buraco precisa do seu "
+        "não encontrei."
+    ),
+)
+
 NAO_INVENTAR = Regra(
     id="nao_inventar",
     titulo="Não inventar prazo, documento ou contato",
@@ -178,6 +191,7 @@ REGRAS: tuple[Regra, ...] = (
     TOM,
     CORTESIA,
     ORIENTACAO_PROCEDURAL,
+    RESPOSTA_PARCIAL,
     NAO_INVENTAR,
     ENCAMINHAMENTO,
     USAR_HISTORICO,
@@ -188,16 +202,17 @@ REGRAS: tuple[Regra, ...] = (
 `test_o_prompt_tem_exatamente_as_regras_da_issue` afirma o conjunto inteiro:
 regra nova entra ali junto, regra derrubada quebra ali primeiro.
 
-**Uma resposta ditada existe, e é declarada.** A regra de frase fixa verbatim
+**Duas formas ditadas existem, e são declaradas.** A regra de frase fixa verbatim
 saiu em `3400b32` porque virava atrator para o 3B, e a linha de base mostrou o
 custo do outro lado: cinco Perguntas-teste respondendo a palavra
 `Encaminhamento` e parando, em 5 tokens. O modelo sabia *quando* encerrar e
-não conseguia *como*. Por isso a persona agora mostra a forma uma vez, no
+não conseguia *como*. Por isso a persona mostra a forma duas vezes: no
 `EXEMPLO_DE_ENCAMINHAMENTO` abaixo — um turno completo de fora de escopo,
 perguntado e respondido de ponta a ponta
-([ADR-0009](../../docs/adr/0009-exemplo-de-encaminhamento-na-persona.md)).
-É a única vez em que a persona mostra em vez de descrever: fora do exemplo
-declarado, nenhuma resposta é ditada, e a instrução continua mandando
+([ADR-0009](../../docs/adr/0009-exemplo-de-encaminhamento-na-persona.md)) —
+e no `EXEMPLO_PARCIAL`, o turno de resposta com só parte sustentada.
+São as únicas vezes em que a persona mostra em vez de descrever: fora dos
+exemplos declarados, nenhuma resposta é ditada, e a instrução continua mandando
 escrever com as próprias palavras seguindo a pergunta.
 
 A instrução descreve o que fazer e manda escrever com as próprias palavras
@@ -232,10 +247,14 @@ escrito na #36 e na spec #34. A decisão de consultar saiu do prompt do redator 
 PERSONA_DE_ROTEAMENTO: str = (
     "Você decide se precisa consultar o Manual de Estágio Obrigatório antes de "
     "responder ao Aluno.\n"
+    "Leia a mensagem atual do Aluno inteira até o fim, depois dos marcadores: "
+    "saudação no início seguida de pergunta factual conta como pergunta factual.\n"
     "Chame a ferramenta buscar_no_manual quando a mensagem do Aluno pedir um fato "
     "do processo de estágio — prazos, documentos, assinaturas, seguro, cadastro ou "
     "entrega —, escrevendo a consulta com as palavras-chave do assunto.\n"
-    "Quando a mensagem for saudação, despedida, agradecimento ou assunto fora do "
+    "Exemplos: Aluno: Oi — sem busca. Aluno: Oi, queria saber sobre o termo de "
+    "compromisso — chame buscar_no_manual com a consulta \"termo de compromisso\".\n"
+    "Quando a mensagem for só saudação, despedida, agradecimento ou assunto fora do "
     "processo de estágio, não chame a ferramenta: responda apenas com as palavras "
     "\"sem busca\".\n"
     "Quando você receber o resultado da ferramenta e não precisar de outra "
@@ -248,8 +267,9 @@ PERSONA_DE_ROTEAMENTO: str = (
 mede: com a persona inteira o `qwen2.5:3b` não chamava a ferramenta (0/6), e com
 este prompt enxuto passou a chamar. Ele não leva as regras nem a
 `ORIENTACAO_DE_FONTE` — o roteador não escreve a resposta, só decide se há
-consulta a fazer —, e o único texto de resposta ditado nele é o "sem busca" do
-caminho sem ferramenta, que o redator não lê. Quem declara o schema de
+consulta a fazer —, e os textos de resposta ditados nele são o "sem busca" do
+caminho sem ferramenta mais os dois few-shots (`Oi` puro × `Oi` com fato),
+que o redator não lê. Quem declara o schema de
 `buscar_no_manual` em `tools` é o nó do roteador
 (`sau/graph/nodes.criar_no_roteador`), não este texto.
 
@@ -261,8 +281,8 @@ pela instrução de responder curto, e não pelo corte.
 
 EXEMPLO_DE_ENCAMINHAMENTO = (
     "Exemplo de Encaminhamento completo: pergunta fora do que o S.A.U. orienta, "
-    "respondida de ponta a ponta. É o único texto de resposta ditado neste prompt; "
-    "fora dele, escreva com as suas palavras.\n"
+    "respondida de ponta a ponta. É um dos dois textos de forma deste prompt "
+    "(o outro é o de resposta parcial); fora deles, escreva com as suas palavras.\n"
     "Aluno: Vocês oferecem curso de inglês nas férias? Queria me inscrever.\n"
     "S.A.U.: Isso está "
     "fora do que eu oriento — eu acompanho o processo de estágio. Procure a "
@@ -277,9 +297,29 @@ de férias — fora do processo de Estágio por construção — para que nenhum
 trecho do Corpus a sustente e nenhum teste confunda o exemplo com conversa.
 """
 
+EXEMPLO_PARCIAL = (
+    "Exemplo de resposta parcial: pergunta com duas partes, só uma sustentada "
+    "pelos trechos. É só forma, e não texto a repetir — fora dele, escreva com "
+    "as suas palavras.\n"
+    "Aluno: A empresa quer usar o modelo dela. O que o termo precisa conter "
+    "e qual o prazo para eu enviar?\n"
+    "S.A.U.: Pelo TERMO DE COMPROMISSO MODELO EMPRESA (p. 51–54), o modelo da "
+    "Empresa precisa conter identificação do Aluno, local do estágio, supervisores "
+    "e dados da Instituição, com assinatura do Aluno, da Empresa e da Instituição. "
+    "Sobre o prazo de envio, não encontrei no material sobre esse ponto. "
+    "Procure a Coordenação de Estágios."
+)
+"""O turno de resposta parcial: o que fazer quando só parte tem Fonte.
+
+Mostra a forma — parte sustentada com citação de título e página, buraco com o
+literal sobre o ponto específico mais Encaminhamento — sem ditar texto a
+repetir. A pergunta cruza conteúdo do termo (dentro do Manual) com prazo de
+envio (fora dele), que é o caso `x3`/`x5` da bateria.
+"""
+
 PERSONA: str = "\n\n".join(
     [f"{regra.titulo}\n{regra.instrucao}" for regra in REGRAS]
-    + [ORIENTACAO_DE_FONTE, EXEMPLO_DE_ENCAMINHAMENTO]
+    + [ORIENTACAO_DE_FONTE, EXEMPLO_DE_ENCAMINHAMENTO, EXEMPLO_PARCIAL]
 )
 
 MENSAGENS_NO_PROMPT = 6

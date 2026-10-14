@@ -228,7 +228,7 @@ def test_configuracao_semaforo_aceita_espaco_em_branco() -> None:
 
 def test_configuracao_manual_valores_padrao() -> None:
     config = carregar_configuracao({})
-    assert config.manual_limiar_similaridade == 0.35
+    assert config.manual_limiar_similaridade == 0.72
     assert config.manual_k_padrao == 4
     assert config.manual_colecao == "manual-estagio-obrigatorio"
 

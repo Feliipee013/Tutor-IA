@@ -46,6 +46,7 @@ from sau.persona import (
     ENCAMINHAMENTO,
     ESCOPO_DE_ESTAGIO,
     EXEMPLO_DE_ENCAMINHAMENTO,
+    EXEMPLO_PARCIAL,
     FIM_CONVERSA,
     FORMATO_SAIDA,
     HISTORICO_VAZIO,
@@ -58,6 +59,7 @@ from sau.persona import (
     PERSONA,
     PERSONA_DE_ROTEAMENTO,
     REGRAS,
+    RESPOSTA_PARCIAL,
     TOM,
     USAR_HISTORICO,
     montar_prompt,
@@ -149,6 +151,7 @@ def test_o_prompt_tem_exatamente_as_regras_da_issue() -> None:
         "tom",
         "cortesia",
         "orientacao_procedural",
+        "resposta_parcial",
         "nao_inventar",
         "encaminhamento",
         "usar_historico",
@@ -629,6 +632,52 @@ def test_o_roteador_responde_sem_busca_apos_o_resultado_da_ferramenta() -> None:
     prompt = montar_prompt_de_roteamento(_MENSAGEM)
 
     assert "quem escreve a resposta final ao Aluno é outra etapa" in prompt
+
+
+def test_o_roteador_le_a_mensagem_atual_ate_o_fim() -> None:
+    """O roteador decide pela mensagem atual inteira, não pelo início.
+
+    É a instrução que fecha o declínio em fato com saudação na frente: `Oi`
+    sozinho continua `sem busca`, mas `Oi` seguido de pergunta factual chama a
+    ferramenta. Sem ela, o 3B ancorava no primeiro token e o fallback
+    determinístico virava o caminho principal.
+    """
+    assert "inteira até o fim" in PERSONA_DE_ROTEAMENTO
+    prompt = montar_prompt_de_roteamento("Oi, queria saber sobre o termo de compromisso")
+
+    assert "inteira até o fim" in prompt
+
+
+def test_a_regra_de_resposta_parcial_chega_ao_modelo(
+    fazer_cliente: FabricaCliente,
+) -> None:
+    """A regra de resposta parcial está no prompt que o modelo recebeu.
+
+    É ela que impede o tudo-ou-nada do redator: parte sustentada com Fonte,
+    buraco com o literal sobre o ponto específico mais Encaminhamento — nunca
+    resposta ancorada com negação genérica no fim.
+    """
+    prompt = _prompt_do_turno(fazer_cliente)
+
+    assert RESPOSTA_PARCIAL.instrucao in prompt
+    assert prompt.count(RESPOSTA_PARCIAL.instrucao) == 1
+
+
+def test_o_exemplo_parcial_chega_ao_modelo(
+    fazer_cliente: FabricaCliente,
+) -> None:
+    """O exemplo de resposta parcial está no prompt, marcado como forma.
+
+    Como o de Encaminhamento, mostra sem ditar: pergunta cruzada com uma parte
+    dentro do Manual e outra fora, respondida com citação mais literal sobre o
+    ponto sem trecho.
+    """
+    prompt = _prompt_do_turno(fazer_cliente)
+
+    assert EXEMPLO_PARCIAL in prompt
+    assert "Aluno:" in EXEMPLO_PARCIAL
+    assert "S.A.U.:" in EXEMPLO_PARCIAL
+    assert "Coordenação de Estágios" in EXEMPLO_PARCIAL
 
 
 def test_o_prompt_do_roteador_cerca_a_conversa_como_o_do_redator() -> None:
