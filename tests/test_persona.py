@@ -14,9 +14,11 @@ recebeu, inteira, no lugar certo, sem ter sido derrubada na composição nem
 comida por formatação.
 
 O transporte do modelo é um `httpx.MockTransport`, o mesmo tipo que
-`test_graph.py` usa. O corpo de `/api/generate` é reescrito aqui em vez de
+`test_graph.py` usa. O corpo de `/api/chat` é reescrito aqui em vez de
 importado: cada arquivo de teste declara o contrato que ele precisa, e ninguém
-depende do texto de outro.
+depende do texto de outro. O turno roda sem `OpcoesDoManual`, então o grafo
+chama só o `redator` e o prompt que ele recebe é o objeto destes testes — a
+ferramenta tem testes próprios, em `test_graph.py`.
 
 O teste do conjunto (`test_o_prompt_tem_exatamente_as_regras_da_issue`) é o
 último a ficar verde por construção: ele afirma as regras todas de uma vez, e
@@ -39,11 +41,12 @@ from sau.inference.ollama import ClienteOllama
 from sau.persona import (
     APRESENTACAO_DA_MENSAGEM,
     APRESENTACAO_DO_HISTORICO,
-    APRESENTACAO_DO_MATERIAL,
     AVISO_CONVERSA,
+    CORTESIA,
     ENCAMINHAMENTO,
     ESCOPO_DE_ESTAGIO,
     EXEMPLO_DE_ENCAMINHAMENTO,
+    EXEMPLO_PARCIAL,
     FIM_CONVERSA,
     FORMATO_SAIDA,
     HISTORICO_VAZIO,
@@ -54,12 +57,14 @@ from sau.persona import (
     ORIENTACAO_DE_FONTE,
     ORIENTACAO_PROCEDURAL,
     PERSONA,
+    PERSONA_DE_ROTEAMENTO,
     REGRAS,
+    RESPOSTA_PARCIAL,
     TOM,
     USAR_HISTORICO,
     montar_prompt,
+    montar_prompt_de_roteamento,
 )
-from sau.rag.retrieve import TrechoRecuperado
 
 _BASE_URL = "http://host.docker.internal:11434"
 _MODELO = "qwen2.5:3b"
@@ -71,10 +76,14 @@ FabricaCliente = Callable[[Any], ClienteOllama]
 
 
 def _payload(texto: str) -> dict[str, Any]:
-    """O que o Ollama devolve numa geração completa."""
+    """O que o Ollama devolve numa conversa por `/api/chat` completa.
+
+    O turno do ADR-0010 fala por `/api/chat`, e não por `/api/generate`: o
+    corpo tem `message`, e não `response`.
+    """
     return {
         "model": _MODELO,
-        "response": texto,
+        "message": {"role": "assistant", "content": texto},
         "done": True,
         "done_reason": "stop",
     }
@@ -96,7 +105,12 @@ def fazer_cliente() -> Iterator[FabricaCliente]:
 
 
 def _espelhando_prompts(registros: list[str]) -> Any:
-    """Transporte que guarda o prompt que o turno mandou ao modelo."""
+    """Transporte que guarda o prompt que o turno mandou ao modelo.
+
+    O prompt do turno é a primeira mensagem `user` da conversa: a persona mais
+    a cerca com o histórico e a mensagem do Aluno. É ela que os testes de
+    persona conferem regra por regra.
+    """
 
     def handler(request: httpx.Request) -> httpx.Response:
         if request.url.path.endswith("/api/embed"):
@@ -104,7 +118,7 @@ def _espelhando_prompts(registros: list[str]) -> Any:
             total = len(corpo["input"])
             return httpx.Response(200, json={"embeddings": [[1.0, 0.0] for _ in range(total)]})
         corpo = json.loads(request.content.decode("utf-8"))
-        registros.append(corpo["prompt"])
+        registros.append(corpo["messages"][0]["content"])
         return httpx.Response(200, json=_payload(_RESPOSTA))
 
     return handler
@@ -135,7 +149,9 @@ def test_o_prompt_tem_exatamente_as_regras_da_issue() -> None:
         "identidade",
         "escopo_de_estagio",
         "tom",
+        "cortesia",
         "orientacao_procedural",
+        "resposta_parcial",
         "nao_inventar",
         "encaminhamento",
         "usar_historico",
@@ -173,6 +189,22 @@ def test_a_regra_de_tom_chega_ao_modelo(
 
     assert TOM.instrucao in prompt
     assert prompt.count(TOM.instrucao) == 1
+
+
+def test_a_regra_de_cortesia_chega_ao_modelo(
+    fazer_cliente: FabricaCliente,
+) -> None:
+    """A cortesia com saudação, despedida e agradecimento está no prompt que o modelo recebeu.
+
+    É esta instrução que impede o redator de tratar um "obrigado" como dúvida:
+    sem ela, com trechos anexados pelo fallback, o redator escolhia o ramo do
+    Encaminhamento e respondia o que o Aluno não perguntou — saudação não é
+    pergunta, e os trechos ficam sem uso.
+    """
+    prompt = _prompt_do_turno(fazer_cliente)
+
+    assert CORTESIA.instrucao in prompt
+    assert prompt.count(CORTESIA.instrucao) == 1
 
 
 def test_a_regra_de_escopo_de_estagio_chega_ao_modelo(
@@ -547,7 +579,7 @@ def test_nenhuma_resposta_ditada_fora_do_exemplo_declarado(
     assert "Coordenação de Estágios" in EXEMPLO_DE_ENCAMINHAMENTO
 
 
-# --- O grounding: responder só do recuperado, citar a Fonte, Encaminhar sem trecho ---
+# --- O grounding: responder só do material e citar a Fonte (título + página) ---
 
 
 def test_a_orientacao_de_fonte_chega_ao_modelo(fazer_cliente: FabricaCliente) -> None:
@@ -557,8 +589,10 @@ def test_a_orientacao_de_fonte_chega_ao_modelo(fazer_cliente: FabricaCliente) ->
     menos recusador para de dizer "não sei" e passa a dizer algo vindo do
     próprio conhecimento dele. Quem observa a obediência é a pessoa, lendo o
     output; o que este teste segura é que a ordem chegou — responder só do
-    recuperado, citar a Fonte de toda afirmação factual, e dizer que não tem o
-    dado e Encaminhar quando nenhum trecho sustentar.
+    recuperado, citar a Fonte (título do slide com a página) de cada trecho que
+    sustentar a afirmação, e dizer que não encontrou e Encaminhar quando nenhum
+    trecho sustentar. A decisão de consultar saiu do prompt do redator na #36, e
+    com ela a menção a `buscar_no_manual`.
     """
     prompt = _prompt_do_turno(fazer_cliente)
 
@@ -566,53 +600,122 @@ def test_a_orientacao_de_fonte_chega_ao_modelo(fazer_cliente: FabricaCliente) ->
     assert prompt.count(ORIENTACAO_DE_FONTE) == 1
 
 
-def _trecho_falso(titulo: str = "Prazo de entrega do relatório de atividades") -> TrechoRecuperado:
-    return TrechoRecuperado(
-        documento="prazos.md",
-        titulo=titulo,
-        texto="O relatório é entregue até a segunda sexta-feira após o início.",
-        similaridade=0.91,
-    )
+# --- A persona do roteador: o prompt enxuto que decide se consulta o Manual ---
 
 
-def test_os_titulos_recuperados_chegam_ao_prompt_montado() -> None:
-    """O material do turno entra no prompt com o título como Fonte e o texto junto.
+def test_o_prompt_do_roteador_abre_pela_persona_enxuta() -> None:
+    """O prompt do roteador abre pela `PERSONA_DE_ROTEAMENTO`, e não pela do redator.
 
-    É o mesmo padrão do teste que compara o prompt recebido com o que a
-    montagem produz: quem afirma a costura é a igualdade com `montar_prompt`,
-    e quem afirma o conteúdo é a presença do título e do texto no prompt.
+    A separação da #36 existe para que o roteador não carregue as regras de
+    redação nem a `ORIENTACAO_DE_FONTE`: é o prompt enxuto que faz o modelo
+    pequeno chamar a ferramenta, medido contra a persona inteira no ADR-0010. Um
+    roteador aberto pela `PERSONA` voltaria ao defeito que a medição apontou.
     """
-    contexto = [_trecho_falso(), _trecho_falso("Prazo de devolução do Termo assinado pela Empresa")]
+    prompt = montar_prompt_de_roteamento(_MENSAGEM)
 
-    prompt = montar_prompt(_MENSAGEM, (), contexto)
-
-    assert prompt == montar_prompt(_MENSAGEM, (), contexto)
-    for trecho in contexto:
-        assert trecho.titulo in prompt
-        assert trecho.texto in prompt
-    assert APRESENTACAO_DO_MATERIAL in prompt
+    assert prompt.startswith(PERSONA_DE_ROTEAMENTO)
+    assert PERSONA not in prompt
+    assert ORIENTACAO_DE_FONTE not in prompt
+    assert EXEMPLO_DE_ENCAMINHAMENTO not in prompt
 
 
-def test_os_titulos_recuperados_chegam_ao_modelo(fazer_cliente: FabricaCliente) -> None:
-    """Os títulos que o turno recuperou estão no prompt que o modelo recebeu.
+def test_o_roteador_responde_sem_busca_apos_o_resultado_da_ferramenta() -> None:
+    """Após o resultado da ferramenta, sem outra consulta, o roteador responde curto.
 
-    O modelo já tem o título na mão — e é por isso que a Fonte citada é o
-    título copiado verbatim, sem par para parsear nem separador que ele possa
-    errar. Sem os títulos aqui, a instrução de citar a Fonte pediria o que o
-    modelo não tem.
+    É a instrução que evita o rascunho descartado: depois de receber o `tool`,
+    o roteador que não precisa de outra consulta responde só "sem busca", em
+    vez de redigir a resposta final — quem escreve ao Aluno é outra etapa, o
+    redator. Sem ela, cada turno factual pagava uma geração longa cujo texto o
+    grafo jogava fora, ficando só com as chamadas.
+    """
+    assert "quem escreve a resposta final ao Aluno é outra etapa" in PERSONA_DE_ROTEAMENTO
+    prompt = montar_prompt_de_roteamento(_MENSAGEM)
+
+    assert "quem escreve a resposta final ao Aluno é outra etapa" in prompt
+
+
+def test_o_roteador_le_a_mensagem_atual_ate_o_fim() -> None:
+    """O roteador decide pela mensagem atual inteira, não pelo início.
+
+    É a instrução que fecha o declínio em fato com saudação na frente: `Oi`
+    sozinho continua `sem busca`, mas `Oi` seguido de pergunta factual chama a
+    ferramenta. Sem ela, o 3B ancorava no primeiro token e o fallback
+    determinístico virava o caminho principal.
+    """
+    assert "inteira até o fim" in PERSONA_DE_ROTEAMENTO
+    prompt = montar_prompt_de_roteamento("Oi, queria saber sobre o termo de compromisso")
+
+    assert "inteira até o fim" in prompt
+
+
+def test_a_regra_de_resposta_parcial_chega_ao_modelo(
+    fazer_cliente: FabricaCliente,
+) -> None:
+    """A regra de resposta parcial está no prompt que o modelo recebeu.
+
+    É ela que impede o tudo-ou-nada do redator: parte sustentada com Fonte,
+    buraco com o literal sobre o ponto específico mais Encaminhamento — nunca
+    resposta ancorada com negação genérica no fim.
     """
     prompt = _prompt_do_turno(fazer_cliente)
 
-    assert APRESENTACAO_DO_MATERIAL in prompt
-    assert "Fonte:" in prompt
+    assert RESPOSTA_PARCIAL.instrucao in prompt
+    assert prompt.count(RESPOSTA_PARCIAL.instrucao) == 1
 
 
-def test_sem_contexto_o_prompt_nao_traz_bloco_de_material() -> None:
-    """Sem material não há bloco vazio: o turno sem trecho encerra no grafo."""
-    prompt = montar_prompt(_MENSAGEM)
+def test_o_exemplo_parcial_chega_ao_modelo(
+    fazer_cliente: FabricaCliente,
+) -> None:
+    """O exemplo de resposta parcial está no prompt, marcado como forma.
 
-    assert APRESENTACAO_DO_MATERIAL not in prompt
-    assert "Fonte:" not in prompt.split(INICIO_CONVERSA, 1)[1]
+    Como o de Encaminhamento, mostra sem ditar: pergunta cruzada com uma parte
+    dentro do Manual e outra fora, respondida com citação mais literal sobre o
+    ponto sem trecho.
+    """
+    prompt = _prompt_do_turno(fazer_cliente)
+
+    assert EXEMPLO_PARCIAL in prompt
+    assert "Aluno:" in EXEMPLO_PARCIAL
+    assert "S.A.U.:" in EXEMPLO_PARCIAL
+    assert "Coordenação de Estágios" in EXEMPLO_PARCIAL
+
+
+def test_o_prompt_do_roteador_cerca_a_conversa_como_o_do_redator() -> None:
+    """A cerca, a ordem da conversa e o sufixo do roteador são os mesmos do redator.
+
+    É a extração `_montar_com_cerca` que impede os dois prompts de divergirem: o
+    roteador precisa do mesmo contexto cercado para decidir, e o teste de cerca
+    do redator passa a valer para ele. O sufixo `S.A.U.:` continua induzindo onde
+    o modelo começa a gerar.
+    """
+    falas = [
+        Mensagem(papel="aluno", texto="qual o prazo do termo de compromisso?", em=1.0),
+        Mensagem(papel="sau", texto="Antes: a assinatura já saiu?", em=2.0),
+    ]
+
+    prompt = montar_prompt_de_roteamento(_MENSAGEM, falas)
+
+    assert AVISO_CONVERSA in prompt
+    assert prompt.index(INICIO_CONVERSA) > prompt.index(PERSONA_DE_ROTEAMENTO)
+    assert prompt.index("a assinatura já saiu?") > prompt.index(INICIO_CONVERSA)
+    assert prompt.index("a assinatura já saiu?") < prompt.index(_MENSAGEM)
+    assert prompt.index(_MENSAGEM) < prompt.index(FIM_CONVERSA)
+    assert prompt.endswith("S.A.U.:")
+
+
+def test_o_historico_vazio_do_roteador_ganha_o_marcador_de_primeira_mensagem() -> None:
+    """Sem histórico, o roteador recebe o mesmo marcador fixo do redator.
+
+    O roteador decide a partir da mensagem de agora; na estreia, o lugar do
+    histórico tem o mesmo marcador, para que ele leia "primeira mensagem" em vez
+    de "bloco faltando". E a mensagem do turno continua rotulada mesmo sem nada
+    antes dela.
+    """
+    prompt = montar_prompt_de_roteamento(_MENSAGEM)
+
+    assert HISTORICO_VAZIO in prompt
+    assert prompt.splitlines()[-3] == f"Aluno: {_MENSAGEM}"
+    assert prompt.splitlines()[-2] == FIM_CONVERSA
 
 
 def _normalizar(texto: str) -> str:

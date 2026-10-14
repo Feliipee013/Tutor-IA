@@ -1,9 +1,18 @@
-"""A persona do S.A.U.: o prompt versionado, com todas as regras de comportamento.
+"""As personas do S.A.U.: os prompts versionados, com todas as regras de comportamento.
 
 Este módulo é um artefato: quem muda o comportamento do S.A.U. edita o texto
 das regras abaixo, e nada mais no código precisa mudar. As regras moram aqui e
 só aqui — `test_as_regras_moram_so_em_sau_persona` varre o pacote e quebra se
 um texto de regra aparecer em outro arquivo.
+
+São **duas** personas versionadas, e a separação é da #36. O **redator**
+(`PERSONA`) é quem escreve a resposta ao Aluno: leva as regras de comportamento
+e a `ORIENTACAO_DE_FONTE`, e **não** declara `tools` — ele redige a partir do
+material que o roteador trouxe. O **roteador** (`PERSONA_DE_ROTEAMENTO`) é um
+prompt enxuto que só decide se consulta o Manual antes de responder; é ele que
+recebe o schema de `buscar_no_manual` em `tools`. O modelo pequeno não sustenta
+as duas coisas num prompt só: com a persona inteira ele não chamava a
+ferramenta (medido 0/6), e com o prompt enxuto passou a chamar.
 
 O que mora aqui é o *prompt inteiro*, não só as regras. A persona é montada
 neste módulo desde a #10, e o histórico da conversa também entra por aqui desde
@@ -44,7 +53,6 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 from sau.graph.state import Mensagem
-from sau.rag.retrieve import TrechoRecuperado
 
 
 @dataclass(frozen=True)
@@ -93,6 +101,18 @@ TOM = Regra(
     ),
 )
 
+CORTESIA = Regra(
+    id="cortesia",
+    titulo="Saudação, despedida e agradecimento",
+    instrucao=(
+        "Quando a mensagem do Aluno for só saudação, despedida ou "
+        "agradecimento, responda com gentileza em uma frase, sem usar os "
+        "trechos e sem Encaminhar: não há dúvida a responder. Isso vale mesmo "
+        "quando houver trechos anexados — saudação não é pergunta, e os "
+        "trechos ficam sem uso."
+    ),
+)
+
 ORIENTACAO_PROCEDURAL = Regra(
     id="orientacao_procedural",
     titulo="Orientação passo a passo do processo",
@@ -103,6 +123,19 @@ ORIENTACAO_PROCEDURAL = Regra(
         "dúvida, faça perguntas objetivas antes de concluir. Você descreve o processo, "
         "mas não emite parecer jurídico sobre o que o termo, o contrato ou a lei exigem: "
         "isso é Encaminhamento."
+    ),
+)
+
+RESPOSTA_PARCIAL = Regra(
+    id="resposta_parcial",
+    titulo="Resposta parcial com o que há",
+    instrucao=(
+        "Quando os trechos sustentarem só parte da pergunta, responda a parte "
+        "sustentada citando a Fonte de cada trecho usado e diga sobre o restante "
+        "que não encontrou no material sobre aquele ponto, encerrando com "
+        "Encaminhamento. Nunca junte resposta ancorada com negação genérica no "
+        "fim: cada afirmação precisa da sua Fonte, e cada buraco precisa do seu "
+        "não encontrei."
     ),
 )
 
@@ -156,7 +189,9 @@ REGRAS: tuple[Regra, ...] = (
     IDENTIDADE,
     ESCOPO_DE_ESTAGIO,
     TOM,
+    CORTESIA,
     ORIENTACAO_PROCEDURAL,
+    RESPOSTA_PARCIAL,
     NAO_INVENTAR,
     ENCAMINHAMENTO,
     USAR_HISTORICO,
@@ -167,16 +202,17 @@ REGRAS: tuple[Regra, ...] = (
 `test_o_prompt_tem_exatamente_as_regras_da_issue` afirma o conjunto inteiro:
 regra nova entra ali junto, regra derrubada quebra ali primeiro.
 
-**Uma resposta ditada existe, e é declarada.** A regra de frase fixa verbatim
+**Duas formas ditadas existem, e são declaradas.** A regra de frase fixa verbatim
 saiu em `3400b32` porque virava atrator para o 3B, e a linha de base mostrou o
 custo do outro lado: cinco Perguntas-teste respondendo a palavra
 `Encaminhamento` e parando, em 5 tokens. O modelo sabia *quando* encerrar e
-não conseguia *como*. Por isso a persona agora mostra a forma uma vez, no
+não conseguia *como*. Por isso a persona mostra a forma duas vezes: no
 `EXEMPLO_DE_ENCAMINHAMENTO` abaixo — um turno completo de fora de escopo,
 perguntado e respondido de ponta a ponta
-([ADR-0009](../../docs/adr/0009-exemplo-de-encaminhamento-na-persona.md)).
-É a única vez em que a persona mostra em vez de descrever: fora do exemplo
-declarado, nenhuma resposta é ditada, e a instrução continua mandando
+([ADR-0009](../../docs/adr/0009-exemplo-de-encaminhamento-na-persona.md)) —
+e no `EXEMPLO_PARCIAL`, o turno de resposta com só parte sustentada.
+São as únicas vezes em que a persona mostra em vez de descrever: fora dos
+exemplos declarados, nenhuma resposta é ditada, e a instrução continua mandando
 escrever com as próprias palavras seguindo a pergunta.
 
 A instrução descreve o que fazer e manda escrever com as próprias palavras
@@ -186,25 +222,67 @@ no prompt, texto fixo vira a resposta.
 """
 
 ORIENTACAO_DE_FONTE = (
-    "Resposta ancorada no Corpus\n"
-    "Responda somente a partir do material recuperado do Corpus, que acompanha "
-    "a conversa abaixo. Cite a Fonte de toda afirmação factual pelo título da "
-    "seção, copiado como está no material. Quando nenhum trecho sustentar a "
-    "resposta, diga que não tem esse dado e encerre com Encaminhamento à "
-    "Coordenação de Estágios, sem inventar telefone, canal ou prazo."
+    "Resposta ancorada no Manual\n"
+    "Os trechos do Manual de Estágio Obrigatório, quando houver, chegam na "
+    "mensagem seguinte, cada um com a sua Fonte (o título do slide com a página). "
+    "Responda somente a partir deles e cite a Fonte de cada trecho que sustentar "
+    "o que você afirmar, com o título e a página como eles vieram. Quando nenhum "
+    "trecho responder à pergunta, comece a resposta com \"não encontrei no "
+    "material\" e encerre dizendo ao Aluno que procure a Coordenação de Estágios, "
+    "sem inventar telefone, canal ou prazo."
 )
-"""A instrução de grounding: responder só do recuperado, citar a Fonte, Encaminhar sem trecho.
+"""A instrução de grounding: responder só do Manual, citar a Fonte, Encaminhar sem trecho.
 
-Entra em todo prompt, junto das regras, e por isso entra no `sha256_do_prompt`:
-é persona, não topologia. O material recuperado do turno vem depois, dentro
-da conversa — o que muda a cada turno não pode morar no prefixo que o Ollama
-guarda em cache.
+Entra em todo prompt do redator, junto das regras, e por isso entra no
+`sha256_do_prompt`: é persona, não topologia. Desde o ADR-0010 o material não
+acompanha o prompt — ele chega como mensagem `tool`, depois de o roteador chamar
+a ferramenta —, e o literal "não encontrei no material" é pedido aqui e
+garantido pela guarda determinística do grafo (`sau/graph/graph.py`), não só
+pela obediência do modelo. O critério de resposta com material é a citação da
+Fonte do trecho que sustenta a afirmação — o título do slide com a página, como
+escrito na #36 e na spec #34. A decisão de consultar saiu do prompt do redator na
+#36, e com ela a menção a `buscar_no_manual`.
+"""
+
+PERSONA_DE_ROTEAMENTO: str = (
+    "Você decide se precisa consultar o Manual de Estágio Obrigatório antes de "
+    "responder ao Aluno.\n"
+    "Leia a mensagem atual do Aluno inteira até o fim, depois dos marcadores: "
+    "saudação no início seguida de pergunta factual conta como pergunta factual.\n"
+    "Chame a ferramenta buscar_no_manual quando a mensagem do Aluno pedir um fato "
+    "do processo de estágio — prazos, documentos, assinaturas, seguro, cadastro ou "
+    "entrega —, escrevendo a consulta com as palavras-chave do assunto.\n"
+    "Exemplos: Aluno: Oi — sem busca. Aluno: Oi, queria saber sobre o termo de "
+    "compromisso — chame buscar_no_manual com a consulta \"termo de compromisso\".\n"
+    "Quando a mensagem for só saudação, despedida, agradecimento ou assunto fora do "
+    "processo de estágio, não chame a ferramenta: responda apenas com as palavras "
+    "\"sem busca\".\n"
+    "Quando você receber o resultado da ferramenta e não precisar de outra "
+    "consulta, responda apenas com as palavras \"sem busca\": quem escreve a "
+    "resposta final ao Aluno é outra etapa, e não você."
+)
+"""A persona do roteador: o prompt enxuto que decide se consulta o Manual.
+
+É a primeira persona **separada** da de redação, e a separação é o que a #36
+mede: com a persona inteira o `qwen2.5:3b` não chamava a ferramenta (0/6), e com
+este prompt enxuto passou a chamar. Ele não leva as regras nem a
+`ORIENTACAO_DE_FONTE` — o roteador não escreve a resposta, só decide se há
+consulta a fazer —, e os textos de resposta ditados nele são o "sem busca" do
+caminho sem ferramenta mais os dois few-shots (`Oi` puro × `Oi` com fato),
+que o redator não lê. Quem declara o schema de
+`buscar_no_manual` em `tools` é o nó do roteador
+(`sau/graph/nodes.criar_no_roteador`), não este texto.
+
+O "sem busca" pós-ferramenta é deliberadamente **só prompt, sem teto de
+tokens**: um `num_predict` baixo no roteador poderia truncar um `tool_calls`
+longo no meio e degradar o caminho bom, então o rascunho descartado se evita
+pela instrução de responder curto, e não pelo corte.
 """
 
 EXEMPLO_DE_ENCAMINHAMENTO = (
     "Exemplo de Encaminhamento completo: pergunta fora do que o S.A.U. orienta, "
-    "respondida de ponta a ponta. É o único texto de resposta ditado neste prompt; "
-    "fora dele, escreva com as suas palavras.\n"
+    "respondida de ponta a ponta. É um dos dois textos de forma deste prompt "
+    "(o outro é o de resposta parcial); fora deles, escreva com as suas palavras.\n"
     "Aluno: Vocês oferecem curso de inglês nas férias? Queria me inscrever.\n"
     "S.A.U.: Isso está "
     "fora do que eu oriento — eu acompanho o processo de estágio. Procure a "
@@ -219,9 +297,29 @@ de férias — fora do processo de Estágio por construção — para que nenhum
 trecho do Corpus a sustente e nenhum teste confunda o exemplo com conversa.
 """
 
+EXEMPLO_PARCIAL = (
+    "Exemplo de resposta parcial: pergunta com duas partes, só uma sustentada "
+    "pelos trechos. É só forma, e não texto a repetir — fora dele, escreva com "
+    "as suas palavras.\n"
+    "Aluno: A empresa quer usar o modelo dela. O que o termo precisa conter "
+    "e qual o prazo para eu enviar?\n"
+    "S.A.U.: Pelo TERMO DE COMPROMISSO MODELO EMPRESA (p. 51–54), o modelo da "
+    "Empresa precisa conter identificação do Aluno, local do estágio, supervisores "
+    "e dados da Instituição, com assinatura do Aluno, da Empresa e da Instituição. "
+    "Sobre o prazo de envio, não encontrei no material sobre esse ponto. "
+    "Procure a Coordenação de Estágios."
+)
+"""O turno de resposta parcial: o que fazer quando só parte tem Fonte.
+
+Mostra a forma — parte sustentada com citação de título e página, buraco com o
+literal sobre o ponto específico mais Encaminhamento — sem ditar texto a
+repetir. A pergunta cruza conteúdo do termo (dentro do Manual) com prazo de
+envio (fora dele), que é o caso `x3`/`x5` da bateria.
+"""
+
 PERSONA: str = "\n\n".join(
     [f"{regra.titulo}\n{regra.instrucao}" for regra in REGRAS]
-    + [ORIENTACAO_DE_FONTE, EXEMPLO_DE_ENCAMINHAMENTO]
+    + [ORIENTACAO_DE_FONTE, EXEMPLO_DE_ENCAMINHAMENTO, EXEMPLO_PARCIAL]
 )
 
 MENSAGENS_NO_PROMPT = 6
@@ -237,37 +335,65 @@ FIM_CONVERSA = "<<< fim da conversa >>>"
 
 APRESENTACAO_DO_HISTORICO = "Histórico recente:"
 APRESENTACAO_DA_MENSAGEM = "Mensagem atual do Aluno (responda somente a esta):"
-APRESENTACAO_DO_MATERIAL = "Material recuperado do Corpus (responda só do que está aqui):"
 HISTORICO_VAZIO = "(Primeira mensagem do Aluno)"
 
 
-def montar_prompt(
+def _montar_com_cerca(
+    persona: str,
     mensagem: str,
-    historico: Sequence[Mensagem] = (),
-    contexto: Sequence[TrechoRecuperado] = (),
+    historico: Sequence[Mensagem],
 ) -> str:
-    """Monta o prompt do turno: persona, histórico, material recuperado e mensagem."""
+    """A composição comum às duas personas: persona, conversa cercada e sufixo.
+
+    O prefixo é a persona inteira, e a conversa — histórico e mensagem do Aluno —
+    vem cercada pelos mesmos marcadores nos dois prompts, o do redator e o do
+    roteador. O corte da janela e o rótulo de cada fala também são os mesmos: o
+    roteador precisa do contexto para decidir se consulta o Manual.
+
+    A extração existe para que os dois prompts não divirjam: um roteador com uma
+    cerca própria seria uma segunda definição de "onde a fala do Aluno começa",
+    e o teste de cerca não passaria a valer para ele.
+    """
     recentes = list(historico)[-MENSAGENS_NO_PROMPT:]
     if recentes:
         bloco = "".join(f"{falada.como_linha()}\n\n" for falada in recentes)
     else:
         bloco = f"{HISTORICO_VAZIO}\n\n"
 
-    if contexto:
-        trechos = "".join(
-            f"Fonte: {trecho.titulo}\n{trecho.texto}\n\n" for trecho in contexto
-        )
-        material = f"{APRESENTACAO_DO_MATERIAL}\n{trechos}"
-    else:
-        material = ""
-
     return (
-        f"{PERSONA}\n\n"
+        f"{persona}\n\n"
         f"{AVISO_CONVERSA}\n"
         f"{INICIO_CONVERSA}\n"
         f"{APRESENTACAO_DO_HISTORICO}\n{bloco}"
-        f"{material}"
         f"{APRESENTACAO_DA_MENSAGEM}\nAluno: {mensagem}\n"
         f"{FIM_CONVERSA}\n"
         f"S.A.U.:"  # Indução de prefixo para garantir onde o modelo deve continuar gerando
     )
+
+
+def montar_prompt(
+    mensagem: str,
+    historico: Sequence[Mensagem] = (),
+) -> str:
+    """Monta o prompt do redator: a persona, o histórico e a mensagem do Aluno.
+
+    O material não entra mais por aqui: desde o ADR-0010 ele chega ao modelo
+    como mensagem `tool`. E desde a #36 quem traz esse material é o roteador — o
+    redator não declara ferramenta nenhuma —, e o que o prompt carrega é a
+    persona (com a `ORIENTACAO_DE_FONTE`) e a conversa cercada.
+    """
+    return _montar_com_cerca(PERSONA, mensagem, historico)
+
+
+def montar_prompt_de_roteamento(
+    mensagem: str,
+    historico: Sequence[Mensagem] = (),
+) -> str:
+    """Monta o prompt do roteador: a persona enxuta e a conversa cercada.
+
+    Reusa a mesma cerca, o mesmo corte de janela e o mesmo sufixo `S.A.U.:` do
+    `montar_prompt` — a única diferença é a persona que abre o prompt. O roteador
+    decide o que fazer com a mensagem; ele não recebe as regras de redação nem a
+    `ORIENTACAO_DE_FONTE`.
+    """
+    return _montar_com_cerca(PERSONA_DE_ROTEAMENTO, mensagem, historico)

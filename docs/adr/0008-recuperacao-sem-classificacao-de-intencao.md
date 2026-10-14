@@ -1,8 +1,16 @@
 # A recuperação entra como nó único, sem classificação de intenção
 
 ---
-status: proposed
+status: superseded by ADR-0010
 ---
+
+> **Substituído pelo
+> [ADR-0010](./0010-aposentadoria-da-recuperacao-obrigatoria-em-todo-turno.md).**
+> A recuperação obrigatória em todo turno, com nó único e sem aresta condicional,
+> foi aposentada: ela passou a ser a ferramenta opcional `buscar_no_manual`, que o
+> modelo chama quando precisa de um fato do Manual. O que este ADR cortou (a
+> classificação de intenção) continua cortado; o que ele fixou (o nó em todo turno
+> e a ausência de condicional) é que mudou.
 
 A recuperação entra no grafo existente (`sau/graph/`) como **um nó só, que roda em
 todo turno**, entre a mensagem do Aluno e o `responder`. **Não há classificação de

@@ -22,9 +22,10 @@ Três decisões estão no código e não só na conversa:
 
 from __future__ import annotations
 
+import json
 import logging
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 import httpx
@@ -109,6 +110,21 @@ class TempoEsgotadoError(ErroDeInferencia):
 
 
 @dataclass(frozen=True)
+class ChamadaDeFerramenta:
+    """Uma ferramenta que o modelo decidiu chamar, com os argumentos que ele mandou.
+
+    É o que o `/api/chat` devolve em `message.tool_calls`: o turno executa a
+    ferramenta e devolve o resultado ao modelo, que decide continuar. O nome é
+    o da ferramenta declarada (`buscar_no_manual`), e `argumentos` é o objeto
+    já decodificado — o Ollama entrega um objeto, e não a string JSON que a
+    API da OpenAI entrega por compatibilidade.
+    """
+
+    nome: str
+    argumentos: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
 class Resposta:
     """A resposta do modelo e o que a geração custou.
 
@@ -147,6 +163,14 @@ class Resposta:
     defeito silencioso: a resposta sai cortada no meio de uma frase e parece
     uma resposta.
     """
+    chamadas: tuple[ChamadaDeFerramenta, ...] = ()
+    """As ferramentas que o modelo pediu para chamar, em ordem.
+
+    Vazio na geração por `/api/generate`, que não tem tool calling, e na
+    resposta final do turno. Preenchido só quando o modelo decide consultar o
+    manual antes de responder; `texto` vem vazio junto, porque a resposta é a
+    chamada.
+    """
 
 
 class ClienteOllama:
@@ -169,6 +193,7 @@ class ClienteOllama:
     ) -> None:
         self._base_url = base_url.rstrip("/")
         self._url = f"{self._base_url}/api/generate"
+        self._url_chat = f"{self._base_url}/api/chat"
         self._modelo = modelo
         self._timeout = timeout
         self._num_ctx = num_ctx
@@ -188,10 +213,11 @@ class ClienteOllama:
     def embutir(self, textos: list[str]) -> list[list[float]]:
         """Embute a lista de textos no `/api/embed` e devolve um vetor por texto.
 
-        É o que permite ao nó de recuperação montar o índice e embutir a
-        pergunta do Aluno sem parâmetro novo no grafo: o cliente do turno
-        carrega o embedding junto da geração. A conversa com o Ollama é a do
-        `ClienteEmbedding`, com o mesmo transporte falso nos testes.
+        É o que permite ao nó `ferramentas` embutir a consulta do modelo sem
+        parâmetro novo no grafo: o cliente do turno carrega o embedding junto da
+        geração, e a ferramenta `buscar_no_manual` o usa para consultar o índice
+        do Manual. A conversa com o Ollama é a do `ClienteEmbedding`, com o mesmo
+        transporte falso nos testes.
         """
         return ClienteEmbedding(
             self._base_url,
@@ -221,9 +247,67 @@ class ClienteOllama:
         }
 
         inicio = time.perf_counter()
-        bruto = self._pedir(payload)
+        bruto = self._pedir(payload, url=self._url, chave="response")
         segundos_totais = time.perf_counter() - inicio
 
+        return self._montar_resposta(
+            bruto, texto=str(bruto.get("response", "")), segundos_totais=segundos_totais
+        )
+
+    def conversar(
+        self,
+        mensagens: list[dict[str, Any]],
+        *,
+        ferramentas: list[dict[str, Any]] | None = None,
+        opcoes: dict[str, Any] | None = None,
+    ) -> Resposta:
+        """Conversa por `/api/chat`, com tool calling opcional.
+
+        É o caminho do turno com ferramenta: o modelo pode responder direto
+        (`texto`) ou pedir para chamar uma ferramenta (`chamadas`), e o turno
+        executa e volta com o resultado no histórico de mensagens. `ferramentas`
+        é o schema no formato `tools` do Ollama; sem ele, a conversa é uma
+        geração comum por chat.
+        """
+        payload: dict[str, Any] = {
+            "model": self._modelo,
+            "messages": mensagens,
+            "stream": False,
+            "options": {"num_ctx": self._num_ctx, **(opcoes or {})},
+        }
+        if ferramentas is not None:
+            payload["tools"] = ferramentas
+
+        inicio = time.perf_counter()
+        bruto = self._pedir(payload, url=self._url_chat, chave="message")
+        segundos_totais = time.perf_counter() - inicio
+
+        mensagem = bruto.get("message")
+        # `_pedir` já garantiu que `message` é um objeto; o `isinstance` é só
+        # para o mypy, que não segue a garantia de um campo verificado lá.
+        if not isinstance(mensagem, dict):
+            mensagem = {}
+        return self._montar_resposta(
+            bruto,
+            texto=str(mensagem.get("content", "")),
+            segundos_totais=segundos_totais,
+            chamadas=_ler_chamadas(mensagem.get("tool_calls")),
+        )
+
+    def _montar_resposta(
+        self,
+        bruto: dict[str, Any],
+        *,
+        texto: str,
+        segundos_totais: float,
+        chamadas: tuple[ChamadaDeFerramenta, ...] = (),
+    ) -> Resposta:
+        """Monta a `Resposta` a partir do JSON do Ollama e a registra no log.
+
+        Os tempos são os mesmos em `/api/generate` e `/api/chat`, e por isso a
+        montagem é uma só: o que muda entre as duas rotas é de onde vem o texto
+        (o `response` ou o `message.content`) e se há chamadas de ferramenta.
+        """
         carga = float(bruto.get("load_duration", 0)) / NANOSEGUNDOS_POR_SEGUNDO
         avaliacao = float(bruto.get("prompt_eval_duration", 0)) / NANOSEGUNDOS_POR_SEGUNDO
         duracao = float(bruto.get("eval_duration", 0)) / NANOSEGUNDOS_POR_SEGUNDO
@@ -235,7 +319,7 @@ class ClienteOllama:
         )
 
         resposta = Resposta(
-            texto=str(bruto.get("response", "")),
+            texto=texto,
             primeiro_token_segundos=carga + avaliacao,
             carga_segundos=carga,
             avaliacao_prompt_segundos=avaliacao,
@@ -244,18 +328,23 @@ class ClienteOllama:
             tokens_gerados=tokens_gerados,
             concluida=bool(bruto.get("done", False)),
             motivo_de_parada=str(bruto.get("done_reason", "")),
+            chamadas=chamadas,
         )
         self._registrar(resposta)
         return resposta
 
-    def _pedir(self, payload: dict[str, Any]) -> dict[str, Any]:
-        """POST em `/api/generate` e devolve o JSON do Ollama."""
+    def _pedir(self, payload: dict[str, Any], *, url: str, chave: str) -> dict[str, Any]:
+        """POST em `url` e devolve o JSON do Ollama.
+
+        `chave` é o campo que a rota precisa devolver (`response` na geração,
+        `message` no chat): sem ele, não há resposta para dar ao Aluno.
+        """
         try:
             if self._client is not None:
-                resp = self._client.post(self._url, json=payload, timeout=self._timeout)
+                resp = self._client.post(url, json=payload, timeout=self._timeout)
             else:
                 with httpx.Client() as c:
-                    resp = c.post(self._url, json=payload, timeout=self._timeout)
+                    resp = c.post(url, json=payload, timeout=self._timeout)
         except httpx.TimeoutException as err:
             raise TempoEsgotadoError(
                 f"FALHA CRÍTICA: o modelo '{self._modelo}' não respondeu em "
@@ -265,7 +354,7 @@ class ClienteOllama:
             ) from err
         except httpx.HTTPError as err:
             raise ErroDeInferencia(
-                f"FALHA CRÍTICA: não consegui falar com o Ollama em {self._url}: {err}. "
+                f"FALHA CRÍTICA: não consegui falar com o Ollama em {url}: {err}. "
                 "Confira se o serviço está rodando no host e se o container alcança "
                 "a porta 11434 (ver ADR-0002)."
             ) from err
@@ -290,12 +379,13 @@ class ClienteOllama:
                 f"objeto JSON ao pedir uma geração do modelo '{self._modelo}'."
             )
 
-        # Sem o campo `response`, não há resposta para dar ao Aluno. Tratar
-        # isso como texto vazio entregaria um Aluno uma tela em branco sem
-        # nenhum sinal de que algo deu errado.
-        if "response" not in dados:
+        # Sem o campo que a rota promete (`response` na geração, `message` no
+        # chat), não há resposta para dar ao Aluno. Tratar isso como texto
+        # vazio entregaria ao Aluno uma tela em branco sem nenhum sinal de que
+        # algo deu errado.
+        if chave not in dados:
             raise ErroDeInferencia(
-                f"FALHA CRÍTICA: o Ollama não devolveu o campo 'response' na geração do "
+                f"FALHA CRÍTICA: o Ollama não devolveu o campo '{chave}' na geração do "
                 f"modelo '{self._modelo}'. O que veio: {sorted(dados)}."
             )
 
@@ -311,6 +401,15 @@ class ClienteOllama:
         fiquem juntos: um tempo sem a resposta que ele mediu é um tempo de
         ninguém.
         """
+        detalhe = resposta.texto
+        if resposta.chamadas:
+            # Uma resposta de ferramenta vem sem texto: o que o modelo "disse"
+            # foi a chamada, e é ela que precisa ficar no log para o critério
+            # de auditoria da #36 (consulta registrada) ser verdadeiro.
+            detalhe = "[tool_calls] " + "; ".join(
+                f"{chamada.nome}({json.dumps(chamada.argumentos, ensure_ascii=False)})"
+                for chamada in resposta.chamadas
+            )
         logger.info(
             "Resposta do modelo '%s' | primeiro token %.3fs (carga %.3fs + prompt %.3fs) "
             "| total %.3fs | %s tok/s | %s tokens | parada: %s\n%s",
@@ -322,8 +421,49 @@ class ClienteOllama:
             formatar_numero(resposta.tokens_por_segundo),
             formatar_numero(resposta.tokens_gerados),
             resposta.motivo_de_parada or MOTIVO_NAO_INFORMADO,
-            resposta.texto,
+            detalhe,
         )
+
+
+def _ler_chamadas(bruto: Any) -> tuple[ChamadaDeFerramenta, ...]:
+    """Lê o `message.tool_calls` do `/api/chat`, ignorando o que não serve.
+
+    O Ollama entrega `arguments` como objeto, e a compatibilidade com a API da
+    OpenAI aceita que venha como string JSON; as duas formas são aceitas. Uma
+    chamada sem nome de função é descartada em vez de virar uma ferramenta
+    fantasma: sem saber o que executar, não há o que executar.
+    """
+    if not isinstance(bruto, list):
+        return ()
+
+    chamadas: list[ChamadaDeFerramenta] = []
+    for item in bruto:
+        if not isinstance(item, dict):
+            continue
+        funcao = item.get("function")
+        if not isinstance(funcao, dict):
+            continue
+        nome = funcao.get("name")
+        if not isinstance(nome, str) or not nome:
+            continue
+        chamadas.append(
+            ChamadaDeFerramenta(nome=nome, argumentos=_ler_argumentos(funcao.get("arguments")))
+        )
+    return tuple(chamadas)
+
+
+def _ler_argumentos(bruto: Any) -> dict[str, Any]:
+    """Os argumentos de uma chamada, objeto ou string JSON, sempre como dicionário."""
+    if isinstance(bruto, dict):
+        return bruto
+    if isinstance(bruto, str):
+        try:
+            decodificado = json.loads(bruto)
+        except ValueError:
+            return {}
+        if isinstance(decodificado, dict):
+            return decodificado
+    return {}
 
 
 def formatar_numero(valor: float | int | None) -> str:

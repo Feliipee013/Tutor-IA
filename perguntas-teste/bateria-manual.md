@@ -657,4 +657,4 @@ quando a apólice vale?
 - [ADR-0012](../docs/adr/0012-limiar-de-similaridade-com-a-frase-de-ausencia.md) — o limiar de similaridade e a frase de ausência que condicionam quando se cita uma Fonte
 - [`perguntas-teste.md`](./perguntas-teste.md) — a bateria congelada da 1.1, que segue intacta
 - Spec [#34](https://github.com/Feliipee013/Tutor-IA/issues/34) e ticket [#38](https://github.com/Feliipee013/Tutor-IA/issues/38) — a origem desta bateria, a divisão 10+20 e as três métricas
-- `manual_estagio.pdf` — o Manual de Estágio Obrigatório do Polo 2026/2, base desta bateria
+- `corpus/manual-estagio-obrigatorio-polo-2026-2.pdf` — o Manual de Estágio Obrigatório do Polo 2026/2, base desta bateria

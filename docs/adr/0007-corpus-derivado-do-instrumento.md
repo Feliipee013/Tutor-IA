@@ -70,6 +70,16 @@ degrada para recuperação desligada (Encaminhamento determinístico) em vez de
 citar o README. Fixtures de `.md` em `tests/` provam só a mecânica, não o
 material.
 
+## Emenda: o caminho `.md` sai do turno na #36
+
+A #36 religa o turno na ferramenta `buscar_no_manual` sobre o índice do PDF
+([ADR-0010](./0010-aposentadoria-da-recuperacao-obrigatoria-em-todo-turno.md)):
+o caminho antigo deixa de ser chamado em todo turno. `sau/rag/retrieve.py` e os
+seus testes continuam no repositório, mas o nó que lia o Corpus a cada turno
+(`criar_no_recuperar`, e o `DIRETORIO_CORPUS_PADRAO` de `sau/graph/nodes.py`) foi
+removido. `DIRETORIO_CORPUS_PADRAO` continua existindo em `harness/metrics.py`,
+que o usa nas métricas da bateria.
+
 ## Referências
 
 - [`CONTEXT.md`](../../CONTEXT.md) — o escopo que este Corpus deliberadamente não

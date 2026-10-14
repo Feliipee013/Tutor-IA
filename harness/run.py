@@ -60,6 +60,7 @@ import httpx
 
 from sau.config import carregar_configuracao
 from sau.graph.graph import executar_turno
+from sau.graph.nodes import OpcoesDoManual
 from sau.graph.state import Mensagem
 from sau.inference.ollama import (
     NUM_CTX_PADRAO,
@@ -67,7 +68,7 @@ from sau.inference.ollama import (
     ClienteOllama,
     Resposta,
 )
-from sau.persona import PERSONA
+from sau.persona import PERSONA, PERSONA_DE_ROTEAMENTO
 from sau.prereqs import PreRequisitoError, executar_checagens, modelo_servido_em_cpu
 from sau.rag.retrieve import Indice, ultimo_indice
 
@@ -319,9 +320,11 @@ class ClienteMedido(ClienteOllama):
     condições em `opcoes`, e esta classe é o "quem mede" do harness.
 
     `ultima` é a `Resposta` da última geração **deste turno**. Quem chama zera
-    antes de rodar o turno e lê depois: com o grafo de um caminho só, cada
-    execução gera exatamente uma — a do `responder` — porque a recuperação
-    não gera, só embute. A exceção é o Encaminhamento determinístico: sem
+    antes de rodar o turno e lê depois: desde a #36 cada turno faz duas
+    gerações — a do `roteador`, que decide se consulta o Manual, e a do
+    `redator`, que escreve a resposta —, e `ultima` guarda a do redator, que é
+    a que o Aluno lê. Sem Manual, sobra uma geração, também a do redator. A
+    exceção é o Encaminhamento determinístico: sem
     material recuperado o turno encerra sem chamar o modelo, e `ultima` segue
     `None` — ler sem zerar devolveria a geração do turno anterior como se
     fosse a atual, que é o defeito que o protocolo de zerar existe para
@@ -346,6 +349,22 @@ class ClienteMedido(ClienteOllama):
     def responder(self, prompt: str, *, opcoes: dict[str, Any] | None = None) -> Resposta:
         combinadas = {**self._opcoes_medidas, **(opcoes or {})}
         resposta = super().responder(prompt, opcoes=combinadas)
+        self.ultima = resposta
+        return resposta
+
+    def conversar(
+        self,
+        mensagens: list[dict[str, Any]],
+        *,
+        ferramentas: list[dict[str, Any]] | None = None,
+        opcoes: dict[str, Any] | None = None,
+    ) -> Resposta:
+        # O turno do ADR-0010 fala por `/api/chat`, e não por `/api/generate`:
+        # sem este override, `ultima` ficaria `None` em todo turno com
+        # ferramenta e a rodada gravaria o turno como determinístico. As
+        # condições medidas entram do mesmo jeito que no `responder`.
+        combinadas = {**self._opcoes_medidas, **(opcoes or {})}
+        resposta = super().conversar(mensagens, ferramentas=ferramentas, opcoes=combinadas)
         self.ultima = resposta
         return resposta
 
@@ -592,13 +611,18 @@ def _executar_passo(
 def sha256_do_prompt() -> str:
     """O `sha256` do prompt versionado, para amarrar a rodada a um estado do código.
 
-    A persona é versionada em `sau/persona.py` no sentido de que mora no
-    arquivo — não tem número de versão. Duas rodadas com o mesmo modelo, a
+    As personas são versionadas em `sau/persona.py` no sentido de que moram no
+    arquivo — não têm número de versão. Duas rodadas com o mesmo modelo, a
     mesma seed e a mesma máquina podem ter prompts diferentes se alguém
-    editou a persona entre elas, e aí a comparação da 1.2 mede duas coisas ao
+    editou uma persona entre elas, e aí a comparação da 1.2 mede duas coisas ao
     mesmo tempo. O hash é o que separa "o RAG mudou" de "a persona mudou".
+
+    Desde a #36 são **duas** personas versionadas, e um turno factual passa pelas
+    duas: o hash cobre a do redator (`PERSONA`) e a do roteador
+    (`PERSONA_DE_ROTEAMENTO`), separadas por uma linha em branco, para que
+    mexer em qualquer uma delas mude a rodada.
     """
-    return hashlib.sha256(PERSONA.encode("utf-8")).hexdigest()
+    return hashlib.sha256((PERSONA + "\n\n" + PERSONA_DE_ROTEAMENTO).encode("utf-8")).hexdigest()
 
 
 def descrever_alocacao(item_ps: dict[str, Any]) -> AlocacaoDoModelo:
@@ -804,7 +828,9 @@ def main(argumentos: Sequence[str] | None = None) -> int:
         # significa "o modelo nem foi chamado", e o registro leva o texto que
         # o Aluno de fato leu, marcado como determinístico.
         cliente.ultima = None
-        texto_entregue = executar_turno(cliente, texto, ())
+        texto_entregue = executar_turno(
+            cliente, texto, (), manual=OpcoesDoManual.de_config(configuracao)
+        )
         if cliente.ultima is None:
             return resposta_deterministica(texto_entregue)
         return cliente.ultima
@@ -815,7 +841,9 @@ def main(argumentos: Sequence[str] | None = None) -> int:
         # que o S.A.U. retoma o dado em vez de repedir a pergunta. O zero e o
         # determinístico valem aqui pelo mesmo motivo do turno isolado.
         cliente.ultima = None
-        texto_entregue = executar_turno(cliente, texto, historico)
+        texto_entregue = executar_turno(
+            cliente, texto, historico, manual=OpcoesDoManual.de_config(configuracao)
+        )
         if cliente.ultima is None:
             return resposta_deterministica(texto_entregue)
         return cliente.ultima

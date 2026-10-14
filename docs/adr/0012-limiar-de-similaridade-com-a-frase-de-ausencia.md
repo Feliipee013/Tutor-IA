@@ -15,3 +15,14 @@ A recuperação por similaridade vetorial usa um limiar mínimo configurável. T
 - Reduz falsos positivos (trechos semanticamente distantes) que antes poderiam levar à alucinação.
 - Torna explícita a ausência de evidência, forçando Encaminhamento quando o manual não sustenta o fato.
 - Cria um ponto de ajuste mensurável (antes/depois com a mesma bateria) ao invés de um valor arbitrário não justificado.
+
+## Emenda: implementação na #36
+
+- **O literal também é garantido em código.** A guarda do grafo (`finalizar`)
+  troca a resposta pelo texto de ausência quando a ferramenta foi chamada e nada
+  passou pelo limiar, de modo que a frase não depende de o modelo obedecer ao
+  prompt ([ADR-0010](./0010-aposentadoria-da-recuperacao-obrigatoria-em-todo-turno.md)).
+- **O limiar e o `k` têm fonte única.** Os padrões vivem em `sau/config.py`
+  (`MANUAL_LIMIAR_SIMILARIDADE=0.35`, `MANUAL_K_PADRAO=4`); a ferramenta
+  `buscar_no_manual` recebe ambos por parâmetro, sem default próprio, para que a
+  calibração tenha um lugar só.

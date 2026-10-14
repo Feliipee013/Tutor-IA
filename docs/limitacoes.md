@@ -18,13 +18,17 @@ no semáforo de inferência (`sau/inference/semaphore.py`), de modo que um
 Aluno nunca tem dois turnos concorrendo — e quando a fila passa do teto, o
 Aluno recebe recusa educada com a posição e a estimativa.
 
-O turno é o grafo LangGraph (`sau/graph/graph.py`), hoje num caminho só
-(`START → responder → END`); a recuperação da 1.2 entra como nó desse mesmo
-grafo, **sem classificação de intenção** ([ADR-0008](./adr/0008-recuperacao-sem-classificacao-de-intencao.md)).
-O prompt é montado por
-`sau/persona.py`: as regras da persona primeiro (prefixo fixo, que o
+O turno é o grafo LangGraph (`sau/graph/graph.py`), hoje em dois papéis
+(`START → roteador → (ferramentas → roteador) → redator → finalizar → END`): o
+`roteador` decide se consulta o Manual de Estágio pela ferramenta opcional
+`buscar_no_manual`, **sem classificação de intenção**
+([ADR-0010](./adr/0010-aposentadoria-da-recuperacao-obrigatoria-em-todo-turno.md)),
+e o `redator` escreve a resposta a partir do que foi consultado. Os prompts são
+montados por
+`sau/persona.py`: no do redator, as regras da persona primeiro (prefixo fixo, que o
 Ollama mantém em cache), depois o histórico recente (até 6 mensagens) e a
-mensagem atual cercada por marcadores, com o texto do Aluno introduzido por `Aluno:`. A inferência roda no Ollama **no host**
+mensagem atual cercada por marcadores, com o texto do Aluno introduzido por `Aluno:`;
+o do roteador é a persona enxuta com a mesma cerca. A inferência roda no Ollama **no host**
 (`host.docker.internal:11434`, ADR-0002), modelo `qwen2.5:3b`. O estado da
 conversa vive num arquivo, isolado por `chat_id`, com TTL (ADR-0005). O
 compose sobe dois serviços, `bot` (checagens e prova de fumaça) e
