@@ -6,6 +6,11 @@ o modelo pequeno não sustenta decisão e redação num prompt só:
 
     START → roteador → (chamou a ferramenta?) → ferramentas → roteador … → redator → finalizar → END
 
+Quando o roteador declina a consulta sem chamar a ferramenta, o ciclo passa pela
+`busca_de_seguranca` — UMA busca determinística com a mensagem do Aluno, que só
+anexa material quando acha evidência — antes do redator. Sem ela, um declínio
+numa pergunta factual deixava o redator sem material.
+
 O nó `roteador` leva a conversa ao modelo por `/api/chat` com o schema de
 `buscar_no_manual` declarado e a persona enxuta do roteamento. Ele **decide**:
 quando o modelo responde direto — saudação, agradecimento, pergunta fora do
@@ -39,6 +44,7 @@ from langgraph.graph.state import CompiledStateGraph
 from sau.graph.nodes import (
     EstadoTurno,
     OpcoesDoManual,
+    criar_no_busca_de_seguranca,
     criar_no_ferramentas,
     criar_no_finalizar,
     criar_no_redator,
@@ -110,12 +116,21 @@ def construir_grafo(
         construtor.add_node(
             "ferramentas", cast(Any, criar_no_ferramentas(cliente, manual=manual))
         )
+        construtor.add_node(
+            "busca_de_seguranca",
+            cast(Any, criar_no_busca_de_seguranca(cliente, manual=manual)),
+        )
         construtor.add_edge(START, "roteador")
         construtor.add_edge("ferramentas", "roteador")
+        construtor.add_edge("busca_de_seguranca", "redator")
         construtor.add_conditional_edges(
             "roteador",
             rota_das_ferramentas,
-            {"ferramentas": "ferramentas", "redator": "redator"},
+            {
+                "ferramentas": "ferramentas",
+                "busca_de_seguranca": "busca_de_seguranca",
+                "redator": "redator",
+            },
         )
     else:
         construtor.add_edge(START, "redator")

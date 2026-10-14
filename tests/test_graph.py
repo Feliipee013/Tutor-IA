@@ -189,20 +189,22 @@ def _manual() -> OpcoesDoManual:
 
 
 def test_grafo_tem_o_roteador_e_o_redator_com_ferramenta(fazer_cliente: FabricaCliente) -> None:
-    """Com Manual, o grafo tem `roteador`, `ferramentas`, `redator` e `finalizar`.
+    """Com Manual, o grafo tem roteador, ferramentas, fallback, redator e finalizar.
 
     A topologia é o critério de aceitação do grafo, e ela é afirmada pela visão
     que o LangGraph monta do grafo compilado — não pelo código que a construiu,
     que é a mesma coisa que se verificaria escrevendo o mesmo grafo de novo. É o
     ciclo do ADR-0010 com a separação da #36: o roteador decide e a ferramenta
-    executa quando chamada, o redator escreve a resposta ao Aluno, e o finalizar
-    encerra com a guarda de ausência.
+    executa quando chamada, a `busca_de_seguranca` cobre o declínio do roteador
+    com UMA busca determinística, o redator escreve a resposta ao Aluno, e o
+    finalizar encerra com a guarda de ausência.
     """
     visao = construir_grafo(fazer_cliente(_roteiro([], [])), manual=_manual()).get_graph()
 
     assert sorted(visao.nodes) == [
         "__end__",
         "__start__",
+        "busca_de_seguranca",
         "ferramentas",
         "finalizar",
         "redator",
@@ -211,6 +213,7 @@ def test_grafo_tem_o_roteador_e_o_redator_com_ferramenta(fazer_cliente: FabricaC
     arestas = {(aresta.source, aresta.target) for aresta in visao.edges}
     assert ("__start__", "roteador") in arestas
     assert ("ferramentas", "roteador") in arestas
+    assert ("busca_de_seguranca", "redator") in arestas
     assert ("redator", "finalizar") in arestas
     assert ("finalizar", "__end__") in arestas
 
@@ -251,20 +254,35 @@ def test_assinatura_do_turno_e_do_grafo_recebem_o_manual() -> None:
 
 
 def test_rota_das_ferramentas_so_abre_o_ciclo_com_chamada_pendente() -> None:
-    """A aresta condicional só volta à ferramenta com chamada pendente e rodada livre.
+    """A aresta condicional tem três destinos: ferramenta, fallback e redator.
 
-    Sem chamada, o roteador passou ao redator — resposta direta. No teto de
-    rodadas, também passa ao redator, que escreve com o que o roteador já
-    trouxe, em vez de girar para sempre: é a trava contra o laço infinito de um
-    modelo que peça a ferramenta sem parar.
+    Com chamada pendente e rodada livre, volta à ferramenta. Sem chamada e sem
+    ferramenta executada — o roteador declinou de primeira —, passa à
+    `busca_de_seguranca`, que tenta UMA busca determinística. Sem chamada mas
+    com ferramenta já executada — o declínio pós-busca —, vai direto ao
+    `redator`, sem rebusca. No teto de rodadas, também passa ao redator, que
+    escreve com o que o roteador já trouxe, em vez de girar para sempre: é a
+    trava contra o laço infinito de um modelo que peça a ferramenta sem parar.
     """
-    assert rota_das_ferramentas({"mensagem": _MENSAGEM, "pendentes": []}) == "redator"
+    assert rota_das_ferramentas({"mensagem": _MENSAGEM, "pendentes": []}) == (
+        "busca_de_seguranca"
+    )
     chamada = ChamadaDeFerramenta(nome="buscar_no_manual", argumentos={})
     com_chamada: EstadoTurno = {"mensagem": _MENSAGEM, "pendentes": [chamada], "rodadas": 1}
     assert rota_das_ferramentas(com_chamada) == "ferramentas"
+    declinio_pos_busca: EstadoTurno = {
+        "mensagem": _MENSAGEM,
+        "pendentes": [],
+        "houve_ferramenta": True,
+        "houve_evidencia": True,
+        "rodadas": 2,
+    }
+    assert rota_das_ferramentas(declinio_pos_busca) == "redator"
     no_teto: EstadoTurno = {
         "mensagem": _MENSAGEM,
         "pendentes": [chamada],
+        "houve_ferramenta": True,
+        "houve_evidencia": True,
         "rodadas": LIMITE_DE_RODADAS,
     }
     assert rota_das_ferramentas(no_teto) == "redator"
@@ -321,12 +339,15 @@ def test_turno_com_ferramenta_executa_e_o_redator_escreve(
 
 def test_saudacao_passa_pelo_roteador_e_pelo_redator_sem_ferramenta(
     fazer_cliente: FabricaCliente,
+    buscar_falsa: list[list[TrechoDoManual]],
 ) -> None:
     """Uma resposta direta são duas rodadas — roteador e redator — e nenhuma `tool`.
 
     O roteador não abre o ciclo (não há chamada pendente) e o redator escreve da
     persona, sem par de ferramenta no corpo. O que o teste protege é justamente
-    isso: a mensagem `tool` só existe quando houve consulta.
+    isso: a mensagem `tool` só existe quando houve consulta. A busca falsificada
+    vazia é a do fallback: a busca de segurança roda e não acha nada, então não
+    anexa nada.
     """
     chats: list[dict[str, Any]] = []
     handler = _roteiro([_chat_com_texto("sem busca"), _chat_com_texto(_RESPOSTA)], chats)
@@ -363,16 +384,105 @@ def test_a_ferramenta_sem_evidencia_vira_o_literal_de_ausencia(
     assert "Coordenação de Estágios" in resposta
 
 
-def test_a_guarda_nao_dispara_quando_nao_houve_ferramenta(fazer_cliente: FabricaCliente) -> None:
+def test_a_guarda_nao_dispara_quando_nao_houve_ferramenta(
+    fazer_cliente: FabricaCliente, buscar_falsa: list[list[TrechoDoManual]]
+) -> None:
     """Sem chamada à ferramenta, a resposta do redator passa intacta.
 
     Saudação e cortesia não buscam nada; não há ausência de evidência a
     declarar, e trocar a resposta pelo literal seria responder o que o Aluno não
-    perguntou.
+    perguntou. A busca falsificada vazia é a do fallback, que roda e não acha.
     """
     handler = _roteiro([_chat_com_texto("sem busca"), _chat_com_texto(_RESPOSTA)], [])
 
     assert executar_turno(fazer_cliente(handler), _MENSAGEM, manual=_manual()) == _RESPOSTA
+
+
+def test_declinio_factual_com_evidencia_no_fallback_nao_vira_ausencia(
+    fazer_cliente: FabricaCliente, buscar_falsa: list[list[TrechoDoManual]]
+) -> None:
+    """O roteador declinou a pergunta factual, mas o fallback achou material.
+
+    É o defeito que a busca de segurança fecha: sem ela, o redator escreveria
+    sem material nenhum — e já saiu resposta não ancorada carimbada com
+    "Segundo o material da UNOPAR". Com ela, o redator recebe o par `tool` com
+    os trechos, a resposta é a ancorada, e a guarda de ausência não dispara.
+    A busca usa a mensagem crua do Aluno, e o turno continua em duas rodadas —
+    o fallback não chama o modelo.
+    """
+    buscar_falsa.append([_TRECHO])
+    chats: list[dict[str, Any]] = []
+    passos = [
+        _chat_com_texto("sem busca"),
+        _chat_com_texto(_RESPOSTA_COM_FONTE),
+    ]
+    grafo = construir_grafo(fazer_cliente(_roteiro(passos, chats)), manual=_manual())
+
+    entrada: EstadoTurno = {
+        "mensagem": _MENSAGEM,
+        "mensagens": [{"role": "user", "content": montar_prompt_de_roteamento(_MENSAGEM)}],
+        "rodadas": 0,
+    }
+    estado = grafo.invoke(entrada)
+
+    assert estado["resposta"] == _RESPOSTA_COM_FONTE
+    assert estado["resposta"] != TEXTO_AUSENCIA
+    assert estado["houve_ferramenta"] is True
+    assert estado["houve_evidencia"] is True
+    assert estado["fontes"] == [_TRECHO.fonte]
+    assert len(chats) == 2
+    # O redator recebeu o par de ferramenta do fallback, com a consulta crua.
+    mensagens = chats[1]["messages"]
+    assistentes = [
+        mensagem
+        for mensagem in mensagens
+        if mensagem["role"] == "assistant" and mensagem.get("tool_calls")
+    ]
+    assert len(assistentes) == 1
+    chamada = assistentes[0]["tool_calls"][0]["function"]
+    assert chamada["name"] == "buscar_no_manual"
+    assert chamada["arguments"] == {"consulta": _MENSAGEM}
+    ferramentas = [mensagem for mensagem in mensagens if mensagem["role"] == "tool"]
+    assert len(ferramentas) == 1
+    assert ferramentas[0]["tool_name"] == "buscar_no_manual"
+    assert _TRECHO.fonte in ferramentas[0]["content"]
+
+
+def test_saudacao_declinada_sem_evidencia_no_fallback_responde_direto(
+    fazer_cliente: FabricaCliente, buscar_falsa: list[list[TrechoDoManual]]
+) -> None:
+    """A saudação que o fallback não sustentou responde direto, sem o literal.
+
+    É o teste guarda-chuva da saudação: o roteador declinou, a busca de
+    segurança não achou nada e por isso NÃO anexou nada nem marcou as
+    bandeiras — a guarda do `finalizar` só dispara com `houve_ferramenta`, e
+    uma saudação trocada pelo literal de ausência responderia o que o Aluno
+    não perguntou.
+    """
+    buscar_falsa.append([])  # A busca de segurança não devolve trecho algum.
+    chats: list[dict[str, Any]] = []
+    passos = [
+        _chat_com_texto("sem busca"),
+        _chat_com_texto(_RESPOSTA),
+    ]
+    grafo = construir_grafo(fazer_cliente(_roteiro(passos, chats)), manual=_manual())
+    mensagem = "oi, bom dia!"
+
+    entrada: EstadoTurno = {
+        "mensagem": mensagem,
+        "mensagens": [{"role": "user", "content": montar_prompt_de_roteamento(mensagem)}],
+        "rodadas": 0,
+    }
+    estado = grafo.invoke(entrada)
+
+    assert estado["resposta"] == _RESPOSTA
+    assert estado["resposta"] != TEXTO_AUSENCIA
+    assert not estado.get("houve_ferramenta")
+    assert not estado.get("houve_evidencia")
+    assert len(chats) == 2
+    assert all(
+        recebida["role"] != "tool" for recebida in chats[1]["messages"]
+    )
 
 
 def test_o_teto_de_rodadas_encerra_o_ciclo(
@@ -423,6 +533,7 @@ def test_o_prompt_que_chega_ao_modelo_sem_manual_e_o_montar_prompt(
 
 def test_o_prompt_do_roteador_chega_ao_modelo_com_manual(
     fazer_cliente: FabricaCliente,
+    buscar_falsa: list[list[TrechoDoManual]],
 ) -> None:
     """Com Manual, o turno abre pelo prompt do roteador, e não pelo do redator.
 
@@ -430,7 +541,8 @@ def test_o_prompt_do_roteador_chega_ao_modelo_com_manual(
     turno é o de `montar_prompt_de_roteamento`. Uma troca acidental — abrir pelo
     prompt do redator — tiraria do roteador a persona enxuta que faz o modelo
     chamar a ferramenta, e as duas pontas ficariam diferentes sem que o conteúdo
-    da persona mudasse.
+    da persona mudasse. A busca falsificada vazia é a do fallback, que roda e
+    não acha.
     """
     chats: list[dict[str, Any]] = []
     handler = _roteiro([_chat_com_texto("sem busca"), _chat_com_texto(_RESPOSTA)], chats)

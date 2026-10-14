@@ -78,3 +78,31 @@ O turno passa a ter dois papéis, e a separação é o que a #36 fixa:
 
 O `sha256_do_prompt` do harness passa a cobrir as duas personas versionadas
 (`PERSONA` e `PERSONA_DE_ROTEAMENTO`), porque um turno factual passa pelas duas.
+
+## Emenda: busca de segurança e roteador sucinto na #36
+
+Produção mostrou dois defeitos no ciclo acima. O primeiro: o roteador às vezes
+**declina** uma pergunta factual — responde "sem busca" sem chamar a ferramenta
+—, e sem fallback o redator respondia sem material nenhum, chegando a carimbar
+"Segundo o material da UNOPAR" numa resposta não ancorada. O segundo: após
+receber o `tool`, o roteador gerava um rascunho longo que o grafo descartava
+(`_pares_de_ferramenta` só aproveita `tool_calls` e `tool`), custando uma geração
+inteira por turno factual.
+
+- **Busca de segurança (fallback determinístico).** Quando o roteador declina de
+  primeira — sem chamada pendente e sem ferramenta executada —, o turno passa
+  pelo nó `busca_de_seguranca` antes do redator: UMA busca com a mensagem crua
+  do Aluno, pelo mesmo caminho seguro (`_executar_chamada_segura`, com a
+  auditoria de consulta/pontuações/descartes/fontes que `buscar_no_manual` já
+  registra). Com trechos, anexa o par assistant-com-`tool_calls` mais a mensagem
+  `tool` e marca as bandeiras; sem trechos, NÃO anexa nada e NÃO toca nas
+  bandeiras — só loga. É o que mantém a saudação fora do literal de ausência: a
+  guarda do `finalizar` só dispara com `houve_ferramenta`, então o declínio
+  pós-busca (ferramenta já executada) vai direto ao redator, sem rebusca. A
+  topologia vira `START → roteador → (cond.) → {ferramentas, busca_de_seguranca,
+  redator}`; `busca_de_seguranca → redator`. O caminho `manual=None` não muda.
+- **Roteador sucinto pós-busca (só prompt, sem teto de tokens).** A
+  `PERSONA_DE_ROTEAMENTO` manda responder só "sem busca" quando, após o
+  resultado da ferramenta, não precisar de outra consulta — quem escreve ao
+  Aluno é outra etapa. Deliberadamente SEM `num_predict`/teto: um teto baixo
+  poderia truncar um `tool_calls` longo no meio e degradar o caminho bom.

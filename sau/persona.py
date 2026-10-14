@@ -224,7 +224,10 @@ PERSONA_DE_ROTEAMENTO: str = (
     "entrega —, escrevendo a consulta com as palavras-chave do assunto.\n"
     "Quando a mensagem for saudação, despedida, agradecimento ou assunto fora do "
     "processo de estágio, não chame a ferramenta: responda apenas com as palavras "
-    "\"sem busca\"."
+    "\"sem busca\".\n"
+    "Quando você receber o resultado da ferramenta e não precisar de outra "
+    "consulta, responda apenas com as palavras \"sem busca\": quem escreve a "
+    "resposta final ao Aluno é outra etapa, e não você."
 )
 """A persona do roteador: o prompt enxuto que decide se consulta o Manual.
 
@@ -236,6 +239,11 @@ consulta a fazer —, e o único texto de resposta ditado nele é o "sem busca" 
 caminho sem ferramenta, que o redator não lê. Quem declara o schema de
 `buscar_no_manual` em `tools` é o nó do roteador
 (`sau/graph/nodes.criar_no_roteador`), não este texto.
+
+O "sem busca" pós-ferramenta é deliberadamente **só prompt, sem teto de
+tokens**: um `num_predict` baixo no roteador poderia truncar um `tool_calls`
+longo no meio e degradar o caminho bom, então o rascunho descartado se evita
+pela instrução de responder curto, e não pelo corte.
 """
 
 EXEMPLO_DE_ENCAMINHAMENTO = (

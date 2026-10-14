@@ -7,6 +7,12 @@ redação num prompt só:
 
     roteador → (chamou ferramenta?) → ferramentas → roteador … → redator → finalizar
 
+Quando o roteador declina a consulta — responde direto sem chamar a ferramenta
+—, o ciclo passa pela `busca_de_seguranca` antes do redator: uma busca
+determinística com a mensagem crua do Aluno, que só anexa material quando acha
+evidência. Sem ela, um declínio numa pergunta factual deixava o redator sem
+material nenhum.
+
 O nó `roteador` leva as mensagens ao modelo por `/api/chat`, com o schema da
 ferramenta declarado em `tools`, e a persona enxuta do roteamento
 (`sau.persona.montar_prompt_de_roteamento`). Ele **decide**: quando o modelo
@@ -266,6 +272,73 @@ def criar_no_ferramentas(
     return ferramentas
 
 
+def criar_no_busca_de_seguranca(
+    cliente: ClienteOllama, *, manual: OpcoesDoManual
+) -> Callable[[EstadoTurno], dict[str, Any]]:
+    """Cria o nó `busca_de_seguranca`, o fallback determinístico do declínio.
+
+    O roteador às vezes declina uma pergunta factual — responde "sem busca" sem
+    chamar a ferramenta —, e sem este nó o redator escreveria sem material
+    nenhum: foi assim que uma resposta não ancorada saiu carimbada com
+    "Segundo o material da UNOPAR". O nó faz UMA busca determinística com a
+    mensagem crua do Aluno, pelo mesmo caminho seguro do nó `ferramentas`
+    (`_executar_chamada_segura`, que registra a auditoria e degrada para vazio
+    em vez de derrubar o turno).
+
+    Com trechos, anexa o par assistant-com-`tool_calls` mais a mensagem `tool`
+    e marca `houve_ferramenta` e `houve_evidencia`: o redator escreve ancorado,
+    e a guarda do `finalizar` vê que houve evidência. Sem trechos, NÃO anexa
+    nada e NÃO toca nas bandeiras — só loga. É o que mantém a saudação fora do
+    literal de ausência: a guarda só dispara com `houve_ferramenta`, e uma
+    saudação que não achou nada continua sendo resposta direta, não ausência
+    de evidência.
+    """
+
+    def busca_de_seguranca(estado: EstadoTurno) -> dict[str, Any]:
+        mensagem = estado["mensagem"]
+        trechos = _executar_chamada_segura(
+            ChamadaDeFerramenta(nome=NOME_DA_FERRAMENTA, argumentos={"consulta": mensagem}),
+            cliente,
+            manual,
+        )
+        if not trechos:
+            logger.info(
+                "Busca de segurança sem evidência no Manual: o turno segue sem "
+                "material, e a resposta do redator passa intacta."
+            )
+            return {}
+        logger.info(
+            "Busca de segurança achou evidência no Manual: o redator escreve ancorado."
+        )
+        return {
+            "mensagens": [
+                *estado.get("mensagens", []),
+                {
+                    "role": "assistant",
+                    "content": "sem busca",
+                    "tool_calls": [
+                        {
+                            "function": {
+                                "name": NOME_DA_FERRAMENTA,
+                                "arguments": {"consulta": mensagem},
+                            }
+                        }
+                    ],
+                },
+                {
+                    "role": "tool",
+                    "tool_name": NOME_DA_FERRAMENTA,
+                    "content": formatar_para_o_modelo(trechos),
+                },
+            ],
+            "houve_ferramenta": True,
+            "houve_evidencia": True,
+            "fontes": [*estado.get("fontes", []), *(trecho.fonte for trecho in trechos)],
+        }
+
+    return busca_de_seguranca
+
+
 def criar_no_finalizar(*, texto_ausencia: str) -> Callable[[EstadoTurno], dict[str, str]]:
     """Cria o nó `finalizar`, com a guarda determinística de ausência de evidência.
 
@@ -292,15 +365,20 @@ def criar_no_finalizar(*, texto_ausencia: str) -> Callable[[EstadoTurno], dict[s
 
 
 def rota_das_ferramentas(estado: EstadoTurno) -> str:
-    """A aresta condicional: executar a ferramenta pedida ou passar ao redator.
+    """A aresta condicional: ferramenta pedida, busca de segurança ou redator.
 
     Vai às `ferramentas` enquanto houver chamada pendente e o teto de rodadas não
-    foi atingido. Sem chamada pendente — resposta direta do roteador —, passa ao
-    `redator`, que é quem escreve a resposta. Ao atingir o teto, também passa ao
-    `redator` em vez de girar para sempre.
+    foi atingido. Sem chamada pendente e sem nenhuma ferramenta executada — o
+    roteador declinou de primeira —, passa à `busca_de_seguranca`, que tenta UMA
+    busca determinística antes de entregar ao redator. Sem chamada pendente mas
+    com ferramenta já executada — o declínio pós-busca —, vai direto ao
+    `redator`, sem rebusca: o material já está nas mensagens. Ao atingir o teto,
+    também passa ao `redator` em vez de girar para sempre.
     """
     if estado.get("pendentes") and estado.get("rodadas", 0) < LIMITE_DE_RODADAS:
         return "ferramentas"
+    if not estado.get("houve_ferramenta"):
+        return "busca_de_seguranca"
     return "redator"
 
 

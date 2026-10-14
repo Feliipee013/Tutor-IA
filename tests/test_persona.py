@@ -599,6 +599,21 @@ def test_o_prompt_do_roteador_abre_pela_persona_enxuta() -> None:
     assert EXEMPLO_DE_ENCAMINHAMENTO not in prompt
 
 
+def test_o_roteador_responde_sem_busca_apos_o_resultado_da_ferramenta() -> None:
+    """Após o resultado da ferramenta, sem outra consulta, o roteador responde curto.
+
+    É a instrução que evita o rascunho descartado: depois de receber o `tool`,
+    o roteador que não precisa de outra consulta responde só "sem busca", em
+    vez de redigir a resposta final — quem escreve ao Aluno é outra etapa, o
+    redator. Sem ela, cada turno factual pagava uma geração longa cujo texto o
+    grafo jogava fora, ficando só com as chamadas.
+    """
+    assert "quem escreve a resposta final ao Aluno é outra etapa" in PERSONA_DE_ROTEAMENTO
+    prompt = montar_prompt_de_roteamento(_MENSAGEM)
+
+    assert "quem escreve a resposta final ao Aluno é outra etapa" in prompt
+
+
 def test_o_prompt_do_roteador_cerca_a_conversa_como_o_do_redator() -> None:
     """A cerca, a ordem da conversa e o sufixo do roteador são os mesmos do redator.
 
