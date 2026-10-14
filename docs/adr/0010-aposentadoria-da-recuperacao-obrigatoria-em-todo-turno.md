@@ -66,11 +66,12 @@ O turno passa a ter dois papéis, e a separação é o que a #36 fixa:
 - **A política de uso da ferramenta sai da persona do redator.** A regra
   `uso_da_ferramenta` deixa de existir em `REGRAS`; a decisão mora no roteador, e
   o redator não fala de `buscar_no_manual`.
-- **O critério de resposta com material é a abertura, não a citação da Fonte.**
-  A `ORIENTACAO_DE_FONTE` passa a pedir "Segundo o material da UNOPAR" quando a
-  resposta vem do Manual, no lugar de "cite a Fonte ... pelo título". O literal
-  "não encontrei no material" e o Encaminhamento sem trecho continuam, e a guarda
-  determinística do `finalizar` continua garantindo os dois em código.
+- **O critério de resposta com material é a citação da Fonte.** A
+  `ORIENTACAO_DE_FONTE` pede que a resposta cite a Fonte de cada trecho que a
+  sustenta, no formato título do slide com a página, como escrito na #36 e na
+  spec #34 — a Fonte chega dentro da mensagem `tool`, e o redator a cita. O
+  literal "não encontrei no material" e o Encaminhamento sem trecho continuam, e
+  a guarda determinística do `finalizar` continua garantindo os dois em código.
 - **O fallback determinístico fica de fora desta rodada.** O que decidiria a
   consulta sem o modelo, quando ele não chama a ferramenta, foi deliberadamente
   deixado para depois: esta rodada mede a separação de papéis, e somar um segundo
@@ -84,7 +85,7 @@ O `sha256_do_prompt` do harness passa a cobrir as duas personas versionadas
 Produção mostrou dois defeitos no ciclo acima. O primeiro: o roteador às vezes
 **declina** uma pergunta factual — responde "sem busca" sem chamar a ferramenta
 —, e sem fallback o redator respondia sem material nenhum, chegando a carimbar
-"Segundo o material da UNOPAR" numa resposta não ancorada. O segundo: após
+uma resposta não ancorada como se viesse do Manual. O segundo: após
 receber o `tool`, o roteador gerava um rascunho longo que o grafo descartava
 (`_pares_de_ferramenta` só aproveita `tool_calls` e `tool`), custando uma geração
 inteira por turno factual.

@@ -80,9 +80,12 @@ Pergunta-teste medida contra modelo nenhum não compara nada.
 ## `sau/` — o pacote do bot
 
 Nome do pacote é decisão fechada junto com a #4. O grafo é a espinha do projeto: a
-recuperação da 1.2 entra como **um nó a mais dentro** desse mesmo grafo, sem
-classificação de intenção e sem aresta condicional
-([ADR-0008](./adr/0008-recuperacao-sem-classificacao-de-intencao.md)).
+recuperação da 1.2 entrou como **um nó a mais dentro** desse mesmo grafo, sem
+classificação de intenção; desde a #36 ela é a ferramenta opcional
+`buscar_no_manual`, que o modelo chama quando precisa de um fato do Manual, com
+aresta condicional no ciclo do agente
+([ADR-0008](./adr/0008-recuperacao-sem-classificacao-de-intencao.md),
+[ADR-0010](./adr/0010-aposentadoria-da-recuperacao-obrigatoria-em-todo-turno.md)).
 
 | Caminho | O que faz | Ticket | Existe |
 | `sau/config.py` | lê do ambiente o que a #4 precisa: modelo, timeout, porta, a URL base do Ollama no host e a VRAM total da máquina; o que a #5 precisa: as duas credenciais do Telegram, a porta do webhook e a URL da API; e o que a #9 precisa: o caminho do arquivo de conversas e o TTL em minutos. A #8 não acrescenta campo novo — o `webhook` passa a ler o mesmo `OLLAMA_*` que o `bot` já lia. Desde a #11 também o `INFERENCIA_K` e o `INFERENCIA_FILA_TETO`, o `k` do semáforo e o teto da fila, com a mesma validação de inteiro positivo do TTL. A temperatura ainda não é lida — chega no ticket que for escrevê-la, e a linha cresce aqui quando ele existir | #4, #5, #8, #9, #11 | sim |

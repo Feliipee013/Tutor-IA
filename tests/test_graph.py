@@ -21,6 +21,7 @@ inclusive quando devolveu nada.
 
 from __future__ import annotations
 
+import hashlib
 import inspect
 import json
 import logging
@@ -404,8 +405,8 @@ def test_declinio_factual_com_evidencia_no_fallback_nao_vira_ausencia(
     """O roteador declinou a pergunta factual, mas o fallback achou material.
 
     É o defeito que a busca de segurança fecha: sem ela, o redator escreveria
-    sem material nenhum — e já saiu resposta não ancorada carimbada com
-    "Segundo o material da UNOPAR". Com ela, o redator recebe o par `tool` com
+    sem material nenhum — e já saiu resposta não ancorada carimbada como se
+    viesse do Manual. Com ela, o redator recebe o par `tool` com
     os trechos, a resposta é a ancorada, e a guarda de ausência não dispara.
     A busca usa a mensagem crua do Aluno, e o turno continua em duas rodadas —
     o fallback não chama o modelo.
@@ -610,7 +611,9 @@ def test_o_texto_de_ausencia_nao_mora_na_persona() -> None:
     """
     assert TEXTO_AUSENCIA not in PERSONA
     assert TEXTO_AUSENCIA not in PERSONA_DE_ROTEAMENTO
-    assert sha256_do_prompt()
+    assert sha256_do_prompt() == hashlib.sha256(
+        (PERSONA + "\n\n" + PERSONA_DE_ROTEAMENTO).encode("utf-8")
+    ).hexdigest()
 
 
 # --- Log: a entrada, o prompt e a saída ficam registrados ---

@@ -279,9 +279,9 @@ def criar_no_busca_de_seguranca(
 
     O roteador às vezes declina uma pergunta factual — responde "sem busca" sem
     chamar a ferramenta —, e sem este nó o redator escreveria sem material
-    nenhum: foi assim que uma resposta não ancorada saiu carimbada com
-    "Segundo o material da UNOPAR". O nó faz UMA busca determinística com a
-    mensagem crua do Aluno, pelo mesmo caminho seguro do nó `ferramentas`
+    nenhum: foi assim que uma resposta não ancorada saiu carimbada como se viesse
+    do Manual. O nó faz UMA busca determinística com a mensagem crua do Aluno,
+    pelo mesmo caminho seguro do nó `ferramentas`
     (`_executar_chamada_segura`, que registra a auditoria e degrada para vazio
     em vez de derrubar o turno).
 

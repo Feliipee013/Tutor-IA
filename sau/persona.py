@@ -196,24 +196,24 @@ no prompt, texto fixo vira a resposta.
 ORIENTACAO_DE_FONTE = (
     "Resposta ancorada no Manual\n"
     "Os trechos do Manual de Estágio Obrigatório, quando houver, chegam na "
-    "mensagem seguinte, cada um com a sua Fonte. Responda somente a partir deles. "
-    "Quando responder com esse material, comece a resposta dizendo "
-    "\"Segundo o material da UNOPAR\". Quando nenhum trecho responder à pergunta, "
-    "comece a resposta com \"não encontrei no material\" e encerre dizendo ao "
-    "Aluno que procure a Coordenação de Estágios, sem inventar telefone, canal "
-    "ou prazo."
+    "mensagem seguinte, cada um com a sua Fonte (o título do slide com a página). "
+    "Responda somente a partir deles e cite a Fonte de cada trecho que sustentar "
+    "o que você afirmar, com o título e a página como eles vieram. Quando nenhum "
+    "trecho responder à pergunta, comece a resposta com \"não encontrei no "
+    "material\" e encerre dizendo ao Aluno que procure a Coordenação de Estágios, "
+    "sem inventar telefone, canal ou prazo."
 )
-"""A instrução de grounding: responder só do Manual, ancorar a resposta, Encaminhar sem trecho.
+"""A instrução de grounding: responder só do Manual, citar a Fonte, Encaminhar sem trecho.
 
 Entra em todo prompt do redator, junto das regras, e por isso entra no
 `sha256_do_prompt`: é persona, não topologia. Desde o ADR-0010 o material não
 acompanha o prompt — ele chega como mensagem `tool`, depois de o roteador chamar
 a ferramenta —, e o literal "não encontrei no material" é pedido aqui e
 garantido pela guarda determinística do grafo (`sau/graph/graph.py`), não só
-pela obediência do modelo. O critério de resposta com material é a abertura
-"Segundo o material da UNOPAR", e não a citação da Fonte pelo título: a decisão
-de consultar saiu do prompt do redator na #36, e com ela a menção a
-`buscar_no_manual`.
+pela obediência do modelo. O critério de resposta com material é a citação da
+Fonte do trecho que sustenta a afirmação — o título do slide com a página, como
+escrito na #36 e na spec #34. A decisão de consultar saiu do prompt do redator na
+#36, e com ela a menção a `buscar_no_manual`.
 """
 
 PERSONA_DE_ROTEAMENTO: str = (

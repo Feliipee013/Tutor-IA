@@ -558,7 +558,7 @@ def test_nenhuma_resposta_ditada_fora_do_exemplo_declarado(
     assert "Coordenação de Estágios" in EXEMPLO_DE_ENCAMINHAMENTO
 
 
-# --- O grounding: responder só do material, abrir com "Segundo o material da UNOPAR" ---
+# --- O grounding: responder só do material e citar a Fonte (título + página) ---
 
 
 def test_a_orientacao_de_fonte_chega_ao_modelo(fazer_cliente: FabricaCliente) -> None:
@@ -568,11 +568,10 @@ def test_a_orientacao_de_fonte_chega_ao_modelo(fazer_cliente: FabricaCliente) ->
     menos recusador para de dizer "não sei" e passa a dizer algo vindo do
     próprio conhecimento dele. Quem observa a obediência é a pessoa, lendo o
     output; o que este teste segura é que a ordem chegou — responder só do
-    recuperado, abrir com "Segundo o material da UNOPAR" quando responder do
-    material, e dizer que não encontrou e Encaminhar quando nenhum trecho
-    sustentar. O critério é a abertura declarada, e não a citação da Fonte pelo
-    título: a decisão de consultar saiu do prompt do redator na #36, e com ela
-    a menção a `buscar_no_manual`.
+    recuperado, citar a Fonte (título do slide com a página) de cada trecho que
+    sustentar a afirmação, e dizer que não encontrou e Encaminhar quando nenhum
+    trecho sustentar. A decisão de consultar saiu do prompt do redator na #36, e
+    com ela a menção a `buscar_no_manual`.
     """
     prompt = _prompt_do_turno(fazer_cliente)
 
