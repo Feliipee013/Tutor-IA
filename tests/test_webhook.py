@@ -95,14 +95,17 @@ RESPOSTA_2 = "texto-resposta-2"
 
 
 def _geracao(texto: str) -> dict[str, Any]:
-    """O corpo de um `/api/generate` completo, como o `ClienteOllama` espera receber.
+    """O corpo de um `/api/chat` completo, como o `ClienteOllama` espera receber.
 
-    Fica aqui, e não dentro da fixture que a usa, porque é o contrato do Ollama e
-    não da guarda: a fixture registra o tráfego e precisa saber responder cada
-    destino, e é esse "saber responder" que vira nome quando ele é uma função só.
+    O turno do ADR-0010 fala por `/api/chat`, e não por `/api/generate`: a
+    resposta vem em `message`, não em `response`. Fica aqui, e não dentro da
+    fixture que a usa, porque é o contrato do Ollama e não da guarda: a fixture
+    registra o tráfego e precisa saber responder cada destino, e é esse "saber
+    responder" que vira nome quando ele é uma função só.
     """
     return {
-        "response": texto,
+        "model": "qwen2.5:3b",
+        "message": {"role": "assistant", "content": texto},
         "done": True,
         "done_reason": "stop",
         "eval_count": 11,
@@ -339,11 +342,11 @@ def destinos_de_saida(monkeypatch: pytest.MonkeyPatch, telegram: TelegramFalso) 
     a guarda ficava verde com a garantia quebrada.
 
     Cada destino é respondido no formato que ele espera: o Telegram recebe a
-    resposta de `TelegramFalso`, a geração recebe um `/api/generate` de verdade,
-    com o campo `response`, e o embedding recebe um `/api/embed` de verdade, com
-    um vetor por texto de entrada. Sem isso o `ClienteOllama` real — que é o que
-    a guarda precisa exercitar — cairia em "não devolveu o campo 'response'" ou
-    em "não devolveu uma lista de vetores", e a prova da ordem viria de um turno
+    resposta de `TelegramFalso`, o chat recebe um `/api/chat` de verdade, com o
+    campo `message`, e o embedding recebe um `/api/embed` de verdade, com um
+    vetor por texto de entrada. Sem isso o `ClienteOllama` real — que é o que a
+    guarda precisa exercitar — cairia em "não devolveu o campo 'message'" ou em
+    "não devolveu uma lista de vetores", e a prova da ordem viria de um turno
     que falhou por um motivo que não é o do teste.
     """
     destinos: list[str] = []
@@ -397,15 +400,33 @@ class ModeloFalso:
     def embutir(self, textos: list[str]) -> list[list[float]]:
         """O embedding do turno, falso: um vetor por texto, sem rede e sem Ollama.
 
-        Existe porque o grafo é o de verdade — o nó `recuperar` monta o índice
-        do Corpus e embute a pergunta do Aluno pelo cliente do turno. Sem ele,
-        todo turno do webhook degradaria para o Encaminhamento determinístico.
+        O turno do ADR-0010 só embute quando o modelo chama a ferramenta, e o
+        `ModeloFalso` responde direto — então este método normalmente não é
+        chamado. Ele existe para que a classe continue sendo um `ClienteOllama`
+        completo: um teste que force uma chamada de ferramenta acha o embedding
+        aqui em vez de cair em rede.
         """
         return [[1.0, 0.0] for _ in textos]
 
     @property
     def modelo_embedding(self) -> str:
         return "falso-para-o-webhook"
+
+    def conversar(
+        self,
+        mensagens: list[dict[str, Any]],
+        *,
+        ferramentas: list[dict[str, Any]] | None = None,
+        opcoes: dict[str, Any] | None = None,
+    ) -> Resposta:
+        """O caminho do `/api/chat`: delega ao `responder` para os filhos o herdarem.
+
+        O turno do ADR-0010 fala por `conversar`, e não por `responder`. Delegar
+        faz com que todo falso desta suíte — que sobrescreve só o `responder` —
+        continue valendo, e mantém num lugar só a construção da `Resposta`.
+        """
+        prompt = mensagens[0]["content"] if mensagens else ""
+        return self.responder(prompt, opcoes=opcoes)
 
     def responder(self, prompt: str, *, opcoes: dict[str, Any] | None = None) -> Resposta:
         self.prompts.append(prompt)
@@ -898,9 +919,10 @@ def test_o_acuse_sai_antes_de_o_turno_comecar(
     contagem vista de dentro do turno. Aqui vão as três peças de verdade — o
     `ClienteOllama` real, o grafo real e o `sendMessage` real —, e a fixture
     registra toda URL que saiu do processo, venha de onde vier. A lista sai nesta
-    ordem: Telegram, embedding do índice, embedding da consulta, modelo, Telegram.
-    Um turno disparado antes do acuse a inverteria, e a lista inteira é a asserção —
-    não só o seu primeiro elemento.
+    ordem: Telegram (acuse), chat, Telegram (resposta). Um turno disparado antes
+    do acuse a inverteria, e a lista inteira é a asserção — não só o seu primeiro
+    elemento. O embedding não aparece porque o modelo falso da fixture responde
+    direto, sem chamar a ferramenta — e sem ferramenta não há o que embutir.
 
     A versão anterior desta guarda afirmava duas coisas que nada exercitava: que
     nenhum destino estava fora do Telegram, e que o acuse não esperou o modelo.
@@ -910,15 +932,12 @@ def test_o_acuse_sai_antes_de_o_turno_comecar(
     """
     config = carregar_configuracao(_ENV_PADRAO)
     para_o_telegram = f"{config.telegram_api_base}/bot{_TOKEN}/sendMessage"
-    para_o_embed = f"{config.ollama_base_url}/api/embed"
-    para_o_modelo = f"{config.ollama_base_url}/api/generate"
+    para_o_modelo = f"{config.ollama_base_url}/api/chat"
 
     _postar(_app(telegram, executor=None), UPDATE_DO_ALUNO)
 
     assert destinos_de_saida == [
         para_o_telegram,
-        para_o_embed,
-        para_o_embed,
         para_o_modelo,
         para_o_telegram,
     ], (
@@ -1098,9 +1117,7 @@ def test_o_turno_roda_na_thread_de_producao(
     assert resposta.status_code == 200
     assert destinos_de_saida == [
         f"{config.telegram_api_base}/bot{_TOKEN}/sendMessage",
-        f"{config.ollama_base_url}/api/embed",
-        f"{config.ollama_base_url}/api/embed",
-        f"{config.ollama_base_url}/api/generate",
+        f"{config.ollama_base_url}/api/chat",
         f"{config.telegram_api_base}/bot{_TOKEN}/sendMessage",
     ], f"o turno não rodou depois do acuse, ou rodou por outra via: {destinos_de_saida}"
 

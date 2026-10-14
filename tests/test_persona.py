@@ -14,9 +14,11 @@ recebeu, inteira, no lugar certo, sem ter sido derrubada na composição nem
 comida por formatação.
 
 O transporte do modelo é um `httpx.MockTransport`, o mesmo tipo que
-`test_graph.py` usa. O corpo de `/api/generate` é reescrito aqui em vez de
+`test_graph.py` usa. O corpo de `/api/chat` é reescrito aqui em vez de
 importado: cada arquivo de teste declara o contrato que ele precisa, e ninguém
-depende do texto de outro.
+depende do texto de outro. O turno roda sem `OpcoesDoManual`, então o agente
+conversa sem declarar ferramenta e o prompt que ele recebe é o objeto destes
+testes — a ferramenta tem testes próprios, em `test_graph.py`.
 
 O teste do conjunto (`test_o_prompt_tem_exatamente_as_regras_da_issue`) é o
 último a ficar verde por construção: ele afirma as regras todas de uma vez, e
@@ -39,7 +41,6 @@ from sau.inference.ollama import ClienteOllama
 from sau.persona import (
     APRESENTACAO_DA_MENSAGEM,
     APRESENTACAO_DO_HISTORICO,
-    APRESENTACAO_DO_MATERIAL,
     AVISO_CONVERSA,
     ENCAMINHAMENTO,
     ESCOPO_DE_ESTAGIO,
@@ -57,9 +58,9 @@ from sau.persona import (
     REGRAS,
     TOM,
     USAR_HISTORICO,
+    USO_DA_FERRAMENTA,
     montar_prompt,
 )
-from sau.rag.retrieve import TrechoRecuperado
 
 _BASE_URL = "http://host.docker.internal:11434"
 _MODELO = "qwen2.5:3b"
@@ -71,10 +72,14 @@ FabricaCliente = Callable[[Any], ClienteOllama]
 
 
 def _payload(texto: str) -> dict[str, Any]:
-    """O que o Ollama devolve numa geração completa."""
+    """O que o Ollama devolve numa conversa por `/api/chat` completa.
+
+    O turno do ADR-0010 fala por `/api/chat`, e não por `/api/generate`: o
+    corpo tem `message`, e não `response`.
+    """
     return {
         "model": _MODELO,
-        "response": texto,
+        "message": {"role": "assistant", "content": texto},
         "done": True,
         "done_reason": "stop",
     }
@@ -96,7 +101,12 @@ def fazer_cliente() -> Iterator[FabricaCliente]:
 
 
 def _espelhando_prompts(registros: list[str]) -> Any:
-    """Transporte que guarda o prompt que o turno mandou ao modelo."""
+    """Transporte que guarda o prompt que o turno mandou ao modelo.
+
+    O prompt do turno é a primeira mensagem `user` da conversa: a persona mais
+    a cerca com o histórico e a mensagem do Aluno. É ela que os testes de
+    persona conferem regra por regra.
+    """
 
     def handler(request: httpx.Request) -> httpx.Response:
         if request.url.path.endswith("/api/embed"):
@@ -104,7 +114,7 @@ def _espelhando_prompts(registros: list[str]) -> Any:
             total = len(corpo["input"])
             return httpx.Response(200, json={"embeddings": [[1.0, 0.0] for _ in range(total)]})
         corpo = json.loads(request.content.decode("utf-8"))
-        registros.append(corpo["prompt"])
+        registros.append(corpo["messages"][0]["content"])
         return httpx.Response(200, json=_payload(_RESPOSTA))
 
     return handler
@@ -136,6 +146,7 @@ def test_o_prompt_tem_exatamente_as_regras_da_issue() -> None:
         "escopo_de_estagio",
         "tom",
         "orientacao_procedural",
+        "uso_da_ferramenta",
         "nao_inventar",
         "encaminhamento",
         "usar_historico",
@@ -209,6 +220,23 @@ def test_a_regra_de_orientacao_procedural_chega_ao_modelo(
 
     assert ORIENTACAO_PROCEDURAL.instrucao in prompt
     assert prompt.count(ORIENTACAO_PROCEDURAL.instrucao) == 1
+
+
+def test_a_regra_de_uso_da_ferramenta_chega_ao_modelo(
+    fazer_cliente: FabricaCliente,
+) -> None:
+    """A política de quando consultar o Manual está no prompt recebido.
+
+    É esta instrução que diz ao modelo que a ferramenta `buscar_no_manual` é
+    opcional — chamá-la só quando precisar de um fato do processo, responder
+    saudação e cortesia direto, e poder consultar mais de uma vez numa pergunta
+    que cruza assuntos (ADR-0010). Sem ela, o modelo ou consulta sempre, ou
+    nunca consulta; é a política explícita que orienta a decisão.
+    """
+    prompt = _prompt_do_turno(fazer_cliente)
+
+    assert USO_DA_FERRAMENTA.instrucao in prompt
+    assert prompt.count(USO_DA_FERRAMENTA.instrucao) == 1
 
 
 def test_a_regra_de_nao_inventar_chega_ao_modelo(
@@ -564,55 +592,6 @@ def test_a_orientacao_de_fonte_chega_ao_modelo(fazer_cliente: FabricaCliente) ->
 
     assert ORIENTACAO_DE_FONTE in prompt
     assert prompt.count(ORIENTACAO_DE_FONTE) == 1
-
-
-def _trecho_falso(titulo: str = "Prazo de entrega do relatório de atividades") -> TrechoRecuperado:
-    return TrechoRecuperado(
-        documento="prazos.md",
-        titulo=titulo,
-        texto="O relatório é entregue até a segunda sexta-feira após o início.",
-        similaridade=0.91,
-    )
-
-
-def test_os_titulos_recuperados_chegam_ao_prompt_montado() -> None:
-    """O material do turno entra no prompt com o título como Fonte e o texto junto.
-
-    É o mesmo padrão do teste que compara o prompt recebido com o que a
-    montagem produz: quem afirma a costura é a igualdade com `montar_prompt`,
-    e quem afirma o conteúdo é a presença do título e do texto no prompt.
-    """
-    contexto = [_trecho_falso(), _trecho_falso("Prazo de devolução do Termo assinado pela Empresa")]
-
-    prompt = montar_prompt(_MENSAGEM, (), contexto)
-
-    assert prompt == montar_prompt(_MENSAGEM, (), contexto)
-    for trecho in contexto:
-        assert trecho.titulo in prompt
-        assert trecho.texto in prompt
-    assert APRESENTACAO_DO_MATERIAL in prompt
-
-
-def test_os_titulos_recuperados_chegam_ao_modelo(fazer_cliente: FabricaCliente) -> None:
-    """Os títulos que o turno recuperou estão no prompt que o modelo recebeu.
-
-    O modelo já tem o título na mão — e é por isso que a Fonte citada é o
-    título copiado verbatim, sem par para parsear nem separador que ele possa
-    errar. Sem os títulos aqui, a instrução de citar a Fonte pediria o que o
-    modelo não tem.
-    """
-    prompt = _prompt_do_turno(fazer_cliente)
-
-    assert APRESENTACAO_DO_MATERIAL in prompt
-    assert "Fonte:" in prompt
-
-
-def test_sem_contexto_o_prompt_nao_traz_bloco_de_material() -> None:
-    """Sem material não há bloco vazio: o turno sem trecho encerra no grafo."""
-    prompt = montar_prompt(_MENSAGEM)
-
-    assert APRESENTACAO_DO_MATERIAL not in prompt
-    assert "Fonte:" not in prompt.split(INICIO_CONVERSA, 1)[1]
 
 
 def _normalizar(texto: str) -> str:

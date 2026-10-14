@@ -1,30 +1,40 @@
-"""Testes da ferramenta `buscar_no_manual` e do limiar de similaridade (issue #36, ADR-0010, ADR-0012).
+"""Testes da ferramenta `buscar_no_manual`, do limiar e do schema (ADR-0010, ADR-0012).
 
 O que se prova aqui são os critérios de aceitação da ferramenta:
-1. Pergunta factual do manual dispara a ferramenta e devolve trecho com Fonte título + página.
-2. Trecho abaixo do limiar (padrão 0.35) é descartado.
-3. Quando nenhum trecho passa pelo limiar, devolve vazio (sinal de ausência de evidência para o turno).
-4. Proibição de dados ilustrativos: a máscara garante que apólice, CNPJ, CPF, etc. não constam no texto.
-5. Log do turno registra consulta, pontuações brutas, descartes pelo limiar e Fontes entregues.
+
+1. Pergunta factual do manual devolve trecho com Fonte título + página.
+2. Trecho abaixo do limiar é descartado.
+3. Quando nenhum trecho passa pelo limiar, devolve vazio — a ausência de
+   evidência que o turno transforma no literal e no Encaminhamento.
+4. Proibição de dados ilustrativos: a máscara garante que apólice, CNPJ, CPF
+   e afins não constam no texto entregue.
+5. O log registra consulta, pontuações brutas, descartes pelo limiar e Fontes
+   entregues.
+6. O schema declarado ao modelo e o executor da chamada usam o `k` da
+   configuração como padrão e ignoram argumento inválido vindo do modelo.
+
+O `k` e o `limiar` são passados em toda chamada porque a ferramenta não tem
+padrão próprio: a fonte única é a `Configuracao` do serviço (ver `sau/config.py`).
 """
 
 from __future__ import annotations
 
+import json
 import logging
 from pathlib import Path
-from typing import Any
 
 import pytest
 
-from sau.manual.chunks import ChunkManual
 from sau.manual.indice import carregar_ou_indexar
 from sau.manual.mascara import MARCADOR
 from sau.manual.tool import (
-    K_PADRAO,
-    LIMIAR_SIMILARIDADE_PADRAO,
     LITERAL_NAO_ENCONTREI,
+    NOME_DA_FERRAMENTA,
     TrechoFiltrado,
     buscar_no_manual,
+    esquema_da_ferramenta,
+    executar_chamada,
+    formatar_para_o_modelo,
 )
 
 _COLECAO = "manual-estagio-obrigatorio"
@@ -178,6 +188,8 @@ def test_buscar_no_manual_com_consulta_vazia_nao_consulta_e_loga(
             diretorio_chroma=chroma,
             nome_colecao=_COLECAO,
             cliente=falso,
+            k=2,
+            limiar=0.35,
         )
 
     assert res == []
@@ -200,6 +212,7 @@ def test_dados_ilustrativos_permanecem_mascarados_nos_trechos_entregues(tmp_path
         diretorio_chroma=chroma,
         nome_colecao=_COLECAO,
         cliente=falso,
+        k=2,
         limiar=0.0,
     )
 
@@ -211,42 +224,12 @@ def test_dados_ilustrativos_permanecem_mascarados_nos_trechos_entregues(tmp_path
 
 
 def test_literal_de_ausencia_esta_declarado() -> None:
-    """O literal obrigatório do ADR-0012 é exatamente 'não encontrei no material'."""
+    """O literal obrigatório do ADR-0012 é 'não encontrei no material'."""
     assert LITERAL_NAO_ENCONTREI == "não encontrei no material"
 
 
-# --- Critérios de aceitação do turno (issue #36, ADR-0010, ADR-0012) ---
-
-
-@pytest.mark.parametrize(
-    "mensagem",
-    [
-        "Olá, bom dia!",
-        "Boa tarde!",
-        "Muito obrigado pela ajuda!",
-        "Valeu, até mais!",
-    ],
-)
-def test_saudacao_e_agradecimento_sao_identificados(mensagem: str) -> None:
-    """Saudação e cortesia respondem direto sem disparar ferramenta de busca."""
-    termos_cortesia = ("olá", "ola", "bom dia", "boa tarde", "boa noite", "obrigad", "valeu", "tchau", "até mais")
-    msg_low = mensagem.lower()
-    eh_cortesia = any(termo in msg_low for termo in termos_cortesia)
-    assert eh_cortesia is True
-
-
-def test_resposta_sem_evidencia_utiliza_literal_e_encaminhamento() -> None:
-    """Sem evidência válida acima do limiar, a resposta deve conter o literal e Encaminhamento."""
-    resposta_ausencia = f"{LITERAL_NAO_ENCONTREI}. Procure a Coordenação de Estágios."
-    assert LITERAL_NAO_ENCONTREI in resposta_ausencia
-    assert "Coordenação de Estágios" in resposta_ausencia
-    # Nenhum dado inventado de canal ou telefone
-    assert "telefone" not in resposta_ausencia.lower()
-    assert "email" not in resposta_ausencia.lower()
-
-
-def test_busca_com_trechos_abaixo_do_limiar_devolve_vazio_gerando_literal(tmp_path: Path) -> None:
-    """Trecho com similaridade abaixo de 0.35 é descartado e gera ausência de evidência."""
+def test_busca_com_trechos_abaixo_do_limiar_devolve_vazio(tmp_path: Path) -> None:
+    """Trecho com similaridade abaixo do limiar é descartado e gera ausência de evidência."""
     caminho_pdf = _pdf_simples(
         tmp_path,
         ["CURSOS DO POLO\nEngenharia e Pedagogia."],
@@ -261,8 +244,80 @@ def test_busca_com_trechos_abaixo_do_limiar_devolve_vazio_gerando_literal(tmp_pa
         diretorio_chroma=chroma,
         nome_colecao=_COLECAO,
         cliente=falso,
+        k=2,
         limiar=0.35,
     )
 
     assert trechos == []
+
+
+def test_esquema_da_ferramenta_declara_o_nome_e_a_consulta_obrigatoria() -> None:
+    """O schema que vai em `tools` nomeia a ferramenta e exige a consulta."""
+    esquema = esquema_da_ferramenta(k_padrao=4)
+
+    assert esquema["type"] == "function"
+    funcao = esquema["function"]
+    assert funcao["name"] == NOME_DA_FERRAMENTA
+    assert "consulta" in funcao["parameters"]["properties"]
+    assert funcao["parameters"]["required"] == ["consulta"]
+    # O `k` é opcional e o padrão do serviço aparece na descrição.
+    assert "4" in funcao["parameters"]["properties"]["k"]["description"]
+
+
+def test_executar_chamada_usa_k_do_modelo_e_cai_no_padrao_quando_invalido(
+    tmp_path: Path,
+) -> None:
+    """O executor passa o `k` do modelo adiante e ignora um `k` que não serve.
+
+    O argumento vem de saída de modelo, e saída de modelo não é entrada
+    confiável: um `k` ausente, não numérico ou abaixo de um cai no padrão da
+    configuração em vez de derrubar o turno.
+    """
+    caminho_pdf = _pdf_simples(
+        tmp_path,
+        ["PRAZOS DO ESTÁGIO\nEntrega do relatório em 30 dias."],
+    )
+    chroma = tmp_path / "chroma"
+    falso = FalsoEmbedding()
+    carregar_ou_indexar(caminho_pdf, chroma, _COLECAO, falso)
+
+    def executar(argumentos: dict[str, object]) -> list[TrechoFiltrado]:
+        return executar_chamada(
+            argumentos,
+            diretorio_chroma=chroma,
+            nome_colecao=_COLECAO,
+            cliente=falso,
+            k_padrao=4,
+            limiar=0.35,
+        )
+
+    # O `k` do modelo chega ao cliente de embedding como pedido.
+    falso.chamadas.clear()
+    assert executar({"consulta": "prazo de entrega", "k": 2}) != []
+    assert any("prazo de entrega" in chamada[0] for chamada in falso.chamadas)
+
+    # Sem consulta utilizável, a busca não acontece.
+    assert executar({"k": "nada"}) == []
+    # `k` inválido não derruba o turno: cai no padrão e ainda busca.
+    assert executar({"consulta": "prazo de entrega", "k": 0}) != []
+
+
+def test_formatar_para_o_modelo_entrega_json_com_fonte_ou_aviso_de_ausencia() -> None:
+    """O resultado da ferramenta vira JSON com Fonte ou o aviso de lista vazia."""
+    # Lista vazia vira o aviso de ausência, e não `[]`: o modelo precisa ler
+    # que a busca não achou nada.
+    vazio = formatar_para_o_modelo([])
+    assert vazio != "[]"
+    assert "limiar" in vazio
+
+    trecho = TrechoFiltrado(
+        titulo="PRAZOS DO ESTÁGIO",
+        pagina=1,
+        texto="Entrega em 30 dias.",
+        fonte="PRAZOS DO ESTÁGIO (p. 1)",
+        pontuacao=0.9,
+    )
+    decodificado = json.loads(formatar_para_o_modelo([trecho]))
+    assert decodificado[0]["fonte"] == "PRAZOS DO ESTÁGIO (p. 1)"
+    assert decodificado[0]["texto"] == "Entrega em 30 dias."
 

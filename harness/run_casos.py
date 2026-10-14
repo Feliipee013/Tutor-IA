@@ -55,6 +55,7 @@ from harness.run import (
 )
 from sau.config import carregar_configuracao
 from sau.graph.graph import construir_grafo
+from sau.graph.nodes import OpcoesDoManual, montar_prompt
 from sau.inference.ollama import NUM_CTX_PADRAO, Resposta
 from sau.rag.retrieve import ultimo_indice
 
@@ -237,10 +238,17 @@ def main(argumentos: Sequence[str] | None = None) -> int:
         # dos Casos precisa das Fontes recuperadas junto da resposta — e
         # `executar_turno` devolve só o texto.
         cliente.ultima = None
-        grafo = construir_grafo(cliente)
-        resultado = grafo.invoke({"mensagem": texto, "historico": []})
+        grafo = construir_grafo(cliente, manual=OpcoesDoManual.de_config(configuracao))
+        resultado = grafo.invoke(
+            {
+                "mensagem": texto,
+                "historico": [],
+                "mensagens": [{"role": "user", "content": montar_prompt(texto)}],
+                "rodadas": 0,
+            }
+        )
         texto_entregue = str(resultado["resposta"])
-        fontes = [str(titulo) for titulo in resultado.get("fontes", []) or []]
+        fontes = [str(fonte) for fonte in resultado.get("fontes", []) or []]
         if cliente.ultima is None:
             return texto_entregue, Resposta(
                 texto=texto_entregue,

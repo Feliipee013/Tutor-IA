@@ -60,6 +60,7 @@ import httpx
 
 from sau.config import carregar_configuracao
 from sau.graph.graph import executar_turno
+from sau.graph.nodes import OpcoesDoManual
 from sau.graph.state import Mensagem
 from sau.inference.ollama import (
     NUM_CTX_PADRAO,
@@ -346,6 +347,22 @@ class ClienteMedido(ClienteOllama):
     def responder(self, prompt: str, *, opcoes: dict[str, Any] | None = None) -> Resposta:
         combinadas = {**self._opcoes_medidas, **(opcoes or {})}
         resposta = super().responder(prompt, opcoes=combinadas)
+        self.ultima = resposta
+        return resposta
+
+    def conversar(
+        self,
+        mensagens: list[dict[str, Any]],
+        *,
+        ferramentas: list[dict[str, Any]] | None = None,
+        opcoes: dict[str, Any] | None = None,
+    ) -> Resposta:
+        # O turno do ADR-0010 fala por `/api/chat`, e não por `/api/generate`:
+        # sem este override, `ultima` ficaria `None` em todo turno com
+        # ferramenta e a rodada gravaria o turno como determinístico. As
+        # condições medidas entram do mesmo jeito que no `responder`.
+        combinadas = {**self._opcoes_medidas, **(opcoes or {})}
+        resposta = super().conversar(mensagens, ferramentas=ferramentas, opcoes=combinadas)
         self.ultima = resposta
         return resposta
 
@@ -804,7 +821,9 @@ def main(argumentos: Sequence[str] | None = None) -> int:
         # significa "o modelo nem foi chamado", e o registro leva o texto que
         # o Aluno de fato leu, marcado como determinístico.
         cliente.ultima = None
-        texto_entregue = executar_turno(cliente, texto, ())
+        texto_entregue = executar_turno(
+            cliente, texto, (), manual=OpcoesDoManual.de_config(configuracao)
+        )
         if cliente.ultima is None:
             return resposta_deterministica(texto_entregue)
         return cliente.ultima
@@ -815,7 +834,9 @@ def main(argumentos: Sequence[str] | None = None) -> int:
         # que o S.A.U. retoma o dado em vez de repedir a pergunta. O zero e o
         # determinístico valem aqui pelo mesmo motivo do turno isolado.
         cliente.ultima = None
-        texto_entregue = executar_turno(cliente, texto, historico)
+        texto_entregue = executar_turno(
+            cliente, texto, historico, manual=OpcoesDoManual.de_config(configuracao)
+        )
         if cliente.ultima is None:
             return resposta_deterministica(texto_entregue)
         return cliente.ultima

@@ -44,7 +44,6 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 from sau.graph.state import Mensagem
-from sau.rag.retrieve import TrechoRecuperado
 
 
 @dataclass(frozen=True)
@@ -106,6 +105,18 @@ ORIENTACAO_PROCEDURAL = Regra(
     ),
 )
 
+USO_DA_FERRAMENTA = Regra(
+    id="uso_da_ferramenta",
+    titulo="Quando consultar o Manual",
+    instrucao=(
+        "Consulte a ferramenta buscar_no_manual apenas quando precisar de um fato do "
+        "processo de estágio — prazos, documentos, assinaturas, seguro ou cadastro. "
+        "Saudação, despedida, agradecimento e perguntas fora do escopo respondem sem "
+        "consulta. Uma pergunta que cruza assuntos pode exigir mais de uma consulta: "
+        "faça quantas precisar antes de responder."
+    ),
+)
+
 NAO_INVENTAR = Regra(
     id="nao_inventar",
     titulo="Não inventar prazo, documento ou contato",
@@ -157,6 +168,7 @@ REGRAS: tuple[Regra, ...] = (
     ESCOPO_DE_ESTAGIO,
     TOM,
     ORIENTACAO_PROCEDURAL,
+    USO_DA_FERRAMENTA,
     NAO_INVENTAR,
     ENCAMINHAMENTO,
     USAR_HISTORICO,
@@ -186,19 +198,22 @@ no prompt, texto fixo vira a resposta.
 """
 
 ORIENTACAO_DE_FONTE = (
-    "Resposta ancorada no Corpus\n"
-    "Responda somente a partir do material recuperado do Corpus, que acompanha "
-    "a conversa abaixo. Cite a Fonte de toda afirmação factual pelo título da "
-    "seção, copiado como está no material. Quando nenhum trecho sustentar a "
-    "resposta, diga que não tem esse dado e encerre com Encaminhamento à "
-    "Coordenação de Estágios, sem inventar telefone, canal ou prazo."
+    "Resposta ancorada no Manual\n"
+    "Busque os fatos do processo de estágio na ferramenta buscar_no_manual, que "
+    "devolve trechos do Manual de Estágio Obrigatório. Responda somente a partir "
+    "dos trechos que ela devolver e cite a Fonte de toda afirmação factual pelo "
+    "título, copiado como está no trecho. Quando a ferramenta não devolver "
+    "trecho válido, comece a resposta com \"não encontrei no material\" e "
+    "encerre dizendo ao Aluno que procure a Coordenação de Estágios, sem "
+    "inventar telefone, canal ou prazo."
 )
-"""A instrução de grounding: responder só do recuperado, citar a Fonte, Encaminhar sem trecho.
+"""A instrução de grounding: responder só do Manual, citar a Fonte, Encaminhar sem trecho.
 
 Entra em todo prompt, junto das regras, e por isso entra no `sha256_do_prompt`:
-é persona, não topologia. O material recuperado do turno vem depois, dentro
-da conversa — o que muda a cada turno não pode morar no prefixo que o Ollama
-guarda em cache.
+é persona, não topologia. Desde o ADR-0010 o material não acompanha o prompt —
+ele chega como mensagem `tool`, depois de o modelo chamar a ferramenta —, e o
+literal "não encontrei no material" é pedido aqui e garantido pela guarda
+determinística do grafo (`sau/graph/graph.py`), não só pela obediência do modelo.
 """
 
 EXEMPLO_DE_ENCAMINHAMENTO = (
@@ -237,36 +252,31 @@ FIM_CONVERSA = "<<< fim da conversa >>>"
 
 APRESENTACAO_DO_HISTORICO = "Histórico recente:"
 APRESENTACAO_DA_MENSAGEM = "Mensagem atual do Aluno (responda somente a esta):"
-APRESENTACAO_DO_MATERIAL = "Material recuperado do Corpus (responda só do que está aqui):"
 HISTORICO_VAZIO = "(Primeira mensagem do Aluno)"
 
 
 def montar_prompt(
     mensagem: str,
     historico: Sequence[Mensagem] = (),
-    contexto: Sequence[TrechoRecuperado] = (),
 ) -> str:
-    """Monta o prompt do turno: persona, histórico, material recuperado e mensagem."""
+    """Monta o prompt do turno: persona, histórico e mensagem do Aluno.
+
+    O material não entra mais por aqui: desde o ADR-0010 ele chega ao modelo
+    como mensagem `tool`, depois de ele chamar `buscar_no_manual`. O que o
+    prompt carrega é a persona (com a instrução de usar a ferramenta e citar a
+    Fonte) e a conversa cercada.
+    """
     recentes = list(historico)[-MENSAGENS_NO_PROMPT:]
     if recentes:
         bloco = "".join(f"{falada.como_linha()}\n\n" for falada in recentes)
     else:
         bloco = f"{HISTORICO_VAZIO}\n\n"
 
-    if contexto:
-        trechos = "".join(
-            f"Fonte: {trecho.titulo}\n{trecho.texto}\n\n" for trecho in contexto
-        )
-        material = f"{APRESENTACAO_DO_MATERIAL}\n{trechos}"
-    else:
-        material = ""
-
     return (
         f"{PERSONA}\n\n"
         f"{AVISO_CONVERSA}\n"
         f"{INICIO_CONVERSA}\n"
         f"{APRESENTACAO_DO_HISTORICO}\n{bloco}"
-        f"{material}"
         f"{APRESENTACAO_DA_MENSAGEM}\nAluno: {mensagem}\n"
         f"{FIM_CONVERSA}\n"
         f"S.A.U.:"  # Indução de prefixo para garantir onde o modelo deve continuar gerando

@@ -492,7 +492,7 @@ def test_main_devolve_1_quando_nenhuma_execucao_responde(
     alocacao_falsa = AlocacaoDoModelo(size=2_000, size_vram=2_000, em_cpu=False)
     monkeypatch.setattr(harness.run, "_checar_pre_requisitos", lambda *_a, **_k: alocacao_falsa)
 
-    def _executar_turno(cliente: Any, _texto: str, _historico: Any) -> str:
+    def _executar_turno(cliente: Any, _texto: str, _historico: Any, **_kwargs: Any) -> str:
         cliente.ultima = None
         raise ErroDeInferencia("FALHA CRÍTICA: o modelo não respondeu")
 
@@ -517,7 +517,7 @@ def test_main_devolve_0_quando_alguma_execucao_responde(tmp_path: Path, monkeypa
 
     chamadas: list[str] = []
 
-    def _turno(cliente: Any, texto: str, _historico: Any) -> str:
+    def _turno(cliente: Any, texto: str, _historico: Any, **_kwargs: Any) -> str:
         """O `main` lê a `Resposta` do cliente depois que o turno roda: é aqui que ela nasce."""
         chamadas.append(texto)
         if len(chamadas) == 1:
@@ -565,7 +565,7 @@ def test_turno_deterministico_nao_reaproveita_a_geracao_anterior(
 
     chamadas: list[str] = []
 
-    def _turno_sem_geracao(cliente: Any, texto: str, _historico: Any) -> str:
+    def _turno_sem_geracao(cliente: Any, texto: str, _historico: Any, **_kwargs: Any) -> str:
         """Só a primeira execução gera; as demais encerram sem tocar na `ultima`."""
         chamadas.append(texto)
         if len(chamadas) == 1:
@@ -805,7 +805,7 @@ def test_main_grava_o_bloco_lido_do_indice_real(tmp_path: Path, monkeypatch: Any
     alocacao_falsa = AlocacaoDoModelo(size=2_000, size_vram=2_000, em_cpu=False)
     monkeypatch.setattr(harness.run, "_checar_pre_requisitos", lambda *_a, **_k: alocacao_falsa)
 
-    def _turno(cliente: Any, texto: str, _historico: Any) -> str:
+    def _turno(cliente: Any, texto: str, _historico: Any, **_kwargs: Any) -> str:
         cliente.ultima = _resposta_falsa("resposta")
         return "resposta"
 
@@ -830,7 +830,7 @@ def test_main_declara_desligada_quando_a_recuperacao_nao_rodou(
     alocacao_falsa = AlocacaoDoModelo(size=2_000, size_vram=2_000, em_cpu=False)
     monkeypatch.setattr(harness.run, "_checar_pre_requisitos", lambda *_a, **_k: alocacao_falsa)
 
-    def _turno(cliente: Any, texto: str, _historico: Any) -> str:
+    def _turno(cliente: Any, texto: str, _historico: Any, **_kwargs: Any) -> str:
         cliente.ultima = _resposta_falsa("resposta")
         return "resposta"
 

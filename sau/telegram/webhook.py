@@ -40,6 +40,7 @@ from flask import Flask, Response, jsonify, request
 
 from sau.config import Configuracao, carregar_configuracao
 from sau.graph.graph import executar_turno
+from sau.graph.nodes import OpcoesDoManual
 from sau.graph.state import RegistroDeConversas
 from sau.inference.ollama import ClienteOllama, ErroDeInferencia
 from sau.inference.semaphore import FilaCheiaError, PosicaoNaFila, SemaforoDeInferencia
@@ -665,7 +666,9 @@ def _processar_turno(
             else:
                 try:
                     with semaforo.na_fila(aviso=avisar_posicao):
-                        entrega = executar_turno(cliente, texto, historico)
+                        entrega = executar_turno(
+                            cliente, texto, historico, manual=OpcoesDoManual.de_config(config)
+                        )
                 except FilaCheiaError as err:
                     # A recusa é do Aluno, não do operador: `warning` e não `error`,
                     # porque nada quebrou — a fila encheu, que é o que o teto existe para
