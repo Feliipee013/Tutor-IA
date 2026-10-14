@@ -24,6 +24,8 @@ este README e `AGENTS.md` — vem do glossário de `CONTEXT.md`.
 
 ## Arquitetura e Topologia
 
+A visão geral técnica está em [ARCHITECTURE.md](ARCHITECTURE.md).
+
 Conforme definido no [ADR-0002](docs/adr/0002-topologia-do-ollama.md), adotamos uma arquitetura híbrida de execução:
 
 - **Ollama no Host:** Executa nativamente no sistema operacional da máquina servidora para utilizar diretamente os drivers NVIDIA e a GPU sem complexidade de container runtime passthrough.
@@ -396,6 +398,7 @@ mypy .
 ```
 
 Consulte também:
+- [`ARCHITECTURE.md`](ARCHITECTURE.md) para a visão geral atemporal da arquitetura.
 - [`CONTEXT.md`](CONTEXT.md) para o vocabulário e regras de domínio.
 - [`SETUP.md`](SETUP.md) para detalhes de configuração do ambiente e ferramentas.
 - [`docs/estrutura.md`](docs/estrutura.md) para o mapa de pastas e responsabilidades.
