@@ -101,6 +101,18 @@ TOM = Regra(
     ),
 )
 
+CORTESIA = Regra(
+    id="cortesia",
+    titulo="Saudação, despedida e agradecimento",
+    instrucao=(
+        "Quando a mensagem do Aluno for só saudação, despedida ou "
+        "agradecimento, responda com gentileza em uma frase, sem usar os "
+        "trechos e sem Encaminhar: não há dúvida a responder. Isso vale mesmo "
+        "quando houver trechos anexados — saudação não é pergunta, e os "
+        "trechos ficam sem uso."
+    ),
+)
+
 ORIENTACAO_PROCEDURAL = Regra(
     id="orientacao_procedural",
     titulo="Orientação passo a passo do processo",
@@ -164,6 +176,7 @@ REGRAS: tuple[Regra, ...] = (
     IDENTIDADE,
     ESCOPO_DE_ESTAGIO,
     TOM,
+    CORTESIA,
     ORIENTACAO_PROCEDURAL,
     NAO_INVENTAR,
     ENCAMINHAMENTO,

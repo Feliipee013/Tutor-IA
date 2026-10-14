@@ -42,6 +42,7 @@ from sau.persona import (
     APRESENTACAO_DA_MENSAGEM,
     APRESENTACAO_DO_HISTORICO,
     AVISO_CONVERSA,
+    CORTESIA,
     ENCAMINHAMENTO,
     ESCOPO_DE_ESTAGIO,
     EXEMPLO_DE_ENCAMINHAMENTO,
@@ -146,6 +147,7 @@ def test_o_prompt_tem_exatamente_as_regras_da_issue() -> None:
         "identidade",
         "escopo_de_estagio",
         "tom",
+        "cortesia",
         "orientacao_procedural",
         "nao_inventar",
         "encaminhamento",
@@ -184,6 +186,22 @@ def test_a_regra_de_tom_chega_ao_modelo(
 
     assert TOM.instrucao in prompt
     assert prompt.count(TOM.instrucao) == 1
+
+
+def test_a_regra_de_cortesia_chega_ao_modelo(
+    fazer_cliente: FabricaCliente,
+) -> None:
+    """A cortesia com saudação, despedida e agradecimento está no prompt que o modelo recebeu.
+
+    É esta instrução que impede o redator de tratar um "obrigado" como dúvida:
+    sem ela, com trechos anexados pelo fallback, o redator escolhia o ramo do
+    Encaminhamento e respondia o que o Aluno não perguntou — saudação não é
+    pergunta, e os trechos ficam sem uso.
+    """
+    prompt = _prompt_do_turno(fazer_cliente)
+
+    assert CORTESIA.instrucao in prompt
+    assert prompt.count(CORTESIA.instrucao) == 1
 
 
 def test_a_regra_de_escopo_de_estagio_chega_ao_modelo(

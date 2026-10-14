@@ -101,7 +101,7 @@ inteira por turno factual.
   guarda do `finalizar` só dispara com `houve_ferramenta`, então o declínio
   pós-busca (ferramenta já executada) vai direto ao redator, sem rebusca. A
   topologia vira `START → roteador → (cond.) → {ferramentas, busca_de_seguranca,
-  redator}`; `busca_de_seguranca → redator`. O caminho `manual=None` não muda.
+  redator}`; `busca_de_seguranca → redator`. O caminho `manual=None` não muda. Quando o fallback anexa material a uma mensagem só social — um "obrigado" que pontuou acima do limiar —, o redator responde com gentileza em uma frase, sem usar os trechos e sem Encaminhar: é a regra de cortesia da persona, que vale mesmo com trechos anexados, porque saudação não é pergunta.
 - **Roteador sucinto pós-busca (só prompt, sem teto de tokens).** A
   `PERSONA_DE_ROTEAMENTO` manda responder só "sem busca" quando, após o
   resultado da ferramenta, não precisar de outra consulta — quem escreve ao

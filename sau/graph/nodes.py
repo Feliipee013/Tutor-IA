@@ -315,7 +315,7 @@ def criar_no_busca_de_seguranca(
                 *estado.get("mensagens", []),
                 {
                     "role": "assistant",
-                    "content": "sem busca",
+                    "content": "",
                     "tool_calls": [
                         {
                             "function": {

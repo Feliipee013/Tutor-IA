@@ -42,7 +42,13 @@ from sau.inference.ollama import (
 )
 from sau.manual.indice import TrechoDoManual
 from sau.manual.tool import LITERAL_NAO_ENCONTREI
-from sau.persona import PERSONA, PERSONA_DE_ROTEAMENTO, montar_prompt, montar_prompt_de_roteamento
+from sau.persona import (
+    CORTESIA,
+    PERSONA,
+    PERSONA_DE_ROTEAMENTO,
+    montar_prompt,
+    montar_prompt_de_roteamento,
+)
 
 _BASE_URL = "http://host.docker.internal:11434"
 _MODELO = "qwen2.5:3b"
@@ -447,6 +453,55 @@ def test_declinio_factual_com_evidencia_no_fallback_nao_vira_ausencia(
     assert len(ferramentas) == 1
     assert ferramentas[0]["tool_name"] == "buscar_no_manual"
     assert _TRECHO.fonte in ferramentas[0]["content"]
+
+
+def test_obrigado_com_trechos_do_fallback_responde_com_gentileza(
+    fazer_cliente: FabricaCliente, buscar_falsa: list[list[TrechoDoManual]]
+) -> None:
+    """Um "obrigado" com trechos do fallback recebe resposta gentil, sem o literal.
+
+    É o caso que a produção mostrou: o roteador declina a mensagem só social, a
+    busca de segurança acha trechos e os anexa, e o redator — que recebe a regra
+    de cortesia no prompt — responde com gentileza em vez de ecoar os trechos ou
+    Encaminhar. A guarda do `finalizar` não dispara: `houve_evidencia` é `True`
+    e a resposta final é a gentil, não o literal de ausência. O teste mede a
+    fiação — a instrução chegou ao prompt do redator e a guarda deixou a
+    resposta passar —, não a obediência do modelo, que só a produção valida.
+    """
+    buscar_falsa.append([_TRECHO])
+    chats: list[dict[str, Any]] = []
+    resposta_gentil = "De nada! Precisando de ajuda com o estágio, é só chamar."
+    passos = [
+        _chat_com_texto("sem busca"),
+        _chat_com_texto(resposta_gentil),
+    ]
+    grafo = construir_grafo(fazer_cliente(_roteiro(passos, chats)), manual=_manual())
+    mensagem = "Obrigado!"
+
+    entrada: EstadoTurno = {
+        "mensagem": mensagem,
+        "mensagens": [{"role": "user", "content": montar_prompt_de_roteamento(mensagem)}],
+        "rodadas": 0,
+    }
+    estado = grafo.invoke(entrada)
+
+    assert estado["resposta"] == resposta_gentil
+    assert estado["resposta"] != TEXTO_AUSENCIA
+    assert estado["houve_ferramenta"] is True
+    assert estado["houve_evidencia"] is True
+    assert len(chats) == 2
+    # O redator recebeu a instrução de cortesia no prompt: saudação não é
+    # pergunta, e os trechos anexados ficam sem uso.
+    prompt_do_redator = chats[1]["messages"][0]["content"]
+    assert CORTESIA.instrucao in prompt_do_redator
+    # E o par sintético do fallback não carrega texto: o redator não tem o que ecoar.
+    assistentes = [
+        mensagem_recebida
+        for mensagem_recebida in chats[1]["messages"]
+        if mensagem_recebida["role"] == "assistant" and mensagem_recebida.get("tool_calls")
+    ]
+    assert len(assistentes) == 1
+    assert assistentes[0]["content"] == ""
 
 
 def test_saudacao_declinada_sem_evidencia_no_fallback_responde_direto(
