@@ -218,7 +218,9 @@ def carregar_configuracao(origem: Mapping[str, str] | None = None) -> Configurac
     ).strip() or "manual-estagio-obrigatorio"
 
     # Limiar mínimo de similaridade de cosseno e quantidade padrão de trechos (issue #36, ADR-0012).
-    limiar_raw = env.get("MANUAL_LIMIAR_SIMILARIDADE", "0.35") or "0.35"
+    # Sem o `or "0.35"` que a string faria cair no padrão: variável numérica vazia
+    # é valor inválido, e não ausência — a mesma régua do `INFERENCIA_K` acima.
+    limiar_raw = env.get("MANUAL_LIMIAR_SIMILARIDADE", "0.35")
     try:
         manual_limiar_similaridade = float(limiar_raw)
     except ValueError as err:
@@ -232,7 +234,7 @@ def carregar_configuracao(origem: Mapping[str, str] | None = None) -> Configurac
             "Esperado valor entre 0.0 e 1.0."
         )
 
-    k_raw = env.get("MANUAL_K_PADRAO", "4") or "4"
+    k_raw = env.get("MANUAL_K_PADRAO", "4")
     try:
         manual_k_padrao = int(k_raw)
     except ValueError as err:
