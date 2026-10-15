@@ -228,9 +228,10 @@ def test_configuracao_semaforo_aceita_espaco_em_branco() -> None:
 
 def test_configuracao_manual_valores_padrao() -> None:
     config = carregar_configuracao({})
-    assert config.manual_limiar_similaridade == 0.72
+    assert config.manual_limiar_similaridade == 0.55
     assert config.manual_k_padrao == 4
     assert config.manual_colecao == "manual-estagio-obrigatorio"
+    assert config.manual_busca_seguranca is True
 
 
 def test_configuracao_manual_lido_do_ambiente() -> None:
@@ -238,10 +239,12 @@ def test_configuracao_manual_lido_do_ambiente() -> None:
         "MANUAL_LIMIAR_SIMILARIDADE": "0.42",
         "MANUAL_K_PADRAO": "5",
         "MANUAL_COLECAO": "colecao-custom",
+        "MANUAL_BUSCA_SEGURANCA": "0",
     })
     assert config.manual_limiar_similaridade == 0.42
     assert config.manual_k_padrao == 5
     assert config.manual_colecao == "colecao-custom"
+    assert config.manual_busca_seguranca is False
 
 
 @pytest.mark.parametrize("bruto", ["-0.1", "1.1", "abc", ""])

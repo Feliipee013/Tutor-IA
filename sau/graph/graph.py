@@ -116,19 +116,31 @@ def construir_grafo(
         construtor.add_node(
             "ferramentas", cast(Any, criar_no_ferramentas(cliente, manual=manual))
         )
-        construtor.add_node(
-            "busca_de_seguranca",
-            cast(Any, criar_no_busca_de_seguranca(cliente, manual=manual)),
-        )
+        if manual.busca_de_seguranca:
+            construtor.add_node(
+                "busca_de_seguranca",
+                cast(Any, criar_no_busca_de_seguranca(cliente, manual=manual)),
+            )
+            construtor.add_edge("busca_de_seguranca", "redator")
+            destino_do_declinio = "busca_de_seguranca"
+        else:
+            # TEMPORÁRIO (teste manual do roteador sozinho): o declínio vai
+            # direto ao redator, sem a busca determinística. Religar é voltar
+            # `MANUAL_BUSCA_SEGURANCA` para `1`; remover de vez é apagar este
+            # `else` junto com o nó e a flag.
+            logger.warning(
+                "Busca de segurança DESATIVADA (MANUAL_BUSCA_SEGURANCA=0): "
+                "o declínio do roteador vai direto ao redator, sem material."
+            )
+            destino_do_declinio = "redator"
         construtor.add_edge(START, "roteador")
         construtor.add_edge("ferramentas", "roteador")
-        construtor.add_edge("busca_de_seguranca", "redator")
         construtor.add_conditional_edges(
             "roteador",
             rota_das_ferramentas,
             {
                 "ferramentas": "ferramentas",
-                "busca_de_seguranca": "busca_de_seguranca",
+                "busca_de_seguranca": destino_do_declinio,
                 "redator": "redator",
             },
         )

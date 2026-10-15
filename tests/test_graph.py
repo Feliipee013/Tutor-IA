@@ -225,6 +225,27 @@ def test_grafo_tem_o_roteador_e_o_redator_com_ferramenta(fazer_cliente: FabricaC
     assert ("finalizar", "__end__") in arestas
 
 
+def test_grafo_sem_busca_de_seguranca_vai_direto_ao_redator(
+    fazer_cliente: FabricaCliente,
+) -> None:
+    """TEMPORÁRIO (teste manual do roteador sozinho): com a flag desligada, o
+    grafo não tem o nó de fallback e o declínio cai direto no redator.
+
+    Religar é voltar `MANUAL_BUSCA_SEGURANCA` para `1`; remover de vez é apagar
+    este teste junto com o nó e a flag.
+    """
+    manual = OpcoesDoManual(
+        diretorio_chroma=Path("/nao-usado/chroma"),
+        nome_colecao="manual-teste",
+        k_padrao=4,
+        limiar=0.35,
+        busca_de_seguranca=False,
+    )
+    visao = construir_grafo(fazer_cliente(_roteiro([], [])), manual=manual).get_graph()
+
+    assert "busca_de_seguranca" not in visao.nodes
+
+
 def test_grafo_sem_manual_nao_tem_roteador_nem_ferramenta(fazer_cliente: FabricaCliente) -> None:
     """Sem Manual, o redator escreve direto da persona e o ciclo nunca abre.
 

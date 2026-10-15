@@ -79,15 +79,17 @@ class OpcoesDoManual:
     """O que o turno precisa para consultar o Manual: onde, quanto e com que corte.
 
     Vem da `Configuracao` do serviço (`manual_chroma_caminho`, `manual_colecao`,
-    `manual_k_padrao`, `manual_limiar_similaridade`). O grafo não lê o ambiente
-    sozinho: quem monta o turno passa estas opções, e o teste monta com as dele
-    — o mesmo desenho do registro de conversas e do semáforo.
+    `manual_k_padrao`, `manual_limiar_similaridade`, `manual_busca_seguranca`).
+    O grafo não lê o ambiente sozinho: quem monta o turno passa estas opções,
+    e o teste monta com as dele — o mesmo desenho do registro de conversas e
+    do semáforo.
     """
 
     diretorio_chroma: Path
     nome_colecao: str
     k_padrao: int
     limiar: float
+    busca_de_seguranca: bool = True
 
     @classmethod
     def de_config(cls, config: Configuracao) -> OpcoesDoManual:
@@ -97,6 +99,7 @@ class OpcoesDoManual:
             nome_colecao=config.manual_colecao,
             k_padrao=config.manual_k_padrao,
             limiar=config.manual_limiar_similaridade,
+            busca_de_seguranca=config.manual_busca_seguranca,
         )
 
 
