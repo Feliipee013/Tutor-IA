@@ -46,8 +46,8 @@ from sau.persona import (
     CORTESIA,
     PERSONA,
     PERSONA_DE_ROTEAMENTO,
-    montar_prompt,
-    montar_prompt_de_roteamento,
+    montar_mensagens,
+    montar_mensagens_de_roteamento,
 )
 
 _BASE_URL = "http://host.docker.internal:11434"
@@ -312,10 +312,10 @@ def test_turno_com_ferramenta_executa_e_o_redator_escreve(
 
     É o caminho do ADR-0010 com a separação da #36: o roteador decide consultar,
     a ferramenta traz o material, o roteador confirma que não precisa de mais
-    nada e o redator redige. O prompt que abre o turno é o do roteador; o do
-    redator chega ao modelo na terceira rodada, junto do resultado da ferramenta
-    como mensagem `tool`, com a Fonte que o redator cita. Sem esta mensagem, o
-    redator escreveria sem material.
+    nada e o redator redige. As mensagens que abrem o turno são as do roteador;
+    as do redator chegam ao modelo na terceira rodada, com a persona em `system`
+    e o resultado da ferramenta como mensagem `tool` no fim, com a Fonte que o
+    redator cita. Sem esta mensagem, o redator escreveria sem material.
     """
     buscar_falsa.append([_TRECHO])
     chats: list[dict[str, Any]] = []
@@ -330,10 +330,11 @@ def test_turno_com_ferramenta_executa_e_o_redator_escreve(
 
     assert resposta == _RESPOSTA_COM_FONTE
     assert len(chats) == 3
-    # A terceira rodada é o redator: prompt do redator mais o par de ferramenta.
+    # A terceira rodada é o redator: persona em `system`, dúvida em `user`,
+    # mais o par de ferramenta no fim.
     mensagens = chats[2]["messages"]
-    assert mensagens[0]["role"] == "user"
-    assert mensagens[0]["content"] == montar_prompt(_MENSAGEM)
+    assert mensagens[0] == {"role": "system", "content": PERSONA}
+    assert mensagens[1] == {"role": "user", "content": _MENSAGEM}
     assert mensagens[-1]["role"] == "tool"
     assert mensagens[-1]["tool_name"] == "buscar_no_manual"
     assert _TRECHO.fonte in mensagens[-1]["content"]
@@ -427,7 +428,7 @@ def test_declinio_factual_com_evidencia_no_fallback_nao_vira_ausencia(
 
     entrada: EstadoTurno = {
         "mensagem": _MENSAGEM,
-        "mensagens": [{"role": "user", "content": montar_prompt_de_roteamento(_MENSAGEM)}],
+        "mensagens": montar_mensagens_de_roteamento(_MENSAGEM),
         "rodadas": 0,
     }
     estado = grafo.invoke(entrada)
@@ -480,7 +481,7 @@ def test_obrigado_com_trechos_do_fallback_responde_com_gentileza(
 
     entrada: EstadoTurno = {
         "mensagem": mensagem,
-        "mensagens": [{"role": "user", "content": montar_prompt_de_roteamento(mensagem)}],
+        "mensagens": montar_mensagens_de_roteamento(mensagem),
         "rodadas": 0,
     }
     estado = grafo.invoke(entrada)
@@ -526,7 +527,7 @@ def test_saudacao_declinada_sem_evidencia_no_fallback_responde_direto(
 
     entrada: EstadoTurno = {
         "mensagem": mensagem,
-        "mensagens": [{"role": "user", "content": montar_prompt_de_roteamento(mensagem)}],
+        "mensagens": montar_mensagens_de_roteamento(mensagem),
         "rodadas": 0,
     }
     estado = grafo.invoke(entrada)
@@ -566,52 +567,53 @@ def test_o_teto_de_rodadas_encerra_o_ciclo(
 # --- A costura do prompt, que é onde a persona do S.A.U. entra ---
 
 
-def test_o_prompt_que_chega_ao_modelo_sem_manual_e_o_montar_prompt(
+def test_o_prompt_que_chega_ao_modelo_sem_manual_e_o_montar_mensagens(
     fazer_cliente: FabricaCliente,
 ) -> None:
-    """Sem Manual, o prompt que chega ao modelo é o `montar_prompt` do redator.
+    """Sem Manual, as mensagens que chegam ao modelo são as do `montar_mensagens`.
 
-    O `montar_prompt` deste módulo não é um: é o de `sau.persona`, reexportado em
-    `nodes.py` com `from sau.persona import montar_prompt as montar_prompt`. É por
-    isso que a afirmação é esta e não "o prompt contém a persona": ela compara o
-    texto que o grafo mandou com a função que mora no módulo da persona, e uma
-    persona que tivesse entrado por outro caminho — um segundo prompt montado
-    dentro do grafo — deixaria as duas pontas diferentes sem que nenhum teste de
-    conteúdo notasse. Quem afirma o conteúdo da persona é o `test_persona.py`.
+    O `montar_mensagens` deste módulo não é um: é o de `sau.persona`,
+    reexportado em `nodes.py` com `from sau.persona import montar_mensagens as
+    montar_mensagens`. É por isso que a afirmação é esta e não "as mensagens
+    contêm a persona": ela compara a lista que o grafo mandou com a função que
+    mora no módulo da persona, e uma persona que tivesse entrado por outro
+    caminho — um segundo construtor montado dentro do grafo — deixaria as duas
+    pontas diferentes sem que nenhum teste de conteúdo notasse. Quem afirma o
+    conteúdo da persona é o `test_persona.py`.
     """
     chats: list[dict[str, Any]] = []
     handler = _roteiro([_chat_com_texto(_RESPOSTA)], chats)
 
     executar_turno(fazer_cliente(handler), _MENSAGEM)
 
-    assert chats[0]["messages"][0]["content"] == montar_prompt(_MENSAGEM)
+    assert chats[0]["messages"] == montar_mensagens(_MENSAGEM)
 
 
 def test_o_prompt_do_roteador_chega_ao_modelo_com_manual(
     fazer_cliente: FabricaCliente,
     buscar_falsa: list[list[TrechoDoManual]],
 ) -> None:
-    """Com Manual, o turno abre pelo prompt do roteador, e não pelo do redator.
+    """Com Manual, o turno abre pelas mensagens do roteador, e não pelas do redator.
 
-    É a mesma costura do teste anterior, do lado do roteador: o texto que abre o
-    turno é o de `montar_prompt_de_roteamento`. Uma troca acidental — abrir pelo
-    prompt do redator — tiraria do roteador a persona enxuta que faz o modelo
-    chamar a ferramenta, e as duas pontas ficariam diferentes sem que o conteúdo
-    da persona mudasse. A busca falsificada vazia é a do fallback, que roda e
-    não acha.
+    É a mesma costura do teste anterior, do lado do roteador: a lista que abre o
+    turno é a de `montar_mensagens_de_roteamento`. Uma troca acidental — abrir
+    pelas mensagens do redator — tiraria do roteador a persona enxuta que faz o
+    modelo chamar a ferramenta, e as duas pontas ficariam diferentes sem que o
+    conteúdo da persona mudasse. A busca falsificada vazia é a do fallback, que
+    roda e não acha.
     """
     chats: list[dict[str, Any]] = []
     handler = _roteiro([_chat_com_texto("sem busca"), _chat_com_texto(_RESPOSTA)], chats)
 
     executar_turno(fazer_cliente(handler), _MENSAGEM, manual=_manual())
 
-    assert chats[0]["messages"][0]["content"] == montar_prompt_de_roteamento(_MENSAGEM)
+    assert chats[0]["messages"] == montar_mensagens_de_roteamento(_MENSAGEM)
 
 
 def test_mensagem_do_aluno_chega_ao_modelo_verbatim(fazer_cliente: FabricaCliente) -> None:
     """A mensagem do Aluno chega ao modelo como ele a escreveu.
 
-    Sem esta afirmação, um grafo que mandasse o prompt fixo e ignorasse a
+    Sem esta afirmação, um grafo que mandasse a persona fixa e ignorasse a
     mensagem passaria por `test_turno_devolve_o_texto_do_modelo`: o texto do
     modelo voltaria igual, vindo de uma pergunta que o Aluno nunca fez.
     """
@@ -620,7 +622,12 @@ def test_mensagem_do_aluno_chega_ao_modelo_verbatim(fazer_cliente: FabricaClient
 
     executar_turno(fazer_cliente(handler), _MENSAGEM)
 
-    assert _MENSAGEM in chats[0]["messages"][0]["content"]
+    usuarios = [
+        mensagem
+        for mensagem in chats[0]["messages"]
+        if mensagem.get("role") == "user"
+    ]
+    assert usuarios and usuarios[-1]["content"] == _MENSAGEM
 
 
 def test_as_fontes_do_turno_vem_da_ferramenta(
@@ -643,7 +650,7 @@ def test_as_fontes_do_turno_vem_da_ferramenta(
 
     entrada: EstadoTurno = {
         "mensagem": _MENSAGEM,
-        "mensagens": [{"role": "user", "content": montar_prompt_de_roteamento(_MENSAGEM)}],
+        "mensagens": montar_mensagens_de_roteamento(_MENSAGEM),
         "rodadas": 0,
     }
     estado = grafo.invoke(entrada)

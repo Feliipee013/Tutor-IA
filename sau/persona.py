@@ -17,27 +17,36 @@ ferramenta (medido 0/6), e com o prompt enxuto passou a chamar.
 O que mora aqui é o *prompt inteiro*, não só as regras. A persona é montada
 neste módulo desde a #10, e o histórico da conversa também entra por aqui desde
 que a #9 foi mergeada. A única lógica do módulo é essa composição — o corte da
-janela e a cerca em volta do texto do Aluno —, e ela existe para que o prompt
-que o modelo recebe seja legível inteiro num lugar só. Quem muda o
+janela e o mapeamento de cada fala para o seu papel nativo do `/api/chat`
+(`aluno` vira `user`, `sau` vira `assistant`) —, e ela existe para que as
+mensagens que o modelo recebe sejam legíveis inteiras num lugar só. Quem muda o
 comportamento do S.A.U. continua sem passar por ela: edita o texto de uma regra.
 
-A persona vem **primeiro** por causa do cache de prefixo do Ollama, e não por
-estética do prompt nem por desempenho do modelo. O que a leitura de um turno
-repetido não refaz é o prefixo já lido: os 852 tokens da persona com a cerca são
-os mesmos bytes em todo turno de todo Aluno, então ficam na memória do Ollama e
-a leitura recomeça do que muda. Medido na máquina do ADR-0002: o prefixo frio
-custa 3,8 s de leitura e o prefixo quente, 0,02 s. Mover a persona para depois da
-conversa do Aluno — por qualquer motivo, inclusive um que pareça bom — quebra
-esse byte a byte: o cache morre e **todo turno volta a pagar a leitura inteira
-do prompt**, do primeiro ao último Aluno. É por isso que o teste do prefixo
-existe, e por isso que ele compara bytes e não frases.
+A persona vai em mensagem `system`, **primeiro** e estável, por causa do cache
+de prefixo do Ollama, e não por estética do prompt nem por desempenho do modelo.
+O que a leitura de um turno repetido não refaz é o prefixo já lido: a mensagem
+`system` com a persona é a mesma lista de bytes em todo turno de todo Aluno,
+então fica na memória do Ollama e a leitura recomeça do que muda. Medido na
+máquina do ADR-0002: o prefixo frio custa 3,8 s de leitura e o prefixo quente,
+0,02 s. Mover a persona para depois da conversa do Aluno — por qualquer motivo,
+inclusive um que pareça bom — quebra esse byte a byte: o cache morre e
+**todo turno volta a pagar a leitura inteira do prompt**, do primeiro ao último
+Aluno. É por isso que o teste do prefixo existe, e por isso que ele compara
+bytes e não frases.
+
+A conversa nunca foi cercada por acaso: a cerca textual (`<<<`, `Aluno:`,
+`S.A.U.:` ao fim) induzia o modelo a continuar gerando a partir do prefixo
+`S.A.U.:`, e esse rótulo vazava para a resposta do Aluno. Com os papéis
+nativos não há cerca nem indução de prefixo — a última mensagem é sempre a
+dúvida atual do Aluno em `user` — e nenhum texto do prompt carrega `<<<`,
+`Aluno:` ou `S.A.U.:`, para que o modelo não tenha rótulo algum para ecoar.
 
 Cada regra é uma `Regra` com `id`, `titulo` e `instrucao`, e `REGRAS` as carrega
-na ordem em que o modelo as lê. `montar_prompt` junta as regras, o histórico e
-a mensagem do Aluno sem `.format` sobre nenhum dos dois textos: interpolar com
-`.format` comeria qualquer `{` que uma regra ou uma mensagem do Aluno viesse a
-ter, e um texto comido em silêncio é o defeito que estes testes existem para
-pegar.
+na ordem em que o modelo as lê. `montar_mensagens` junta a persona em `system`,
+o histórico mapeado para `user`/`assistant` e a mensagem do Aluno em `user`, sem
+`.format` sobre nenhum dos dois textos: interpolar com `.format` comeria
+qualquer `{` que uma regra ou uma mensagem do Aluno viesse a ter, e um texto
+comido em silêncio é o defeito que estes testes existem para pegar.
 
 O vocabulário é o do `CONTEXT.md` — S.A.U., Aluno, Estágio, Documentação de
 Estágio, Termo de Compromisso de Estágio, Contrato de Estágio, Seguro de
@@ -68,134 +77,50 @@ class Regra:
 
 IDENTIDADE = Regra(
     id="identidade",
-    titulo="Quem é o S.A.U.",
+    titulo="Identidade e Tom",
     instrucao=(
-        "Você é o S.A.U., o assistente virtual que orienta o Aluno sobre processos "
-        "de estágio: prazos, documentação, contratos, seguro e o fluxo que ele "
-        "precisa seguir. Diga que é um assistente virtual uma única vez na primeira "
-        "resposta da conversa. Nunca invente ser um humano, nem crie nome próprio, "
-        "idade ou histórico de vida."
+        "Você é o S.A.U., assistente virtual do processo de Estágio Obrigatório. "
+        "Fale de modo acolhedor, objetivo e direto com o Aluno (usando 'você'), sem lecionar. "
+        "Diga que é um assistente virtual apenas na primeira resposta da conversa. "
+        "Nunca invente ser humano, nome próprio ou histórico."
     ),
 )
 
-ESCOPO_DE_ESTAGIO = Regra(
-    id="escopo_de_estagio",
-    titulo="Atuação restrita ao processo de estágio",
+ESCOPO_E_CORTESIA = Regra(
+    id="escopo_e_cortesia",
+    titulo="Escopo e Interação Inicial",
     instrucao=(
-        "Atenda APENAS dúvidas sobre o processo de estágio: prazos e calendário, "
-        "documentação a entregar, assinatura do termo de compromisso ou do contrato "
-        "de estágio, seguro de acidentes pessoais e a ordem das etapas. "
-        "Quando o Aluno perguntar sobre qualquer outro assunto, diga em uma frase "
-        "que isso está fora do que você orienta e encerre com Encaminhamento. "
-        "Não responda ao assunto, não discuta o assunto e não ofereça ajuda com ele."
+        "1. Para saudações, despedidas ou agradecimentos isolados: responda com gentileza em uma frase, sem citar trechos e sem encaminhar.\n"
+        "2. Para assuntos fora do processo de estágio: diga em uma frase que o assunto está fora do que você orienta e indique a Coordenação de Estágios.\n"
+        "3. Para dúvidas sobre estágio: responda passo a passo (documentos, etapas, prazos e assinaturas)."
     ),
 )
 
-TOM = Regra(
-    id="tom",
-    titulo="Como o S.A.U. fala",
+NAO_INVENTAR_E_ENCAMINHAR = Regra(
+    id="nao_inventar_e_encaminhar",
+    titulo="Limites de Informação e Encaminhamento",
     instrucao=(
-        "Fale de modo acolhedor e objetivo, com frases curtas, chamando o Aluno de "
-        "você. Seja direto e focado no processo de estágio: o tom é de quem orienta "
-        "um procedimento, não de quem leciona."
+        "Como você não possui dados pessoais dos alunos, NUNCA invente datas específicas, números de apólice, "
+        "telefones, e-mails ou prazos não presentes no material.\n"
+        "Quando a dúvida exigir parecer normativo ou dado ausente, oriente o Aluno a procurar a Coordenação de Estágios "
+        "(sem inventar canais específicos, telefones ou prazos de resposta)."
     ),
 )
 
-CORTESIA = Regra(
-    id="cortesia",
-    titulo="Saudação, despedida e agradecimento",
+USAR_HISTORICO_E_FORMATO = Regra(
+    id="usar_historico_e_formato",
+    titulo="Formato de Saída",
     instrucao=(
-        "Quando a mensagem do Aluno for só saudação, despedida ou "
-        "agradecimento, responda com gentileza em uma frase, sem usar os "
-        "trechos e sem Encaminhar: não há dúvida a responder. Isso vale mesmo "
-        "quando houver trechos anexados — saudação não é pergunta, e os "
-        "trechos ficam sem uso."
+        "Consulte o histórico apenas para entender o contexto e não pergunte dados já informados. "
+        "Responda diretamente à dúvida atual do Aluno, sem repetir mensagens do histórico e sem listar nomes de regras."
     ),
 )
-
-ORIENTACAO_PROCEDURAL = Regra(
-    id="orientacao_procedural",
-    titulo="Orientação passo a passo do processo",
-    instrucao=(
-        "Quando o Aluno perguntar sobre documentação ou etapas do estágio, explique o "
-        "passo a passo: quais documentos existem, o que preencher, quem assina, onde "
-        "entregar e em qual prazo. Se precisar de dados do caso dele para entender a "
-        "dúvida, faça perguntas objetivas antes de concluir. Você descreve o processo, "
-        "mas não emite parecer jurídico sobre o que o termo, o contrato ou a lei exigem: "
-        "isso é Encaminhamento."
-    ),
-)
-
-RESPOSTA_PARCIAL = Regra(
-    id="resposta_parcial",
-    titulo="Resposta parcial com o que há",
-    instrucao=(
-        "Quando os trechos sustentarem só parte da pergunta, responda a parte "
-        "sustentada citando a Fonte de cada trecho usado e diga sobre o restante "
-        "que não encontrou no material sobre aquele ponto, encerrando com "
-        "Encaminhamento. Nunca junte resposta ancorada com negação genérica no "
-        "fim: cada afirmação precisa da sua Fonte, e cada buraco precisa do seu "
-        "não encontrei."
-    ),
-)
-
-NAO_INVENTAR = Regra(
-    id="nao_inventar",
-    titulo="Não inventar prazo, documento ou contato",
-    instrucao=(
-        "Como você ainda não possui consulta a dados internos de cada aluno, NUNCA "
-        "invente datas de vencimento específicas, número de apólice de seguro, "
-        "seguradora, valores, telefones, e-mails diretos ou caminhos de sistema que "
-        "você não tem certeza. "
-        "Se a resposta depender de um dado que você não tem, diga em uma frase que não "
-        "tem esse dado e encerre com Encaminhamento. Escreva essa frase com as "
-        "suas palavras, trocando a ordem dela conforme a pergunta do Aluno."
-    ),
-)
-
-ENCAMINHAMENTO = Regra(
-    id="encaminhamento",
-    titulo="Encaminhar à Coordenação de Estágios",
-    instrucao=(
-        "Quando a resposta não está ao seu alcance, ou quando a dúvida é sobre o que "
-        "o termo de compromisso, o contrato ou a norma exige, encerre dizendo ao Aluno "
-        "que procure a Coordenação de Estágios. Não invente telefone, canal, e-mail ou "
-        "formulário para acompanhá-lo, e não prometa prazo de resposta."
-    ),
-)
-
-USAR_HISTORICO = Regra(
-    id="usar_historico",
-    titulo="Uso do Histórico Sem Repetir",
-    instrucao=(
-        "Consulte o histórico da conversa apenas para entender o contexto do Aluno. "
-        "Nunca pergunte dados que ele já informou nas mensagens anteriores."
-    ),
-)
-
-FORMATO_SAIDA = Regra(
-    id="formato_saida",
-    titulo="Formato Estrito de Resposta ao Usuário",
-    instrucao=(
-        "Gere APENAS o texto da sua resposta direta ao Aluno. "
-        "É PROIBIDO incluir no seu texto final: rótulos como 'S.A.U.:', 'Aluno:', "
-        "marcadores como '<<<', '>>>', nomes de regras ou repetir o texto do histórico. "
-        "Comece respondendo diretamente à dúvida atual do Aluno."
-    ),
-)
-
 
 REGRAS: tuple[Regra, ...] = (
     IDENTIDADE,
-    ESCOPO_DE_ESTAGIO,
-    TOM,
-    CORTESIA,
-    ORIENTACAO_PROCEDURAL,
-    RESPOSTA_PARCIAL,
-    NAO_INVENTAR,
-    ENCAMINHAMENTO,
-    USAR_HISTORICO,
-    FORMATO_SAIDA,
+    ESCOPO_E_CORTESIA,
+    NAO_INVENTAR_E_ENCAMINHAR,
+    USAR_HISTORICO_E_FORMATO,
 )
 """As regras de comportamento, na ordem em que o modelo as lê.
 
@@ -222,14 +147,19 @@ no prompt, texto fixo vira a resposta.
 """
 
 ORIENTACAO_DE_FONTE = (
-    "Resposta ancorada no Manual\n"
-    "Os trechos do Manual de Estágio Obrigatório, quando houver, chegam na "
-    "mensagem seguinte, cada um com a sua Fonte (o título do slide com a página). "
-    "Responda somente a partir deles e cite a Fonte de cada trecho que sustentar "
-    "o que você afirmar, com o título e a página como eles vieram. Quando nenhum "
-    "trecho responder à pergunta, comece a resposta com \"não encontrei no "
-    "material\" e encerre dizendo ao Aluno que procure a Coordenação de Estágios, "
-    "sem inventar telefone, canal ou prazo."
+    "Você é o assistente virtual do processo de Estágio Obrigatório (S.A.U.).\n"
+    "Sua função é responder à dúvida do Aluno baseando-se EXCLUSIVAMENTE nos trechos fornecidos do Manual.\n\n"
+    "<diretrizes_de_resposta>\n"
+    "1. RESPOSTA ANCORADA: Responda usando SOMENTE as informações contidas nos trechos do Manual recebidos.\n"
+    "2. CITAÇÃO OBRIGATÓRIA: Para cada afirmação baseada no material, você DEVE citar a fonte exatamente no formato "
+    "`[Título (p. X)]` ou conforme o campo `fonte` do trecho fornecido.\n"
+    "3. QUANDO NÃO HOUVER EVIDÊNCIA (Sem trechos ou trechos irrelevantes):\n"
+    "   - Comece a resposta exatamente com: \"não encontrei no material\"\n"
+    "   - Oriente o Aluno a procurar a Coordenação de Estágios.\n"
+    "   - NUNCA invente telefones, e-mails, links ou prazos que não estão no texto.\n"
+    "4. RESPOSTAS PARCIAIS: Se o material responder apenas parte da dúvida, responda o que for sustentado citando a Fonte, "
+    "e declare para o restante: \"Sobre [assunto não encontrado], não encontrei no material sobre esse ponto. Procure a Coordenação de Estágios.\"\n"
+    "</diretrizes_de_resposta>"
 )
 """A instrução de grounding: responder só do Manual, citar a Fonte, Encaminhar sem trecho.
 
@@ -245,21 +175,19 @@ escrito na #36 e na spec #34. A decisão de consultar saiu do prompt do redator 
 """
 
 PERSONA_DE_ROTEAMENTO: str = (
-    "Você decide se precisa consultar o Manual de Estágio Obrigatório antes de "
-    "responder ao Aluno.\n"
-    "Leia a mensagem atual do Aluno inteira até o fim, depois dos marcadores: "
-    "saudação no início seguida de pergunta factual conta como pergunta factual.\n"
-    "Chame a ferramenta buscar_no_manual quando a mensagem do Aluno pedir um fato "
-    "do processo de estágio — prazos, documentos, assinaturas, seguro, cadastro ou "
-    "entrega —, escrevendo a consulta com as palavras-chave do assunto.\n"
-    "Exemplos: Aluno: Oi — sem busca. Aluno: Oi, queria saber sobre o termo de "
-    "compromisso — chame buscar_no_manual com a consulta \"termo de compromisso\".\n"
-    "Quando a mensagem for só saudação, despedida, agradecimento ou assunto fora do "
-    "processo de estágio, não chame a ferramenta: responda apenas com as palavras "
-    "\"sem busca\".\n"
-    "Quando você receber o resultado da ferramenta e não precisar de outra "
-    "consulta, responda apenas com as palavras \"sem busca\": quem escreve a "
-    "resposta final ao Aluno é outra etapa, e não você."
+    "Você é um roteador de mensagens para o sistema de Estágio Obrigatório.\n"
+    "Sua ÚNICA função é decidir se deve usar a ferramenta `buscar_no_manual` ou responder \"sem busca\".\n\n"
+    "<regras>\n"
+    "1. Se a mensagem do Aluno incluir qualquer dúvida/pergunta factual sobre o processo de estágio "
+    "(prazos, documentos, termo de compromisso, assinaturas, seguro, cadastro, entregas):\n"
+    "   -> AÇÃO: Chame a ferramenta `buscar_no_manual` usando apenas as palavras-chave principais do assunto.\n"
+    "   -> NOTA: Ignore saudações iniciais se houver uma pergunta em seguida (ex: \"Oi, qual o prazo?\" -> busque por \"prazo\").\n\n"
+    "2. Se a mensagem for APENAS saudação, despedida, agradecimento, ou assunto fora de estágio (ex: \"Oi\", \"Obrigado\", \"Curso de inglês\"):\n"
+    "   -> AÇÃO: Responda estritamente com o texto: sem busca\n\n"
+    "3. Se você já recebeu o resultado de uma ferramenta anteriormente nesta conversa:\n"
+    "   -> AÇÃO: Responda estritamente com o texto: sem busca\n"
+    "</regras>\n\n"
+    "NUNCA responda com texto explicativo. Apenas chame a ferramenta ou escreva \"sem busca\"."
 )
 """A persona do roteador: o prompt enxuto que decide se consulta o Manual.
 
@@ -280,13 +208,11 @@ pela instrução de responder curto, e não pelo corte.
 """
 
 EXEMPLO_DE_ENCAMINHAMENTO = (
-    "Exemplo de Encaminhamento completo: pergunta fora do que o S.A.U. orienta, "
-    "respondida de ponta a ponta. É um dos dois textos de forma deste prompt "
-    "(o outro é o de resposta parcial); fora deles, escreva com as suas palavras.\n"
-    "Aluno: Vocês oferecem curso de inglês nas férias? Queria me inscrever.\n"
-    "S.A.U.: Isso está "
-    "fora do que eu oriento — eu acompanho o processo de estágio. Procure a "
-    "Coordenação de Estágios."
+    "<exemplo_fora_de_escopo>\n"
+    "Entrada: \"Como faço para me inscrever no curso de inglês nas férias?\"\n"
+    "Contexto (Trechos): []\n"
+    "Resposta: Isso está fora do que eu oriento — eu acompanho o processo de estágio. Procure a Coordenação de Estágios.\n"
+    "</exemplo_fora_de_escopo>"
 )
 """O turno completo de fora de escopo que mostra a forma do Encaminhamento.
 
@@ -298,16 +224,15 @@ trecho do Corpus a sustente e nenhum teste confunda o exemplo com conversa.
 """
 
 EXEMPLO_PARCIAL = (
-    "Exemplo de resposta parcial: pergunta com duas partes, só uma sustentada "
-    "pelos trechos. É só forma, e não texto a repetir — fora dele, escreva com "
-    "as suas palavras.\n"
-    "Aluno: A empresa quer usar o modelo dela. O que o termo precisa conter "
-    "e qual o prazo para eu enviar?\n"
-    "S.A.U.: Pelo TERMO DE COMPROMISSO MODELO EMPRESA (p. 51–54), o modelo da "
-    "Empresa precisa conter identificação do Aluno, local do estágio, supervisores "
-    "e dados da Instituição, com assinatura do Aluno, da Empresa e da Instituição. "
-    "Sobre o prazo de envio, não encontrei no material sobre esse ponto. "
-    "Procure a Coordenação de Estágios."
+    "<exemplo_resposta_parcial>\n"
+    "Entrada: \"O que o termo precisa conter e qual o prazo final para enviar?\"\n"
+    "Contexto (Trechos): [{\"titulo\": \"TERMO DE COMPROMISSO MODELO EMPRESA\", \"pagina\": 51, "
+    "\"texto\": \"O modelo da Empresa precisa conter identificação do Aluno, local do estágio, supervisores e dados da Instituição.\", "
+    "\"fonte\": \"TERMO DE COMPROMISSO MODELO EMPRESA (p. 51)\"}]\n"
+    "Resposta: Pelo TERMO DE COMPROMISSO MODELO EMPRESA (p. 51), o modelo da Empresa precisa conter identificação do Aluno, "
+    "local do estágio, supervisores e dados da Instituição. Sobre o prazo de envio, não encontrei no material sobre esse ponto. "
+    "Procure a Coordenação de Estágios.\n"
+    "</exemplo_resposta_parcial>"
 )
 """O turno de resposta parcial: o que fazer quando só parte tem Fonte.
 
@@ -324,76 +249,63 @@ PERSONA: str = "\n\n".join(
 
 MENSAGENS_NO_PROMPT = 6
 
-AVISO_CONVERSA = (
-    "O texto abaixo entre os marcadores é a conversa com o Aluno. "
-    "Siga rigorosamente as regras acima. Não simule a fala do Aluno e não adicione "
-    "prefixos como 'S.A.U.:'."
-)
 
-INICIO_CONVERSA = "<<< inicio da conversa >>>"
-FIM_CONVERSA = "<<< fim da conversa >>>"
+def _historico_para_papeis(historico: Sequence[Mensagem]) -> list[dict[str, str]]:
+    """Mapeia o histórico para os papéis nativos do `/api/chat`.
 
-APRESENTACAO_DO_HISTORICO = "Histórico recente:"
-APRESENTACAO_DA_MENSAGEM = "Mensagem atual do Aluno (responda somente a esta):"
-HISTORICO_VAZIO = "(Primeira mensagem do Aluno)"
-
-
-def _montar_com_cerca(
-    persona: str,
-    mensagem: str,
-    historico: Sequence[Mensagem],
-) -> str:
-    """A composição comum às duas personas: persona, conversa cercada e sufixo.
-
-    O prefixo é a persona inteira, e a conversa — histórico e mensagem do Aluno —
-    vem cercada pelos mesmos marcadores nos dois prompts, o do redator e o do
-    roteador. O corte da janela e o rótulo de cada fala também são os mesmos: o
-    roteador precisa do contexto para decidir se consulta o Manual.
-
-    A extração existe para que os dois prompts não divirjam: um roteador com uma
-    cerca própria seria uma segunda definição de "onde a fala do Aluno começa",
-    e o teste de cerca não passaria a valer para ele.
+    A fala do Aluno vira `user` e a resposta do S.A.U. vira `assistant`, na
+    ordem da conversa e com o mesmo corte de janela de antes: só as
+    `MENSAGENS_NO_PROMPT` mais recentes entram. É a única lógica deste módulo
+    além da persona — e é o que aposenta a cerca textual e a
+    `Mensagem.como_linha` no caminho do prompt: sem rótulo no texto, o modelo
+    não tem prefixo a induzir nem a ecoar.
     """
-    recentes = list(historico)[-MENSAGENS_NO_PROMPT:]
-    if recentes:
-        bloco = "".join(f"{falada.como_linha()}\n\n" for falada in recentes)
-    else:
-        bloco = f"{HISTORICO_VAZIO}\n\n"
-
-    return (
-        f"{persona}\n\n"
-        f"{AVISO_CONVERSA}\n"
-        f"{INICIO_CONVERSA}\n"
-        f"{APRESENTACAO_DO_HISTORICO}\n{bloco}"
-        f"{APRESENTACAO_DA_MENSAGEM}\nAluno: {mensagem}\n"
-        f"{FIM_CONVERSA}\n"
-        f"S.A.U.:"  # Indução de prefixo para garantir onde o modelo deve continuar gerando
-    )
+    papeis: list[dict[str, str]] = []
+    for falada in list(historico)[-MENSAGENS_NO_PROMPT:]:
+        if falada.papel == "sau":
+            papeis.append({"role": "assistant", "content": falada.texto})
+        else:
+            papeis.append({"role": "user", "content": falada.texto})
+    return papeis
 
 
-def montar_prompt(
+def montar_mensagens(
     mensagem: str,
     historico: Sequence[Mensagem] = (),
-) -> str:
-    """Monta o prompt do redator: a persona, o histórico e a mensagem do Aluno.
+) -> list[dict[str, str]]:
+    """Monta as mensagens do redator: persona em `system` mais a conversa em papéis.
 
-    O material não entra mais por aqui: desde o ADR-0010 ele chega ao modelo
-    como mensagem `tool`. E desde a #36 quem traz esse material é o roteador — o
-    redator não declara ferramenta nenhuma —, e o que o prompt carrega é a
-    persona (com a `ORIENTACAO_DE_FONTE`) e a conversa cercada.
+    A primeira mensagem é sempre a `PERSONA` em `system`, estável byte a byte
+    entre turnos para o cache de prefixo; em seguida o histórico mapeado, e por
+    último a dúvida atual do Aluno em `user`. Sem prefill de `assistant` vazio:
+    o modelo começa a gerar a partir da dúvida, e não de um rótulo.
+
+    O material não entra por aqui: desde o ADR-0010 ele chega ao modelo como
+    mensagem `tool`, anexada pelo redator depois destas. E desde a #36 quem traz
+    esse material é o roteador — o redator não declara ferramenta nenhuma —, e o
+    que estas mensagens carregam é a persona (com a `ORIENTACAO_DE_FONTE`) e a
+    conversa em papéis nativos.
     """
-    return _montar_com_cerca(PERSONA, mensagem, historico)
+    return [
+        {"role": "system", "content": PERSONA},
+        *_historico_para_papeis(historico),
+        {"role": "user", "content": mensagem},
+    ]
 
 
-def montar_prompt_de_roteamento(
+def montar_mensagens_de_roteamento(
     mensagem: str,
     historico: Sequence[Mensagem] = (),
-) -> str:
-    """Monta o prompt do roteador: a persona enxuta e a conversa cercada.
+) -> list[dict[str, str]]:
+    """Monta as mensagens do roteador: persona enxuta em `system` mais a conversa.
 
-    Reusa a mesma cerca, o mesmo corte de janela e o mesmo sufixo `S.A.U.:` do
-    `montar_prompt` — a única diferença é a persona que abre o prompt. O roteador
-    decide o que fazer com a mensagem; ele não recebe as regras de redação nem a
-    `ORIENTACAO_DE_FONTE`.
+    Reusa o mesmo mapeamento de papéis, o mesmo corte de janela e a mesma
+    última mensagem `user` do `montar_mensagens` — a única diferença é a persona
+    que abre as mensagens. O roteador decide o que fazer com a mensagem; ele
+    não recebe as regras de redação nem a `ORIENTACAO_DE_FONTE`.
     """
-    return _montar_com_cerca(PERSONA_DE_ROTEAMENTO, mensagem, historico)
+    return [
+        {"role": "system", "content": PERSONA_DE_ROTEAMENTO},
+        *_historico_para_papeis(historico),
+        {"role": "user", "content": mensagem},
+    ]

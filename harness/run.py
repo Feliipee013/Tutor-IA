@@ -627,6 +627,11 @@ def sha256_do_prompt() -> str:
     duas: o hash cobre a do redator (`PERSONA`) e a do roteador
     (`PERSONA_DE_ROTEAMENTO`), separadas por uma linha em branco, para que
     mexer em qualquer uma delas mude a rodada.
+
+    Com a migração para papéis nativos do `/api/chat`, o conteúdo das duas
+    personas mudou (sem cerca textual nem rótulos): o hash quebrou a
+    comparabilidade com as linhas de base anteriores, então rodada nova só se
+    compara com rodada nova.
     """
     return hashlib.sha256((PERSONA + "\n\n" + PERSONA_DE_ROTEAMENTO).encode("utf-8")).hexdigest()
 
