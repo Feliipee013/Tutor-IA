@@ -43,7 +43,7 @@ from sau.inference.ollama import (
 from sau.manual.indice import TrechoDoManual
 from sau.manual.tool import LITERAL_NAO_ENCONTREI
 from sau.persona import (
-    CORTESIA,
+    ESCOPO_E_CORTESIA,
     PERSONA,
     PERSONA_DE_ROTEAMENTO,
     montar_mensagens,
@@ -367,6 +367,71 @@ def test_saudacao_passa_pelo_roteador_e_pelo_redator_sem_ferramenta(
     assert "tools" not in chats[1]
 
 
+def test_pergunta_factual_de_prazo_consulta_em_frase_e_oi_dispensa_a_busca(
+    fazer_cliente: FabricaCliente,
+    buscar_falsa: list[list[TrechoDoManual]],
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A pergunta de prazo com saudação consulta em frase; "Oi" puro dispensa.
+
+    É o contrato da consulta em linguagem natural, medido na fiação: a
+    pergunta factual com apresentação na frente ("Oi, meu nome é Leo, quero
+    prazo de estágio") chega à ferramenta como frase — mais de uma palavra —,
+    e o log de auditoria ("Consulta ao manual") registra a frase que o modelo
+    mandou, sem encurtamento no caminho; o redator recebe o par de ferramenta
+    com a Fonte e escreve ancorado. Já o "Oi" puro segue o caminho curto do
+    roteador ("sem busca"), sem mensagem `tool` e sem literal de ausência. O
+    teste mede a fiação — o schema que o roteador lê e o que o grafo faz com
+    a consulta —, não a obediência do modelo, que só a produção valida.
+    """
+    buscar_falsa.append([_TRECHO])
+    chats: list[dict[str, Any]] = []
+    mensagem_factual = "Oi, meu nome é Leo, quero prazo de estágio"
+    consulta_em_frase = "quero prazo de estágio"
+    passos = [
+        _chat_com_chamada(consulta=consulta_em_frase),
+        _chat_com_texto("sem busca"),
+        _chat_com_texto(_RESPOSTA_COM_FONTE),
+    ]
+
+    with caplog.at_level(logging.INFO, logger="sau.manual.tool"):
+        resposta = executar_turno(
+            fazer_cliente(_roteiro(passos, chats)), mensagem_factual, manual=_manual()
+        )
+
+    assert resposta == _RESPOSTA_COM_FONTE
+    # O schema que o roteador leu descreve a consulta em linguagem natural.
+    descricao = chats[0]["tools"][0]["function"]["parameters"]["properties"]["consulta"][
+        "description"
+    ]
+    assert "linguagem natural" in descricao
+    # A consulta que o modelo mandou atravessou o grafo sem encurtamento.
+    consultas = [
+        chamada["function"]["arguments"]["consulta"]
+        for mensagem in chats[1]["messages"]
+        if mensagem.get("role") == "assistant"
+        for chamada in mensagem.get("tool_calls", [])
+    ]
+    assert consultas == [consulta_em_frase]
+    assert len(consulta_em_frase.split()) > 1
+    auditoria = [registro.getMessage() for registro in caplog.records]
+    assert any(
+        "Consulta ao manual" in linha and consulta_em_frase in linha for linha in auditoria
+    )
+
+    # O "Oi" puro dispensa a busca: duas rodadas e nenhuma `tool`.
+    buscar_falsa.append([])  # O fallback não sustenta a saudação pura.
+    chats_oi: list[dict[str, Any]] = []
+    resposta_curta = "Oi! Sobre o seu Estágio, o que você precisa?"
+    handler = _roteiro(
+        [_chat_com_texto("sem busca"), _chat_com_texto(resposta_curta)], chats_oi
+    )
+
+    assert executar_turno(fazer_cliente(handler), "Oi", manual=_manual()) == resposta_curta
+    assert len(chats_oi) == 2
+    assert all(mensagem["role"] != "tool" for mensagem in chats_oi[1]["messages"])
+
+
 def test_a_ferramenta_sem_evidencia_vira_o_literal_de_ausencia(
     fazer_cliente: FabricaCliente, buscar_falsa: list[list[TrechoDoManual]]
 ) -> None:
@@ -463,8 +528,8 @@ def test_obrigado_com_trechos_do_fallback_responde_com_gentileza(
 
     É o caso que a produção mostrou: o roteador declina a mensagem só social, a
     busca de segurança acha trechos e os anexa, e o redator — que recebe a regra
-    de cortesia no prompt — responde com gentileza em vez de ecoar os trechos ou
-    Encaminhar. A guarda do `finalizar` não dispara: `houve_evidencia` é `True`
+    de escopo e cortesia no prompt — responde com gentileza em vez de ecoar os
+    trechos ou Encaminhar. A guarda do `finalizar` não dispara: `houve_evidencia` é `True`
     e a resposta final é a gentil, não o literal de ausência. O teste mede a
     fiação — a instrução chegou ao prompt do redator e a guarda deixou a
     resposta passar —, não a obediência do modelo, que só a produção valida.
@@ -491,10 +556,10 @@ def test_obrigado_com_trechos_do_fallback_responde_com_gentileza(
     assert estado["houve_ferramenta"] is True
     assert estado["houve_evidencia"] is True
     assert len(chats) == 2
-    # O redator recebeu a instrução de cortesia no prompt: saudação não é
-    # pergunta, e os trechos anexados ficam sem uso.
+    # O redator recebeu a instrução de escopo e cortesia no prompt: saudação
+    # não é pergunta, e os trechos anexados ficam sem uso.
     prompt_do_redator = chats[1]["messages"][0]["content"]
-    assert CORTESIA.instrucao in prompt_do_redator
+    assert ESCOPO_E_CORTESIA.instrucao in prompt_do_redator
     # E o par sintético do fallback não carrega texto: o redator não tem o que ecoar.
     assistentes = [
         mensagem_recebida

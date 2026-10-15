@@ -38,24 +38,19 @@ import pytest
 from sau.graph.graph import executar_turno
 from sau.graph.state import Mensagem
 from sau.inference.ollama import ClienteOllama
+from sau.manual.tool import esquema_da_ferramenta
 from sau.persona import (
-    CORTESIA,
-    ENCAMINHAMENTO,
-    ESCOPO_DE_ESTAGIO,
+    ESCOPO_E_CORTESIA,
     EXEMPLO_DE_ENCAMINHAMENTO,
     EXEMPLO_PARCIAL,
-    FORMATO_SAIDA,
     IDENTIDADE,
     MENSAGENS_NO_PROMPT,
-    NAO_INVENTAR,
+    NAO_INVENTAR_E_ENCAMINHAR,
     ORIENTACAO_DE_FONTE,
-    ORIENTACAO_PROCEDURAL,
     PERSONA,
     PERSONA_DE_ROTEAMENTO,
     REGRAS,
-    RESPOSTA_PARCIAL,
-    TOM,
-    USAR_HISTORICO,
+    USAR_HISTORICO_E_FORMATO,
     montar_mensagens,
     montar_mensagens_de_roteamento,
 )
@@ -149,15 +144,9 @@ def test_o_prompt_tem_exatamente_as_regras_da_issue() -> None:
     """
     assert tuple(regra.id for regra in REGRAS) == (
         "identidade",
-        "escopo_de_estagio",
-        "tom",
-        "cortesia",
-        "orientacao_procedural",
-        "resposta_parcial",
-        "nao_inventar",
-        "encaminhamento",
-        "usar_historico",
-        "formato_saida",
+        "escopo_e_cortesia",
+        "nao_inventar_e_encaminhar",
+        "usar_historico_e_formato",
     )
 
 
@@ -178,134 +167,57 @@ def test_a_regra_de_identidade_chega_ao_modelo(
     assert prompt.count(IDENTIDADE.instrucao) == 1
 
 
-def test_a_regra_de_tom_chega_ao_modelo(
+def test_a_regra_de_escopo_e_cortesia_chega_ao_modelo(
     fazer_cliente: FabricaCliente,
 ) -> None:
-    """O tom acolhedor e objetivo está no prompt que o modelo recebeu.
+    """O escopo com a cortesia está no prompt que o modelo recebeu.
 
-    É esta instrução que impede o S.A.U. de soar como assistente genérico —
-    sem ela, o modelo abre a conversa oferecendo ajuda com qualquer assunto,
-    que é o oposto do papel de agente de orientação do `CONTEXT.md`.
+    É esta instrução que separa os três destinos da mensagem do Aluno: saudação,
+    despedida e agradecimento isolados recebem gentileza em uma frase, sem citar
+    trechos e sem Encaminhar; assunto fora do processo de Estágio recebe uma
+    frase de fora de escopo com Encaminhamento à Coordenação de Estágios; e
+    dúvida sobre Estágio recebe orientação passo a passo (documentos, etapas,
+    Prazos e assinaturas). Sem ela, o redator trata um "obrigado" como dúvida
+    ou responde ao assunto que está fora do que o S.A.U. orienta.
     """
     prompt = _prompt_do_turno(fazer_cliente)
 
-    assert TOM.instrucao in prompt
-    assert prompt.count(TOM.instrucao) == 1
+    assert ESCOPO_E_CORTESIA.instrucao in prompt
+    assert prompt.count(ESCOPO_E_CORTESIA.instrucao) == 1
 
 
-def test_a_regra_de_cortesia_chega_ao_modelo(
+def test_a_regra_de_nao_inventar_e_encaminhar_chega_ao_modelo(
     fazer_cliente: FabricaCliente,
 ) -> None:
-    """A cortesia com saudação, despedida e agradecimento está no prompt que o modelo recebeu.
+    """O limite de não inventar com Encaminhamento está no prompt que o modelo recebeu.
 
-    É esta instrução que impede o redator de tratar um "obrigado" como dúvida:
-    sem ela, com trechos anexados pelo fallback, o redator escolhia o ramo do
-    Encaminhamento e respondia o que o Aluno não perguntou — saudação não é
-    pergunta, e os trechos ficam sem uso.
+    É esta instrução que segura a Alucinação do `CONTEXT.md`: como o S.A.U. não
+    possui dados pessoais dos Alunos, ele nunca inventa datas, números de
+    apólice, telefones, e-mails ou Prazos ausentes do material — e quando a
+    dúvida exigir parecer normativo ou dado ausente, orienta o Aluno a procurar
+    a Coordenação de Estágios, sem inventar canal nem prometer prazo. Sem ela,
+    o modelo preenche a lacuna com o detalhe mais plausível.
     """
     prompt = _prompt_do_turno(fazer_cliente)
 
-    assert CORTESIA.instrucao in prompt
-    assert prompt.count(CORTESIA.instrucao) == 1
+    assert NAO_INVENTAR_E_ENCAMINHAR.instrucao in prompt
+    assert prompt.count(NAO_INVENTAR_E_ENCAMINHAR.instrucao) == 1
 
 
-def test_a_regra_de_escopo_de_estagio_chega_ao_modelo(
+def test_a_regra_de_usar_historico_e_formato_chega_ao_modelo(
     fazer_cliente: FabricaCliente,
 ) -> None:
-    """A restrição ao processo de estágio está no prompt que o modelo recebeu.
+    """O uso do histórico com o formato de saída está no prompt que o modelo recebeu.
 
-    É esta instrução que nomeia o que o agente orienta — prazos, documentação,
-    contratos, seguro e a ordem das etapas — e o que fazer com o que está fora
-    disso: dizer em uma frase que está fora e encerrar com Encaminhamento, sem
-    responder ao assunto.
-
-    A regra **não** dita o texto da resposta, e isso é o que o teste ao lado
-    segura: pedir frase exata aqui dentro faz o 3B devolver a frase em vez de
-    orientar.
+    É esta instrução que impede o S.A.U. de repetir pergunta sobre dado que o
+    Aluno já informou — sem ela, a cadeia repete a pergunta a cada turno — e de
+    devolver rótulo, marcador ou nome de regra junto da resposta: o Aluno lê o
+    texto da resposta direta à dúvida atual, não a estrutura do prompt.
     """
     prompt = _prompt_do_turno(fazer_cliente)
 
-    assert ESCOPO_DE_ESTAGIO.instrucao in prompt
-    assert prompt.count(ESCOPO_DE_ESTAGIO.instrucao) == 1
-
-
-def test_a_regra_de_orientacao_procedural_chega_ao_modelo(
-    fazer_cliente: FabricaCliente,
-) -> None:
-    """A orientação passo a passo está no prompt que o modelo recebeu.
-
-    É esta instrução que faz o S.A.U. descrever o processo em etapas — o que
-    preencher, quem assina, onde entregar, em qual prazo — e é dela que vem a
-    pergunta pelos dados que faltam antes de concluir, e a ressalva de que
-    parecer jurídico é Encaminhamento.
-    """
-    prompt = _prompt_do_turno(fazer_cliente)
-
-    assert ORIENTACAO_PROCEDURAL.instrucao in prompt
-    assert prompt.count(ORIENTACAO_PROCEDURAL.instrucao) == 1
-
-
-def test_a_regra_de_nao_inventar_chega_ao_modelo(
-    fazer_cliente: FabricaCliente,
-) -> None:
-    """A instrução de não inventar está no prompt que o modelo recebeu.
-
-    É esta instrução que segura a taxa de não-saber da #13: ela nomeia as
-    iscas que as Perguntas-teste plantam — prazo e data de assinatura, número
-    de apólice e seguradora, valor, telefone e canal — porque sem a lista o
-    modelo preenche a lacuna com o detalhe mais plausível, que é exatamente a
-    Alucinação do `CONTEXT.md`.
-    """
-    prompt = _prompt_do_turno(fazer_cliente)
-
-    assert NAO_INVENTAR.instrucao in prompt
-    assert prompt.count(NAO_INVENTAR.instrucao) == 1
-
-
-def test_a_regra_de_encaminhamento_chega_ao_modelo(
-    fazer_cliente: FabricaCliente,
-) -> None:
-    """O Encaminhamento está no prompt que o modelo recebeu.
-
-    É esta instrução que escreve a frase que nenhum dos três modelos escreveu
-    sozinho na sondagem do ADR-0003: recusar sem encaminhar não é encaminhar.
-    E ela fecha a porta do `f1` pelo outro lado — sem prometer prazo de
-    resposta e sem inventar o canal para onde o Aluno iria.
-    """
-    prompt = _prompt_do_turno(fazer_cliente)
-
-    assert ENCAMINHAMENTO.instrucao in prompt
-    assert prompt.count(ENCAMINHAMENTO.instrucao) == 1
-
-
-def test_a_regra_de_usar_historico_chega_ao_modelo(
-    fazer_cliente: FabricaCliente,
-) -> None:
-    """O uso do histórico está no prompt que o modelo recebeu.
-
-    É esta instrução que impede o S.A.U. de repedir pergunta sobre dado que o
-    Aluno já informou: sem ela, a cadeia de Petrolina repete "qual cidade?" a
-    cada turno, e o conforme da cadeia s1–s5 reprova.
-    """
-    prompt = _prompt_do_turno(fazer_cliente)
-
-    assert USAR_HISTORICO.instrucao in prompt
-    assert prompt.count(USAR_HISTORICO.instrucao) == 1
-
-
-def test_a_regra_de_formato_saida_chega_ao_modelo(
-    fazer_cliente: FabricaCliente,
-) -> None:
-    """O formato estrito de resposta está no prompt que o modelo recebeu.
-
-    É esta instrução que impede o S.A.U. de devolver rótulo, marcador ou nome de
-    regra junto da resposta: o Aluno lê o texto da resposta, não a estrutura do
-    prompt.
-    """
-    prompt = _prompt_do_turno(fazer_cliente)
-
-    assert FORMATO_SAIDA.instrucao in prompt
-    assert prompt.count(FORMATO_SAIDA.instrucao) == 1
+    assert USAR_HISTORICO_E_FORMATO.instrucao in prompt
+    assert prompt.count(USAR_HISTORICO_E_FORMATO.instrucao) == 1
 
 
 def test_o_titulo_de_cada_regra_chega_ao_modelo(fazer_cliente: FabricaCliente) -> None:
@@ -628,19 +540,45 @@ def test_o_roteador_le_a_mensagem_atual_ate_o_fim() -> None:
     }
 
 
+def test_o_roteador_reescreve_a_duvida_em_linguagem_natural() -> None:
+    """A consulta ao Manual é o trecho relevante da dúvida, não a palavra solta.
+
+    É a regra que resgata os Prazos sem mexer no limiar: o roteador lê a
+    mensagem inteira até o fim, remove só saudação, apresentação e
+    agradecimento, e repassa a dúvida em linguagem natural com o verbo e o
+    objeto como o Aluno escreveu — nunca resumida para uma palavra só, que é
+    o que enterrava a pergunta factual de prazo. Os três few-shots fixam a
+    forma: "Oi" puro dispensa a busca, e a pergunta com saudação na frente
+    vira consulta em frase. Nem a persona nem o schema falam mais em
+    palavra solta do assunto.
+    """
+    assert "linguagem natural" in PERSONA_DE_ROTEAMENTO
+    assert "NUNCA resuma para uma palavra só" in PERSONA_DE_ROTEAMENTO
+    assert '"queria saber sobre o termo de compromisso"' in PERSONA_DE_ROTEAMENTO
+    assert '"quero prazo de estágio"' in PERSONA_DE_ROTEAMENTO
+    assert "palavras-chave" not in PERSONA_DE_ROTEAMENTO
+
+    consulta = esquema_da_ferramenta(k_padrao=4)["function"]["parameters"]["properties"][
+        "consulta"
+    ]["description"]
+    assert "linguagem natural" in consulta
+    assert "quero prazo de estágio" in consulta
+    assert "palavras-chave" not in consulta
+
+
 def test_a_regra_de_resposta_parcial_chega_ao_modelo(
     fazer_cliente: FabricaCliente,
 ) -> None:
     """A regra de resposta parcial está no prompt que o modelo recebeu.
 
-    É ela que impede o tudo-ou-nada do redator: parte sustentada com Fonte,
-    buraco com o literal sobre o ponto específico mais Encaminhamento — nunca
-    resposta ancorada com negação genérica no fim.
+    Ela mora na `ORIENTACAO_DE_FONTE`, e não numa regra própria: parte
+    sustentada com a Fonte, buraco com o literal sobre o ponto específico mais
+    Encaminhamento — nunca resposta ancorada com negação genérica no fim. É
+    ela que impede o tudo-ou-nada do redator.
     """
     prompt = _prompt_do_turno(fazer_cliente)
 
-    assert RESPOSTA_PARCIAL.instrucao in prompt
-    assert prompt.count(RESPOSTA_PARCIAL.instrucao) == 1
+    assert "não encontrei no material sobre esse ponto" in prompt
 
 
 def test_o_exemplo_parcial_chega_ao_modelo(
@@ -697,12 +635,13 @@ def test_o_historico_vazio_do_roteador_e_so_persona_e_duvida() -> None:
 
 
 def _normalizar(texto: str) -> str:
-    """Tira espaços e aspas para comparar o runtime com o fonte.
+    """Tira espaços, aspas e escapes para comparar o runtime com o fonte.
 
     No fonte, cada instrução é uma sequência de literais adjacentes — com
-    aspas e quebras de linha entre os pedaços — e em runtime ela é uma string
-    só. Sem normalizar, a instrução "não aparece" nem no próprio
-    `persona.py`, e o teste acima quebra com a lista de donos vazia em vez de
-    quebrar com o segundo prompt.
+    aspas e quebras de linha entre os pedaços — e pode trazer `\n` explícito
+    onde em runtime há a quebra de verdade: sem apagar o escape, a instrução
+    "não aparece" nem no próprio `persona.py`, e o teste acima quebra com a
+    lista de donos vazia em vez de quebrar com o segundo prompt. Em runtime
+    ela é uma string só, então a quebra real sai com os espaços.
     """
-    return re.sub(r"[\s\"']", "", texto)
+    return re.sub(r"[\s\"']", "", texto.replace("\\n", ""))

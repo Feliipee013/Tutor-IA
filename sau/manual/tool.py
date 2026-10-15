@@ -148,7 +148,11 @@ def esquema_da_ferramenta(*, k_padrao: int) -> dict[str, Any]:
                 "properties": {
                     "consulta": {
                         "type": "string",
-                        "description": "A dúvida do Aluno, em linguagem natural.",
+                        "description": (
+                            "O trecho relevante da dúvida do Aluno em linguagem "
+                            "natural, sem saudação ou apresentação "
+                            "(ex.: quero prazo de estágio)."
+                        ),
                     },
                     "k": {
                         "type": "integer",
