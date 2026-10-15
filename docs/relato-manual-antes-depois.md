@@ -14,6 +14,13 @@ pergunta a pergunta; as `x`/`n` entram como estreia do híbrido. Os limiares
 também diferem (0.72 no antes, 0.55 no depois). Isto é uma evolução observada,
 não um experimento controlado — e é como deve ser lido.
 
+**Amostra única, por decisão.** O depois roda **1 repetição por pergunta** (20
+execuções), como no antes — decisão do usuário na #37, com exceção explícita
+ao ADR-0003 (que proíbe execução única porque o `qwen2.5:3b` varia entre
+repetições). Consequência: não há leitura de estabilidade (a coluna
+"comportamento" sai trivialmente estável) e cada número registra uma das
+respostas possíveis, não o comportamento típico.
+
 **Como ler os vereditos.** O julgamento do depois foi redigido pelo agente
 executor e ratificado por Leonardo Rodrigues (assignee da #37), conforme a
 emenda do ADR-0006. A régua é aplicada à letra: todo bloco `b`/`x` exige a
@@ -31,15 +38,15 @@ o antes já fazia (9/10 ancoradas, 0/10 com citação completa).
 | Gerador e travas | qwen2.5:3b, temperature 0, seed 20260926, num_predict 512, num_ctx 4096 | os mesmos |
 | Índice | Chroma `manual-estagio-obrigatorio`, 57 chunks | o mesmo (PDF sha256 `1832780d…be19ffefa9`, 57 chunks, `nomic-embed-text`) |
 | Caminho | `executar_turno` real, histórico vazio | o mesmo (grafo por turno, histórico vazio) |
-| Repetições | 1 por pergunta, julgamento humano lendo o PDF | 3 por pergunta (60 execuções) |
-| Prompt | persona anterior | persona atual (sha256 `9d68c6dc…f69b1`) |
+| Repetições | 1 por pergunta, julgamento humano lendo o PDF | 1 por pergunta (20 execuções) |
+| Prompt | persona anterior | persona atual (sha256 `9d68c6dc…f69b1`, conferido: o da rodada é o do código) |
 | Julgamento | pessoa lendo o Manual em PDF | agente redigiu, Leonardo Rodrigues ratificou |
 | Data | 2026-10-14 | 2026-10-15 |
 | Máquina | GPU (ver `docs/bateria-basica-b1-b10-sau.md`) | GPU, `size_vram` 2159374499, `em_cpu: false` |
 
 O antes vive em `docs/bateria-basica-b1-b10-sau.md`. O depois vive em
 `outputs/baseline-manual-hibrido.json` (rodada),
-`outputs/baseline-manual-hibrido.julgamento.json` (folha) e
+`outputs/baseline-manual-hibrido.julgamento.json` (folha, 35 vereditos) e
 `outputs/baseline-manual-hibrido.metricas.json` (taxas).
 
 ## Agregado
@@ -50,43 +57,43 @@ com citação título+página completa (só b9 cita "página 16", sem título). 
 consta / não precisa" aos 6 cursos, quando o Manual o atribui aos demais
 cursos).
 
-**Depois (20 perguntas × 3 repetições = 60 execuções, 0 erros, 0 cortadas):**
+**Depois (20 perguntas × 1 repetição = 20 execuções, 0 erros, 0 cortadas):**
 
 | Métrica | Por execução | Por pergunta |
 | --- | --- | --- |
-| Acerto (b/x) | 0/45 = 0,00 | 0/15 perguntas = 0,00 |
-| Citação correta (b/x) | 0/45 = 0,00 | 0/15 perguntas = 0,00 |
-| "Não sei" correto (n) | 12/15 = 0,80 | 4/5 perguntas = 0,80 |
+| Acerto (b/x) | 0/15 = 0,00 | 0/15 perguntas = 0,00 |
+| Citação correta (b/x) | 0/15 = 0,00 | 0/15 perguntas = 0,00 |
+| "Não sei" correto (n) | 4/5 = 0,80 | 4/5 perguntas = 0,80 |
 
-Nenhuma das 45 respostas de `b`/`x` traz a Fonte título+página: a conferência
-mecânica marca 42 como parciais (fragmento do título, sem `(p. N)`) e 3 como
-ausentes (b7 ×3). O veredito humano confirma: citação 0/45. E como a régua
-exige a citação também no acerto, o acerto vai a 0/45 junto.
+Nenhuma das 15 respostas de `b`/`x` traz a Fonte título+página: a conferência
+mecânica marca 14 como parciais (fragmento do título, sem `(p. N)`) e 1 como
+ausente (b7). O veredito humano confirma: citação 0/15. E como a régua
+exige a citação também no acerto, o acerto vai a 0/15 junto.
 
 **A leitura que o número sozinho esconde.** Pela letra da régua, o depois
-zerou; pelo conteúdo, não. Núcleo correto em: b1 (×3), b3 (×3, sem dado de
-captura), b4 rep1, b5 reps 2–3, b6 (×3, núcleo), b7 (×3), b8 rep1 (a regra
-saiu **no sentido certo** — a inversão do antes foi corrigida em 1/3), b10
-(×3, núcleo) e x5 reps 2–3 (conteúdo + envio). Conteúdo errado ou
-incompleto no ponto que a régua cobra em: b2 (generaliza "até 7 dias úteis"
-— o antes listava os 7 valores certos), b4 reps 2–3 (sugere Cadastro de
-Empresa para a Saúde), b5 rep1 (omite o Time de Convênios), b8 reps 2–3
-(troca Acadêmico por Campo), b9 (omite a regra de cadastro prévio), x1 (nega
-o Acadêmico em Enfermagem / sem nomenclatura), x2 (teto de horas errado),
+zerou; pelo conteúdo, não. Núcleo correto em: b1, b3 (sem dado de captura),
+b4, b6 (núcleo), b7, b8 (a regra saiu **no sentido certo** — a inversão do
+antes foi corrigida), b10 (núcleo, nomeando a Lei) e x5 (conteúdo + envio).
+Conteúdo errado ou incompleto no ponto que a régua cobra em: b2 (generaliza
+"até 7 dias úteis" — o antes listava os 7 valores certos), b5 (resume "IES
+(faculdade)" e perde o Time de Convênios), b8 no extra (acrescenta passos de
+cadastro não pedidos), b9 (omite a regra de cadastro prévio), x1 (nega o
+Acadêmico em Enfermagem), x2 (omite o vínculo validado, teto de horas errado),
 x3 (omite os 7+7 dias — a p.4 nem foi recuperada), x4 (confunde reedição com
-alteração). Nas `n`, 4/5 conferem de forma estável; a n4 responde sem o
-literal que a régua exige.
+alteração). Nas `n`, 4/5 conferem; a n4 responde sem o literal que a régua
+exige.
 
 **Antes × depois, só nas `b`:** o conteúdo continua ancorado na maioria dos
 casos e a citação continua ausente em todos — o defeito que o antes apontava
 ("ORIENTACAO_DE_FONTE não virou citação visível") segue aberto no depois. O
-que mudou de verdade: b8 rep1 acertou a regra que o antes invertia, e b2
-piorou (o antes acertava os 7 prazos). As `x`/`n` são estreia, sem delta.
+que mudou de verdade: b8 acertou a regra que o antes invertia, e b2
+piorou (o antes acertava os 7 prazos) e b9 piorou (o antes ancorava com
+citação parcial; o depois desvia para um "prazo" não perguntado). As `x`/`n`
+são estreia, sem delta.
 
 ## Caso a caso
 
-Salvo nota, as 3 repetições do depois saíram estáveis (mesmo conteúdo); a
-resposta citada é a da repetição 1, literal.
+Resposta literal da única repetição do depois, com a análise.
 
 ### b1 — Data limite do período de estágio
 
@@ -101,10 +108,9 @@ está disponível no sistema Colaborar em: Menu > DGA/Secretaria > Estágio >
 Período. Para obter a data final, você deve acessar esse menu e verificar a
 informação."
 
-**Análise:** conteúdo correto e sem data inventada, como no antes; nenhuma
-das 3 cita a Fonte. Vereditos: acerto `nao_conforme` (×3), citação
-`nao_conforme` (×3) — pela ausência da citação que a régua exige. Recuperação
-trouxe a p.3 em 1º nas 3.
+**Análise:** conteúdo correto e sem data inventada, como no antes; sem
+citação da Fonte. Vereditos: acerto `nao_conforme`, citação `nao_conforme` —
+pela ausência da citação que a régua exige. Recuperação trouxe a p.3 em 1º.
 
 ### b2 — Prazos de análise no Colaborar
 
@@ -117,13 +123,12 @@ cadastro que eu faço no Colaborar? Os prazos são em dias úteis?
 material, o Time de Estágios leva até 7 dias úteis para analisar cada cadastro
 que você faz no Colaborar. Por favor, observe que esses prazos podem variar
 dependendo da situação específica do cadastro, como alterações ou
-inconsistências que possam ser necessárias." (reps 2–3 idênticas entre si,
-mesmo núcleo.)
+inconsistências que possam ser necessárias."
 
 **Análise:** regressão contra o antes. O depois generaliza "até 7 dias
 úteis" para todo cadastro e omite a tabela (4/5/4/4/5/7/7) — erra prazos por
 generalização, que o `não conforme quando` proíbe. Sem citação. Vereditos:
-`nao_conforme` nos dois, ×3. A p.4 foi recuperada em 1º nas 3 — o erro foi do
+`nao_conforme` nos dois. A p.4 foi recuperada em 1º — o erro foi do
 redator, não da busca.
 
 ### b3 — Seguro obrigatório e o que cobre
@@ -141,9 +146,9 @@ acidental e IPA - Invalidez Permanente Parcial ou Total por Acidente** [...]
 ou dúvidas, recomendo que você entre em contato com a Coordenação de
 Estágios."
 
-**Análise:** núcleo MA/IPA + demais-não correto nas 3, sem número de
+**Análise:** núcleo MA/IPA + demais-não correto, sem número de
 apólice/seguradora/vigência (a máscara segurou); omite a Lei 11.788/08 e não
-cita a Fonte. Vereditos: `nao_conforme` nos dois, ×3. Os exemplos de
+cita a Fonte. Vereditos: `nao_conforme` nos dois. Os exemplos de
 situações não cobertas ("doenças graves", "violência doméstica") são
 elaboração do modelo sobre o "demais não contempladas" — não contradizem o
 Manual, mas também não vêm dele.
@@ -158,14 +163,12 @@ para fazer o estágio? O que acontece se não tiver convênio?
 **Resposta obtida (depois):** "Para realizar um estágio na área da Saúde, é
 necessário um convênio entre a Instituição de Ensino Superior (IES) e a
 empresa. Sem o convênio, os alunos da área da Saúde não podem iniciar o
-estágio. [...]" (rep1; reps 2–3 acrescentam: "Se você não tiver um convênio,
-você pode tentar fazer um cadastro de empresa no sistema Colaborar.")
+estágio. [...] Se não tiver convênio, você precisará entrar em contato com a
+Coordenação de Estágios para obter mais informações."
 
-**Análise:** a rep1 tem o núcleo certo; as reps 2–3 sugerem Cadastro de
-Empresa para curso da Saúde — confundindo Convênio com Cadastro, que o
-`não conforme quando` proíbe (na Saúde quem cadastra é o Time de Convênios, e
-o Polo não faz sozinho). Nenhuma cita a Fonte. Vereditos: `nao_conforme`
-nos dois, ×3.
+**Análise:** núcleo certo (convênio obrigatório, sem ele não inicia) e
+Encaminhamento sem sugerir Cadastro de Empresa para a Saúde; sem citação.
+Vereditos: `nao_conforme` nos dois — só pela citação.
 
 ### b5 — Convênio × Cadastro de Empresa
 
@@ -175,17 +178,14 @@ Quem faz cada um — eu, o Polo ou a faculdade?
 **Antes:** ancorada com extra correto de p.11, com eco "Aluno:" (defeito de
 forma), sem citação.
 
-**Resposta obtida (depois, rep1):** "[...] Quanto a quem faz cada um, o Polo
-faz o cadastro de empresa no sistema Colaborar, enquanto a IES (faculdade)
-faz o cadastro do convênio." (reps 2–3 trazem a versão completa: "é o Time
-de Convênios da IES (Regulação e Controle) que faz o cadastro no sistema e o
-Polo é informado via chamado. Portanto, o Polo não deve realizar o cadastro
-do convênio sozinho.")
+**Resposta obtida (depois):** distingue Convênio (Saúde, IES) de Cadastro de
+Empresa (fora da Saúde, Polo no Colaborar); resume quem faz como "o Polo faz
+o cadastro de empresa [...] enquanto a IES (faculdade) faz o cadastro do
+convênio".
 
-**Análise:** a rep1 resume "IES (faculdade)" e perde o Time de Convênios +
-via chamado + não-fazer-sozinho; as reps 2–3 têm o conteúdo completo e
-correto. O eco "Aluno:" sumiu. Nenhuma cita a Fonte. Vereditos:
-`nao_conforme` nos dois, ×3 — nas reps 2–3, só pela citação.
+**Análise:** perde o Time de Convênios (Regulação e Controle) + via chamado
++ não-fazer-sozinho, que a régua cobra; o eco "Aluno:" sumiu. Sem citação.
+Vereditos: `nao_conforme` nos dois.
 
 ### b6 — Cadastrar empresa no Colaborar
 
@@ -199,10 +199,10 @@ Registro de Empresas, consulta por Ctrl + F / "CNPJ", reedição com os
 motivos, Prisma/GO no fecho — e "siga os passos descritos na página 8 do
 manual".
 
-**Análise:** núcleo correto nas 3, com o extra de reedição; falta o
+**Análise:** núcleo correto, com o extra de reedição; falta o
 "Novo Cadastro" explícito que a régua cobra, e "página 8 do manual"
 é citação parcial (página sem título — a mecânica marca parcial). Vereditos:
-`nao_conforme` nos dois, ×3.
+`nao_conforme` nos dois.
 
 ### b7 — Razão social da empresa
 
@@ -216,10 +216,9 @@ Federal, seguida pelo nome da fantasia da empresa. Por exemplo, se o estágio
 for realizado na Escola João e Maria (Ensino Fundamental) [...]" + reedição
 + CNPJ.
 
-**Análise:** conteúdo correto e completo nas 3; zero menção a Fonte
-(a mecânica marca ausente — o texto usa "cadastro", nunca o verbo
-"cadastrar" do título nem `(p. N)`). Vereditos: `nao_conforme` nos dois, ×3
-— só pela citação.
+**Análise:** conteúdo correto e completo; zero menção a Fonte
+(a mecânica marca ausente). Vereditos: `nao_conforme` nos dois — só pela
+citação.
 
 ### b8 — Supervisor Acadêmico
 
@@ -229,22 +228,18 @@ cadastrar ele? Vale para o meu curso?
 **Antes:** a única b com conteúdo não conforme — regra invertida (o "não
 consta / não precisa" atribuído aos 6 cursos).
 
-**Resposta obtida (depois, rep1):** "O Supervisor Acadêmico é o representante
+**Resposta obtida (depois):** "O Supervisor Acadêmico é o representante
 da Instituição de Ensino Superior (IES) responsável por acompanhar o estágio.
 Para os alunos de "demais cursos", o nome do Supervisor Acadêmico não
 constará no termo de compromisso e, portanto, não é necessário informar no
 momento da associação. Para os cursos de Biomedicina, Enfermagem, Farmácia,
 Fisioterapia, Nutrição e Serviço Social, antes de associar o aluno, é
 necessário cadastrar o Supervisor Acadêmico no sistema colaborar. Em alguns
-casos, é necessário vinculá-lo à empresa." (reps 2–3 repetem o 1º parágrafo
-certo e depois trocam: "é necessário cadastrar o Supervisor de Campo" para
-os 6 cursos.)
+casos, é necessário vinculá-lo à empresa." + passos de cadastro.
 
-**Análise:** a rep1 corrige a inversão do antes — a regra saiu no sentido do
-Manual. As reps 2–3 recaem em erro de papel (Acadêmico → Campo) e se
-contradizem ("como seu" sendo de demais cursos e dos 6 ao mesmo tempo).
-Nenhuma cita a Fonte. Vereditos: `nao_conforme` nos dois, ×3 — na rep1, só
-pela citação. A p.15 foi recuperada em 1º nas 3.
+**Análise:** a inversão do antes foi corrigida — a regra saiu no sentido do
+Manual. Sem citação. Vereditos: `nao_conforme` nos dois — só pela citação. A
+p.15 foi recuperada em 1º.
 
 ### b9 — Supervisor de Campo
 
@@ -261,7 +256,7 @@ ponto. Procure a Coordenação de Estágios."
 **Análise:** omite a regra central que a régua cobra (cadastrar antes de
 associar nos 6 cursos) e desvia para um "prazo" que ninguém perguntou,
 respondendo com o literal de ausência fora de lugar. Sem citação. Vereditos:
-`nao_conforme` nos dois, ×3 — pior que o antes neste caso.
+`nao_conforme` nos dois — pior que o antes neste caso.
 
 ### b10 — Limite de carga horária e Declaração de Dispensa
 
@@ -273,33 +268,30 @@ sem citação.
 
 **Resposta obtida (depois):** "O limite de carga horária do estágio
 obrigatório é de 6 horas diárias e 30 horas semanais, conforme estabelecido
-pela Lei de Estágio nº 11.788/08." + envio no Colaborar (menu, matrícula,
-formatos PDF/JPG/JPEG/PNG, assinado e legível) + extras de ServiceNow/chamado
-e status "Aceito".
+pela Lei de Estágio nº 11.788/08." + envio no Colaborar (menu, formatos
+PDF/JPG/JPEG/PNG, assinado e legível) + extras de consulta a declarações,
+ServiceNow e status.
 
-**Análise:** núcleo correto nas 3 (a única b a nomear a Lei); o menu sai sem
-o "remunerado" do título esperado, e os extras (ServiceNow, "Aceito") vêm dos
-chunks recuperados — procedimento, não invenção solta. Sem citação.
-Vereditos: `nao_conforme` nos dois, ×3 — só pela citação. Oito Fontes foram
-recuperadas neste turno (k efetivo acima do padrão via chamadas repetidas).
+**Análise:** núcleo correto (a única b a nomear a Lei); o menu sai sem
+o "remunerado" do título esperado, e os extras vêm dos chunks recuperados —
+procedimento, não invenção solta. Sem citação. Vereditos: `nao_conforme`
+nos dois — só pela citação.
 
 ### x1 — Enfermagem: convênio e qual supervisor (estreia)
 
 **Pergunta feita:** Sou de Enfermagem. A empresa precisa ter convênio com a
 faculdade? E qual supervisor eu preciso cadastrar — o de campo e o acadêmico?
 
-**Resposta obtida (depois, rep1):** convênio obrigatório para a Saúde (certo)
-+ "Não é necessário cadastrar o Supervisor Acadêmico, pois, para os cursos
+**Resposta obtida (depois):** convênio obrigatório para a Saúde (certo) +
+"Não é necessário cadastrar o Supervisor Acadêmico, pois, para os cursos
 de Enfermagem, o nome do supervisor acadêmico não constará no termo de
-compromisso" (reps 2–3: exigem os dois supervisores para os 6 cursos, sem a
-nomenclatura por curso).
+compromisso".
 
-**Análise:** a rep1 repete a inversão do antes-b8 em Enfermagem (a régua
+**Análise:** repete a inversão do antes-b8 em Enfermagem (a régua
 exige: Acadêmico = Preceptor, com vínculo e convocação; Campo = Enfermeiro
-do Serviço, sem vínculo). As reps 2–3 acertam a exigência dos dois, mas sem
-Preceptor/Enfermeiro do Serviço e sem o Time de Convênios. Sem citação.
-Vereditos: `nao_conforme` nos dois, ×3. As 3 Fontes certas foram recuperadas
-(p.6, p.15, p.16) — o erro foi do redator.
+do Serviço, sem vínculo). Sem citação. Vereditos: `nao_conforme` nos dois.
+As 3 Fontes certas foram recuperadas (p.6, p.15, p.16) — o erro foi do
+redator.
 
 ### x2 — Serviço Social: vínculo, empresa e carga horária (estreia)
 
@@ -307,15 +299,14 @@ Vereditos: `nao_conforme` nos dois, ×3. As 3 Fontes certas foram recuperadas
 vínculo com a empresa? Por que a empresa não aparece para associar? E quantas
 horas ele pode ter?
 
-**Resposta obtida (depois, rep1):** vínculo necessário (certo) + "A carga
-horária deve ser maior que 10 horas" + "1 aluno a cada 10 horas" (reps 2–3:
-"o supervisor de campo pode ter até 10 horas de trabalho semanal").
+**Resposta obtida (depois):** vínculo necessário (certo) + "A carga
+horária deve ser maior que 10 horas" + "1 aluno a cada 10 horas" (Res.
+533/08), sem o ponto da empresa invisível sem vínculo validado.
 
 **Análise:** omite o ponto central ("empresa só aparece após o vínculo
-realizado e validado") e erra o teto nas 3 (o certo é **não ultrapassar 30h
-semanais**; "maior que 10" é o mínimo do vínculo genérico, e "até 10" inverte
-a proporção da Res. 533/08). Sem citação. Vereditos: `nao_conforme` nos
-dois, ×3.
+realizado e validado") e erra o teto (o certo é **não ultrapassar 30h
+semanais**; "maior que 10" é o mínimo do vínculo genérico). Sem citação.
+Vereditos: `nao_conforme` nos dois.
 
 ### x3 — Prazos de liberação, validação e envio (estreia)
 
@@ -325,14 +316,14 @@ eu enviar a documentação?
 
 **Resposta obtida (depois):** envio pelo Aluno no AVA, 3 folhas em PDF único,
 10MB (certo) + "O prazo para enviar a documentação não está especificado no
-material" (certo — não inventa) + "não há informações específicas sobre
-[liberação e validação] no material. Procure a Coordenação de Estágios."
+material" (certo — não inventa) + declara ausência sobre liberação e
+validação, com Encaminhamento.
 
 **Análise:** meio certo, meio omisso: acerta o envio e não inventa prazo,
 mas declara ausência onde há resposta (liberação 7 + validação 7 dias úteis,
-p.4) — e a p.4 de fato não estava entre as Fontes recuperadas (p.46/p.51/
-p.48/p.44). É o caso que mais mostra o custo de recuperação incompleta em
-pergunta cruzada. Sem citação. Vereditos: `nao_conforme` nos dois, ×3.
+p.4) — e a p.4 de fato não estava entre as Fontes recuperadas. É o caso que
+mais mostra o custo de recuperação incompleta em pergunta cruzada. Sem
+citação. Vereditos: `nao_conforme` nos dois.
 
 ### x4 — Reedição × alteração de responsável (estreia)
 
@@ -340,68 +331,64 @@ pergunta cruzada. Sem citação. Vereditos: `nao_conforme` nos dois, ×3.
 entre colocar em "reedição" e fazer "alteração de responsável"? Qual eu uso
 em cada caso?
 
-**Resposta obtida (depois, rep1):** "você não precisa colocar o cadastro do
-aluno em reedição" na alteração (certo) + "Já para a reedição [...] você
-precisa colocar o cadastro do aluno em reedição, conforme [...] a página 42
-do manual" (reps 2–3 descrevem os dois procedimentos sem o caminho do Polo
-nem o "sem novo cadastro").
+**Resposta obtida (depois):** "você não precisa colocar o cadastro do aluno
+em reedição" na alteração (certo) + "Já para a reedição [...] você precisa
+colocar o cadastro do aluno em reedição, conforme [...] a página 42 do
+manual".
 
-**Análise:** a rep1 usa o título da p.14 ("REEDIÇÃO DE ALTERAÇÃO DE") como se
+**Análise:** usa o título da p.14 ("REEDIÇÃO DE ALTERAÇÃO DE") como se
 fosse a reedição de empresa da p.11 e manda o Aluno à reedição — o oposto do
-que a régua pede para a alteração; as reps 2–3 listam divergências
-corretamente, mas omitem Polo-faz/Menu/sem-novo-cadastro e a vedação de
-reedir o Aluno junto. Citação parcial ("página 42", sem título). Vereditos:
-`nao_conforme` nos dois, ×3.
+que a régua pede para a alteração; citação parcial ("página 42", sem
+título). Vereditos: `nao_conforme` nos dois.
 
 ### x5 — Termo modelo Empresa (estreia)
 
 **Pergunta feita:** A empresa quer usar o modelo de Termo de Compromisso
 dela. O que ele precisa conter, como eu envio e quem assina?
 
-**Resposta obtida (depois, rep1):** conteúdo (Aluno RA/CPF, local,
+**Resposta obtida (depois):** conteúdo (Aluno RA/CPF, local,
 supervisores + conselho, IES + representante) + assinaturas (Aluno, empresa,
-Instituição) certos; envio "por chamado" genérico (reps 2–3 trazem o filtro
-"Estágio > Documentação > Envio do termo de compromisso (Modelo Empresa)" no
-sistema da Graduação EAD).
+Instituição) certos; envio "por chamado" genérico, após trâmites no sistema
+da IES.
 
-**Análise:** o melhor conteúdo das cruzadas nas reps 2–3; faltam a menção às
+**Análise:** o melhor conteúdo das cruzadas; faltam a menção às
 cláusulas conforme a Lei 11.788 e os detalhes (vigência/horário, atividades,
-locais de assinatura). Sem citação. Vereditos: `nao_conforme` nos dois, ×3
-— nas reps 2–3, por detalhe + citação.
+locais de assinatura, filtro do chamado). Sem citação. Vereditos:
+`nao_conforme` nos dois — por detalhe + citação.
 
 ### n1 — Valor da mensalidade e desconto (estreia)
 
 **Pergunta feita:** Quanto é a mensalidade do meu curso e tem desconto para
 quem faz estágio?
 
-**Resposta obtida (depois, ×3 estáveis):** "Não encontrei no material
-informações específicas sobre a mensalidade do seu curso ou descontos para
-quem faz estágio. Procure a Coordenação de Estágios."
+**Resposta obtida (depois):** "Não encontrei no material informações
+específicas sobre a mensalidade do seu curso ou descontos para quem faz
+estágio. Procure a Coordenação de Estágios."
 
 **Análise:** literal (com maiúscula de início de frase) + Encaminhamento,
-sem valor. Veredito: `conforme` ×3.
+sem valor. Veredito: `conforme`.
 
 ### n2 — Contato oficial da Coordenação de Estágios (estreia)
 
 **Pergunta feita:** Qual é o telefone e o e-mail da Coordenação de Estágios?
 Preciso falar com alguém de lá.
 
-**Resposta obtida (depois, ×3):** "Não encontrei no material informações
-sobre o telefone e o e-mail da Coordenação de Estágios. Procure a Coordenação
-de Estágios."
+**Resposta obtida (depois):** "Não encontrei no material informações sobre o
+telefone e o e-mail da Coordenação de Estágios. Procure a Coordenação de
+Estágios."
 
 **Análise:** literal + Encaminhamento, sem inventar canal — o caso que a
-máscara do ADR-0011 existe para proteger. Veredito: `conforme` ×3.
+máscara do ADR-0011 existe para proteger. Veredito: `conforme`.
 
 ### n3 — Data de entrega do relatório do Aluno (estreia)
 
 **Pergunta feita:** Qual é a data exata de entrega do meu relatório de
 atividades? Meu professor falou que tem um dia certo.
 
-**Resposta obtida (depois, ×3):** "Não encontrei no material a data exata de
+**Resposta obtida (depois):** "Não encontrei no material a data exata de
 entrega do seu relatório de atividades. Procure a Coordenação de Estágios."
 
-**Análise:** literal + Encaminhamento, sem data. Veredito: `conforme` ×3.
+**Análise:** literal + Encaminhamento, sem data. Veredito: `conforme`.
 
 ### n4 — Catálogo de cursos e polos (estreia)
 
@@ -415,7 +402,7 @@ Para isso, você deve consultar a Coordenação de Estágios."
 
 **Análise:** não afirma catálogo e Encaminha — mas sem o literal "não
 encontrei no material" que a régua exige, e pedindo dado que não resolveria
-(a resposta seguiria inexistente). Veredito: `nao_conforme` ×3. É o único
+(a resposta seguiria inexistente). Veredito: `nao_conforme`. É o único
 "não sei" que falhou, por forma e não por Alucinação.
 
 ### n5 — Dado do seguro: apólice, seguradora e vigência (estreia)
@@ -423,14 +410,13 @@ encontrei no material" que a régua exige, e pedindo dado que não resolveria
 **Pergunta feita:** Qual é o número da apólice do seguro de estágio? E qual é
 a seguradora, e até quando a apólice vale?
 
-**Resposta obtida (depois, ×3):** "não encontrei no material informações
-sobre o número da apólice do seguro de estágio, a seguradora ou até quando a
-apólice vale. Procure a Coordenação de Estágios."
+**Resposta obtida (depois):** "não encontrei no material informações sobre o
+número da apólice do seguro de estágio, a seguradora ou até quando a apólice
+vale. Procure a Coordenação de Estágios."
 
 **Análise:** literal em caixa baixa + Encaminhamento, sem citar dado
 mascarado — a prova de que a máscara antes de indexar funciona de ponta a
-ponta (o chunk p.5 recuperado em 1º já vem mascarado). Veredito: `conforme`
-×3.
+ponta (o chunk p.5 recuperado em 1º já vem mascarado). Veredito: `conforme`.
 
 ## Página de justificativa: chunking e armazenamento (1 folha)
 
@@ -476,10 +462,14 @@ OCR: só o texto nativo foi indexado — reduz o recall absoluto onde o conteúd
 mora em figura, e vale igual para todas as execuções do depois. Tabelas de
 p.15–p.16 dependem desse OCR; capturas mascaradas não voltam como fato.
 Limiar 0.55 é ponto de partida calibrável pela bateria, não constante
-sagrada. A ausência de citação visível (0/45 no depois, como 0/10 no antes) é
-o próximo defeito a fechar, não uma qualidade do índice. A b8 do antes saiu
-com a regra invertida; o depois a corrigiu em 1/3 (b8 rep1) — inversão
-parcial, não fechada.
+sagrada. A ausência de citação visível (0/15 no depois, como 0/10 no antes) é
+o próximo defeito a fechar, não uma qualidade do índice — e há um complicador
+medido: no Telegram (temperatura do modelo, seed sorteada a cada chamada) o
+redator cita a Fonte, enquanto no harness (`temperature 0`, seed fixa) ele a
+omite sistematicamente, com o mesmo código e a mesma persona (`sha256`
+conferido). A obediência à `ORIENTACAO_DE_FONTE` é sensível à amostragem, e a
+régua do harness mede o pior caso. A b8 do antes saiu com a regra invertida;
+o depois a corrigiu — inversão fechada nesta amostra única.
 
 ## Ressalva sobre d1–d10 (fora do escopo)
 
@@ -488,7 +478,7 @@ registrada no plano (o usuário ressalvou que os blocos `d` possivelmente estão
 errados e merecem revisão em issue futura). Nada deles foi deletado nem
 reescrito aqui. Em particular, as sondas de nomenclatura e ação por curso
 (d1–d4) dependem do pareamento do OCR das tabelas de p.15–p.16 — e o depois
-mostra que esse pareamento ainda falha no redator (x1, b8 reps 2–3) mesmo com
+mostra que esse pareamento ainda falha no redator (x1, b9) mesmo com
 as páginas recuperadas. A revisão dos `d` deve cobrir o `conforme quando` de
 cada um contra o Manual antes de qualquer rodada que os inclua.
 
@@ -496,9 +486,9 @@ cada um contra o Manual antes de qualquer rodada que os inclua.
 
 - `perguntas-teste/bateria-manual.md` — os 30 blocos e o `conforme quando` de cada um
 - `corpus/manual-estagio-obrigatorio-polo-2026-2.pdf` — o Manual (local, fora do git; sha256 `1832780d…be19ffefa9`)
-- `outputs/baseline-manual-hibrido.json` — a rodada do depois (60 execuções, evidência bruta + Fontes recuperadas)
-- `outputs/baseline-manual-hibrido.julgamento.json` — a folha (105 vereditos, redigida pelo agente, ratificada por Leonardo Rodrigues em 2026-10-15)
-- `outputs/baseline-manual-hibrido.metricas.json` — as taxas (acerto 0/45, citação 0/45, "não sei" 12/15, por execução e por pergunta, fora_da_conta vazio, Fonte mecânica por execução)
+- `outputs/baseline-manual-hibrido.json` — a rodada do depois (20 execuções, evidência bruta + Fontes recuperadas)
+- `outputs/baseline-manual-hibrido.julgamento.json` — a folha (35 vereditos, redigida pelo agente, ratificada por Leonardo Rodrigues em 2026-10-15)
+- `outputs/baseline-manual-hibrido.metricas.json` — as taxas (acerto 0/15, citação 0/15, "não sei" 4/5, por execução e por pergunta, fora_da_conta vazio, Fonte mecânica por execução)
 - `docs/bateria-basica-b1-b10-sau.md` — o antes, reusado sem re-rodar
 - `harness/run_manual.py`, `harness/metrics_manual.py` — o instrumento desta issue
 - ADR-0010 — ferramenta opcional, busca de segurança, literal garantido em código
