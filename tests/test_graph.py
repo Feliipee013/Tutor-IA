@@ -178,7 +178,7 @@ def buscar_falsa(monkeypatch: pytest.MonkeyPatch) -> list[list[TrechoDoManual]]:
             return retornos.pop(0)
         return []
 
-    monkeypatch.setattr("sau.manual.tool.buscar_no_indice", buscar_falsa_no_indice)
+    monkeypatch.setattr("sau.manual.tool.buscar_hibrida_no_indice", buscar_falsa_no_indice)
     return retornos
 
 
