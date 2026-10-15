@@ -59,6 +59,7 @@ agente Implementar localizar o ponto de impacto sem varrer o repositório inteir
 | `docs/fila-e-semaforo.md` | a máquina do `k` do semáforo, o roteiro para medi-lo e as duas contas do teste de campo, com os campos em branco que a medição vai preencher — **issue #11** | sim |
 | `docs/relato-1.1.md` | a página de relato da 1.1: a régua declarada, as duas taxas, a leitura de tom e acolhimento e as limitações. Os números dependem da bateria rodada — **issue #13** | sim |
 | `docs/relato-1.2.md` | a página de relato da 1.2: as três métricas nos cinco Casos, as taxas da 1.1 republicadas e a discussão do que a Alucinação revela — **issue #28** | sim |
+| `docs/relato-manual-antes-depois.md` | o comparativo do Manual: o antes b1–b10 sem híbrido (reuso) contra o depois b1–b10 + x1–x5 + n1–n5 no híbrido padrão, com pergunta + resposta + análise por caso e a página de justificativa de chunking e armazenamento — **issue #37** | sim |
 | `docs/limitacoes.md` | documento de limitações do modelo — **issue #14** | sim |
 | `docs/medicao-hibrido/` | medição da recuperação híbrida nas cruzadas x1–x5: `medir.py` e `resultado.md` — **issue #39** | sim |
 
@@ -133,6 +134,8 @@ recuperado custa contexto que a conversa não tem.
 | `harness/metrics.py` | taxa de não-saber e taxa de recusa de Atividade, com a folha de julgamento humano e a evidência de cada contagem. Os dois nomes são do instrumento, amarrados às linhas `conta na métrica do #13` de `perguntas-teste/perguntas-teste.md`. Desde a #28, também as três métricas dos Casos (Alucinação e confabulação por pessoa, Fonte verificável por script), o falso positivo e a republicação congelada da 1.1 | #13 | sim |
 | `harness/casos.py` | os cinco Casos de alucinação, com o motivo do erro de cada um e o output real que cada um origina. É onde o caminho B mora: a 1.2 mede sobre estes cinco casos, e não sobre a bateria de 30 execuções | #29 | sim |
 | `harness/run_casos.py` | roda os cinco Casos no S.A.U. pelo caminho real do turno, com as mesmas travas da bateria, e grava a rodada com as Fontes recuperadas por execução | #28 | sim |
+| `harness/run_manual.py` | roda as 20 Perguntas-teste da bateria do Manual (b1–b10 + x1–x5 + n1–n5) no pipeline híbrido padrão, com as mesmas travas da bateria, e grava a rodada com as Fontes recuperadas por execução e o bloco do índice lido do Chroma montado | #37 | sim |
+| `harness/metrics_manual.py` | as três métricas da bateria do Manual (acerto, citação correta, "não sei" correto), com a folha de julgamento humano e a Fonte verificável por script como conferência mecânica | #37 | sim |
 
 O harness é a régua das duas sprints: a 1.2 roda **o mesmo** harness sobre
 **os mesmos** casos, e é por isso que ele precisa ser reexecutável sem refazer
