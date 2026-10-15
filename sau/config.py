@@ -42,8 +42,9 @@ class Configuracao:
     manual_pdf_caminho: str = "corpus/manual-estagio-obrigatorio-polo-2026-2.pdf"
     manual_chroma_caminho: str = "manual-chroma"
     manual_colecao: str = "manual-estagio-obrigatorio"
-    manual_limiar_similaridade: float = 0.72
+    manual_limiar_similaridade: float = 0.55
     manual_k_padrao: int = 4
+    manual_busca_seguranca: bool = True
     telegram_public_url: str | None = None
     ngrok_api_url: str | None = None
 
@@ -218,15 +219,15 @@ def carregar_configuracao(origem: Mapping[str, str] | None = None) -> Configurac
     ).strip() or "manual-estagio-obrigatorio"
 
     # Limiar mínimo de similaridade de cosseno e quantidade padrão de trechos (issue #36, ADR-0012).
-    # Sem o `or "0.72"` que a string faria cair no padrão: variável numérica vazia
+    # Sem o `or "0.55"` que a string faria cair no padrão: variável numérica vazia
     # é valor inválido, e não ausência — a mesma régua do `INFERENCIA_K` acima.
-    limiar_raw = env.get("MANUAL_LIMIAR_SIMILARIDADE", "0.72")
+    limiar_raw = env.get("MANUAL_LIMIAR_SIMILARIDADE", "0.55")
     try:
         manual_limiar_similaridade = float(limiar_raw)
     except ValueError as err:
         raise ValueError(
             f"Valor inválido para MANUAL_LIMIAR_SIMILARIDADE: '{limiar_raw}'. "
-            "Esperado número de ponto flutuante (ex: 0.72)."
+            "Esperado número de ponto flutuante (ex: 0.55)."
         ) from err
     if not 0.0 <= manual_limiar_similaridade <= 1.0:
         raise ValueError(
@@ -247,6 +248,12 @@ def carregar_configuracao(origem: Mapping[str, str] | None = None) -> Configurac
             f"Valor inválido para MANUAL_K_PADRAO: '{k_raw}'. "
             "Esperado número inteiro positivo (k >= 1)."
         )
+
+    # Interruptor TEMPORÁRIO da busca de segurança: com `0`/`false` o declínio
+    # do roteador vai direto ao redator, sem a busca determinística — é o modo
+    # do teste manual do roteador sozinho. Padrão ligado; remover de vez (junto
+    # com o nó) só depois do teste.
+    manual_busca_seguranca = _parse_bool(env.get("MANUAL_BUSCA_SEGURANCA"), default=True)
 
     return Configuracao(
         ollama_base_url=ollama_base_url,
@@ -270,6 +277,7 @@ def carregar_configuracao(origem: Mapping[str, str] | None = None) -> Configurac
         manual_colecao=manual_colecao,
         manual_limiar_similaridade=manual_limiar_similaridade,
         manual_k_padrao=manual_k_padrao,
+        manual_busca_seguranca=manual_busca_seguranca,
         telegram_public_url=telegram_public_url,
         ngrok_api_url=ngrok_api_url,
     )

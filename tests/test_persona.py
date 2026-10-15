@@ -38,32 +38,21 @@ import pytest
 from sau.graph.graph import executar_turno
 from sau.graph.state import Mensagem
 from sau.inference.ollama import ClienteOllama
+from sau.manual.tool import esquema_da_ferramenta
 from sau.persona import (
-    APRESENTACAO_DA_MENSAGEM,
-    APRESENTACAO_DO_HISTORICO,
-    AVISO_CONVERSA,
-    CORTESIA,
-    ENCAMINHAMENTO,
-    ESCOPO_DE_ESTAGIO,
+    ESCOPO_E_CORTESIA,
     EXEMPLO_DE_ENCAMINHAMENTO,
     EXEMPLO_PARCIAL,
-    FIM_CONVERSA,
-    FORMATO_SAIDA,
-    HISTORICO_VAZIO,
     IDENTIDADE,
-    INICIO_CONVERSA,
     MENSAGENS_NO_PROMPT,
-    NAO_INVENTAR,
+    NAO_INVENTAR_E_ENCAMINHAR,
     ORIENTACAO_DE_FONTE,
-    ORIENTACAO_PROCEDURAL,
     PERSONA,
     PERSONA_DE_ROTEAMENTO,
     REGRAS,
-    RESPOSTA_PARCIAL,
-    TOM,
-    USAR_HISTORICO,
-    montar_prompt,
-    montar_prompt_de_roteamento,
+    USAR_HISTORICO_E_FORMATO,
+    montar_mensagens,
+    montar_mensagens_de_roteamento,
 )
 
 _BASE_URL = "http://host.docker.internal:11434"
@@ -104,12 +93,12 @@ def fazer_cliente() -> Iterator[FabricaCliente]:
         cliente_http.close()
 
 
-def _espelhando_prompts(registros: list[str]) -> Any:
-    """Transporte que guarda o prompt que o turno mandou ao modelo.
+def _espelhando_mensagens(registros: list[list[dict[str, Any]]]) -> Any:
+    """Transporte que guarda as mensagens que o turno mandou ao modelo.
 
-    O prompt do turno é a primeira mensagem `user` da conversa: a persona mais
-    a cerca com o histórico e a mensagem do Aluno. É ela que os testes de
-    persona conferem regra por regra.
+    As mensagens do turno são persona em `system` mais a conversa em papéis
+    nativos: é a lista inteira que os testes de persona conferem regra por
+    regra.
     """
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -118,20 +107,28 @@ def _espelhando_prompts(registros: list[str]) -> Any:
             total = len(corpo["input"])
             return httpx.Response(200, json={"embeddings": [[1.0, 0.0] for _ in range(total)]})
         corpo = json.loads(request.content.decode("utf-8"))
-        registros.append(corpo["messages"][0]["content"])
+        registros.append(corpo["messages"])
         return httpx.Response(200, json=_payload(_RESPOSTA))
 
     return handler
 
 
+def _mensagens_do_turno(fazer_cliente: FabricaCliente) -> list[dict[str, Any]]:
+    """Roda um turno e devolve as mensagens que o modelo recebeu."""
+    coletadas: list[list[dict[str, Any]]] = []
+
+    executar_turno(fazer_cliente(_espelhando_mensagens(coletadas)), _MENSAGEM)
+
+    assert len(coletadas) == 1
+    return coletadas[0]
+
+
 def _prompt_do_turno(fazer_cliente: FabricaCliente) -> str:
-    """Roda um turno e devolve o prompt que o modelo recebeu."""
-    prompts: list[str] = []
+    """Roda um turno e devolve a persona em `system` que o modelo recebeu."""
+    mensagens = _mensagens_do_turno(fazer_cliente)
 
-    executar_turno(fazer_cliente(_espelhando_prompts(prompts)), _MENSAGEM)
-
-    assert len(prompts) == 1
-    return prompts[0]
+    assert mensagens[0]["role"] == "system"
+    return str(mensagens[0]["content"])
 
 
 # --- O conjunto: as regras todas, na ordem em que o modelo as lê ---
@@ -147,15 +144,9 @@ def test_o_prompt_tem_exatamente_as_regras_da_issue() -> None:
     """
     assert tuple(regra.id for regra in REGRAS) == (
         "identidade",
-        "escopo_de_estagio",
-        "tom",
-        "cortesia",
-        "orientacao_procedural",
-        "resposta_parcial",
-        "nao_inventar",
-        "encaminhamento",
-        "usar_historico",
-        "formato_saida",
+        "escopo_e_cortesia",
+        "nao_inventar_e_encaminhar",
+        "usar_historico_e_formato",
     )
 
 
@@ -176,134 +167,57 @@ def test_a_regra_de_identidade_chega_ao_modelo(
     assert prompt.count(IDENTIDADE.instrucao) == 1
 
 
-def test_a_regra_de_tom_chega_ao_modelo(
+def test_a_regra_de_escopo_e_cortesia_chega_ao_modelo(
     fazer_cliente: FabricaCliente,
 ) -> None:
-    """O tom acolhedor e objetivo está no prompt que o modelo recebeu.
+    """O escopo com a cortesia está no prompt que o modelo recebeu.
 
-    É esta instrução que impede o S.A.U. de soar como assistente genérico —
-    sem ela, o modelo abre a conversa oferecendo ajuda com qualquer assunto,
-    que é o oposto do papel de agente de orientação do `CONTEXT.md`.
+    É esta instrução que separa os três destinos da mensagem do Aluno: saudação,
+    despedida e agradecimento isolados recebem gentileza em uma frase, sem citar
+    trechos e sem Encaminhar; assunto fora do processo de Estágio recebe uma
+    frase de fora de escopo com Encaminhamento à Coordenação de Estágios; e
+    dúvida sobre Estágio recebe orientação passo a passo (documentos, etapas,
+    Prazos e assinaturas). Sem ela, o redator trata um "obrigado" como dúvida
+    ou responde ao assunto que está fora do que o S.A.U. orienta.
     """
     prompt = _prompt_do_turno(fazer_cliente)
 
-    assert TOM.instrucao in prompt
-    assert prompt.count(TOM.instrucao) == 1
+    assert ESCOPO_E_CORTESIA.instrucao in prompt
+    assert prompt.count(ESCOPO_E_CORTESIA.instrucao) == 1
 
 
-def test_a_regra_de_cortesia_chega_ao_modelo(
+def test_a_regra_de_nao_inventar_e_encaminhar_chega_ao_modelo(
     fazer_cliente: FabricaCliente,
 ) -> None:
-    """A cortesia com saudação, despedida e agradecimento está no prompt que o modelo recebeu.
+    """O limite de não inventar com Encaminhamento está no prompt que o modelo recebeu.
 
-    É esta instrução que impede o redator de tratar um "obrigado" como dúvida:
-    sem ela, com trechos anexados pelo fallback, o redator escolhia o ramo do
-    Encaminhamento e respondia o que o Aluno não perguntou — saudação não é
-    pergunta, e os trechos ficam sem uso.
+    É esta instrução que segura a Alucinação do `CONTEXT.md`: como o S.A.U. não
+    possui dados pessoais dos Alunos, ele nunca inventa datas, números de
+    apólice, telefones, e-mails ou Prazos ausentes do material — e quando a
+    dúvida exigir parecer normativo ou dado ausente, orienta o Aluno a procurar
+    a Coordenação de Estágios, sem inventar canal nem prometer prazo. Sem ela,
+    o modelo preenche a lacuna com o detalhe mais plausível.
     """
     prompt = _prompt_do_turno(fazer_cliente)
 
-    assert CORTESIA.instrucao in prompt
-    assert prompt.count(CORTESIA.instrucao) == 1
+    assert NAO_INVENTAR_E_ENCAMINHAR.instrucao in prompt
+    assert prompt.count(NAO_INVENTAR_E_ENCAMINHAR.instrucao) == 1
 
 
-def test_a_regra_de_escopo_de_estagio_chega_ao_modelo(
+def test_a_regra_de_usar_historico_e_formato_chega_ao_modelo(
     fazer_cliente: FabricaCliente,
 ) -> None:
-    """A restrição ao processo de estágio está no prompt que o modelo recebeu.
+    """O uso do histórico com o formato de saída está no prompt que o modelo recebeu.
 
-    É esta instrução que nomeia o que o agente orienta — prazos, documentação,
-    contratos, seguro e a ordem das etapas — e o que fazer com o que está fora
-    disso: dizer em uma frase que está fora e encerrar com Encaminhamento, sem
-    responder ao assunto.
-
-    A regra **não** dita o texto da resposta, e isso é o que o teste ao lado
-    segura: pedir frase exata aqui dentro faz o 3B devolver a frase em vez de
-    orientar.
+    É esta instrução que impede o S.A.U. de repetir pergunta sobre dado que o
+    Aluno já informou — sem ela, a cadeia repete a pergunta a cada turno — e de
+    devolver rótulo, marcador ou nome de regra junto da resposta: o Aluno lê o
+    texto da resposta direta à dúvida atual, não a estrutura do prompt.
     """
     prompt = _prompt_do_turno(fazer_cliente)
 
-    assert ESCOPO_DE_ESTAGIO.instrucao in prompt
-    assert prompt.count(ESCOPO_DE_ESTAGIO.instrucao) == 1
-
-
-def test_a_regra_de_orientacao_procedural_chega_ao_modelo(
-    fazer_cliente: FabricaCliente,
-) -> None:
-    """A orientação passo a passo está no prompt que o modelo recebeu.
-
-    É esta instrução que faz o S.A.U. descrever o processo em etapas — o que
-    preencher, quem assina, onde entregar, em qual prazo — e é dela que vem a
-    pergunta pelos dados que faltam antes de concluir, e a ressalva de que
-    parecer jurídico é Encaminhamento.
-    """
-    prompt = _prompt_do_turno(fazer_cliente)
-
-    assert ORIENTACAO_PROCEDURAL.instrucao in prompt
-    assert prompt.count(ORIENTACAO_PROCEDURAL.instrucao) == 1
-
-
-def test_a_regra_de_nao_inventar_chega_ao_modelo(
-    fazer_cliente: FabricaCliente,
-) -> None:
-    """A instrução de não inventar está no prompt que o modelo recebeu.
-
-    É esta instrução que segura a taxa de não-saber da #13: ela nomeia as
-    iscas que as Perguntas-teste plantam — prazo e data de assinatura, número
-    de apólice e seguradora, valor, telefone e canal — porque sem a lista o
-    modelo preenche a lacuna com o detalhe mais plausível, que é exatamente a
-    Alucinação do `CONTEXT.md`.
-    """
-    prompt = _prompt_do_turno(fazer_cliente)
-
-    assert NAO_INVENTAR.instrucao in prompt
-    assert prompt.count(NAO_INVENTAR.instrucao) == 1
-
-
-def test_a_regra_de_encaminhamento_chega_ao_modelo(
-    fazer_cliente: FabricaCliente,
-) -> None:
-    """O Encaminhamento está no prompt que o modelo recebeu.
-
-    É esta instrução que escreve a frase que nenhum dos três modelos escreveu
-    sozinho na sondagem do ADR-0003: recusar sem encaminhar não é encaminhar.
-    E ela fecha a porta do `f1` pelo outro lado — sem prometer prazo de
-    resposta e sem inventar o canal para onde o Aluno iria.
-    """
-    prompt = _prompt_do_turno(fazer_cliente)
-
-    assert ENCAMINHAMENTO.instrucao in prompt
-    assert prompt.count(ENCAMINHAMENTO.instrucao) == 1
-
-
-def test_a_regra_de_usar_historico_chega_ao_modelo(
-    fazer_cliente: FabricaCliente,
-) -> None:
-    """O uso do histórico está no prompt que o modelo recebeu.
-
-    É esta instrução que impede o S.A.U. de repedir pergunta sobre dado que o
-    Aluno já informou: sem ela, a cadeia de Petrolina repete "qual cidade?" a
-    cada turno, e o conforme da cadeia s1–s5 reprova.
-    """
-    prompt = _prompt_do_turno(fazer_cliente)
-
-    assert USAR_HISTORICO.instrucao in prompt
-    assert prompt.count(USAR_HISTORICO.instrucao) == 1
-
-
-def test_a_regra_de_formato_saida_chega_ao_modelo(
-    fazer_cliente: FabricaCliente,
-) -> None:
-    """O formato estrito de resposta está no prompt que o modelo recebeu.
-
-    É esta instrução que impede o S.A.U. de devolver rótulo, marcador ou nome de
-    regra junto da resposta: o Aluno lê o texto da resposta, não a estrutura do
-    prompt.
-    """
-    prompt = _prompt_do_turno(fazer_cliente)
-
-    assert FORMATO_SAIDA.instrucao in prompt
-    assert prompt.count(FORMATO_SAIDA.instrucao) == 1
+    assert USAR_HISTORICO_E_FORMATO.instrucao in prompt
+    assert prompt.count(USAR_HISTORICO_E_FORMATO.instrucao) == 1
 
 
 def test_o_titulo_de_cada_regra_chega_ao_modelo(fazer_cliente: FabricaCliente) -> None:
@@ -322,64 +236,35 @@ def test_o_titulo_de_cada_regra_chega_ao_modelo(fazer_cliente: FabricaCliente) -
         assert prompt.count(regra.titulo) == 1
 
 
-# --- A conversa do Aluno: depois das regras, dentro da cerca ---
+# --- A conversa do Aluno: persona em `system`, conversa em papéis nativos ---
 
 
-def test_a_conversa_do_aluno_vem_depois_das_regras_dentro_da_cerca(
+def test_as_mensagens_abrem_pela_persona_em_system_e_fecham_na_duvida_atual(
     fazer_cliente: FabricaCliente,
 ) -> None:
-    """A conversa chega verbatim, depois da persona, entre os dois marcadores.
+    """As mensagens abrem pela persona em `system` e fecham na dúvida atual em `user`.
 
-    Quatro afirmações em uma: o texto do Aluno não é comida pela composição, ele
-    não divide o prompt com as regras (vem depois da persona inteira), ele aparece
-    uma vez só, e ele é a última coisa antes do fechamento.
-
-    A última é a que a cerca torna possível: um marcador de abertura sem um de
-    fechamento deixa aberto onde a citação acaba, e um prompt cuja última linha é a
-    fala do Aluno é o que a ordem de leitura do modelo pequeno espera. O par de
-    marcadores é o que dá a uma e a outra ao mesmo tempo.
+    Três afirmações em uma: a persona é a primeira mensagem, a dúvida do Aluno
+    não é comida pela composição, e ela é a última coisa da lista — sem prefill
+    de `assistant` e sem rótulo textual, o modelo começa a gerar a partir da
+    dúvida, e não de um prefixo induzido.
     """
-    prompt = _prompt_do_turno(fazer_cliente)
+    mensagens = _mensagens_do_turno(fazer_cliente)
 
-    assert PERSONA in prompt
-    assert INICIO_CONVERSA in prompt
-    assert FIM_CONVERSA in prompt
-    assert _MENSAGEM in prompt
-    assert prompt.index(_MENSAGEM) > prompt.index(PERSONA)
-    assert prompt.index(_MENSAGEM) > prompt.index(INICIO_CONVERSA)
-    assert prompt.index(FIM_CONVERSA) > prompt.index(_MENSAGEM)
-    assert prompt.count(_MENSAGEM) == 1
+    assert mensagens[0] == {"role": "system", "content": PERSONA}
+    assert mensagens[-1] == {"role": "user", "content": _MENSAGEM}
+    assert sum(1 for mensagem in mensagens if mensagem["role"] == "user") == 1
 
 
-def test_o_aviso_da_cerca_vem_antes_do_marcador_de_abertura(
-    fazer_cliente: FabricaCliente,
-) -> None:
-    """O aviso diz o que é o texto do Aluno, e ele é lido antes de encontrá-lo.
+def test_o_historico_da_conversa_vai_em_papeis_nativos() -> None:
+    """O histórico entra mapeado para `user` e `assistant`, na ordem da conversa.
 
-    O aviso sem a ordem seria um parágrafo a mais: o modelo encontraria a
-    delimitação e o texto do Aluno antes de ler que aquilo é citação e não ordem.
-    Ele vem logo antes da abertura por isso.
-    """
-    prompt = _prompt_do_turno(fazer_cliente)
-
-    assert AVISO_CONVERSA in prompt
-    assert prompt.index(AVISO_CONVERSA) < prompt.index(INICIO_CONVERSA)
-    assert prompt.index(AVISO_CONVERSA) > prompt.index(PERSONA)
-
-
-def test_o_historico_da_conversa_vai_dentro_da_cerca() -> None:
-    """O histórico entra cercado, e não antes dela.
-
-    A cerca abre antes do histórico de propósito: as falas anteriores do Aluno são
-    entrada não confiável tanto quanto a mensagem de agora, e as respostas
-    anteriores do S.A.U. são saída de modelo, que é tão pouco confiável quanto a
-    entrada. Um histórico montado antes da abertura deixaria a parte mais longa do
-    prompt sem cerca nenhuma.
-
-    E o corte da janela acontece dentro da cerca: o que não cabe em
-    `MENSAGENS_NO_PROMPT` não entra no prompt, e o que entra vem inteiro. São nove
-    falas e a janela guarda seis, então as três mais antigas saem — e o que a
-    afirmação abaixo mede é que elas saem mesmo, e não que a cerca as esconde.
+    A fala do Aluno vira `user` e a resposta do S.A.U. vira `assistant`: sem
+    rótulo no texto, o modelo não tem prefixo a ecoar. E o corte da janela
+    acontece no mapeamento: o que não cabe em `MENSAGENS_NO_PROMPT` não entra
+    nas mensagens, e o que entra vem inteiro. São nove falas e a janela guarda
+    seis, então as três mais antigas saem — e o que a afirmação abaixo mede é
+    que elas saem mesmo.
     """
     falas = [
         Mensagem(papel="aluno", texto=f"pergunta {indice}", em=float(indice))
@@ -389,19 +274,24 @@ def test_o_historico_da_conversa_vai_dentro_da_cerca() -> None:
         Mensagem(papel="sau", texto="Antes: o Termo de Compromisso já está assinado?", em=99.0)
     )
 
-    prompt = montar_prompt(_MENSAGEM, falas)
+    mensagens = montar_mensagens(_MENSAGEM, falas)
 
-    # A mais antiga que sobra é a que abre a janela: ela vem depois da abertura.
-    mais_antiga_que_sobra = f"pergunta {MENSAGENS_NO_PROMPT - 3}"
-    assert prompt.index(INICIO_CONVERSA) < prompt.index(mais_antiga_que_sobra)
-    assert prompt.index(mais_antiga_que_sobra) < prompt.index(FIM_CONVERSA)
-    # E as três que não cabem não estão no prompt, nem dentro nem fora da cerca.
+    # A persona abre, e a dúvida atual fecha — sem prefill de `assistant`.
+    assert mensagens[0] == {"role": "system", "content": PERSONA}
+    assert mensagens[-1] == {"role": "user", "content": _MENSAGEM}
+    conversa = mensagens[1:-1]
+    # A mais antiga que sobra é a que abre a janela.
+    assert conversa[0] == {"role": "user", "content": f"pergunta {MENSAGENS_NO_PROMPT - 3}"}
+    assert len(conversa) == MENSAGENS_NO_PROMPT
+    # E as três que não cabem não estão nas mensagens.
+    textos = [mensagem["content"] for mensagem in conversa]
     for indice in range(MENSAGENS_NO_PROMPT - 3):
-        assert f"pergunta {indice}" not in prompt
-    # A mensagem do turno é a penúltima linha da conversa, antes do fechamento —
-    # e rotulada, como toda fala do histórico.
-    assert prompt.splitlines()[-3] == f"Aluno: {_MENSAGEM}"
-    assert prompt.splitlines()[-2] == FIM_CONVERSA
+        assert f"pergunta {indice}" not in textos
+    # A resposta anterior do S.A.U. virou `assistant`, sem rótulo no texto.
+    assert {
+        "role": "assistant",
+        "content": "Antes: o Termo de Compromisso já está assinado?",
+    } in conversa
 
 
 def test_o_historico_vai_antes_da_mensagem_do_turno() -> None:
@@ -416,53 +306,59 @@ def test_o_historico_vai_antes_da_mensagem_do_turno() -> None:
         Mensagem(papel="sau", texto="Antes: a assinatura já saiu?", em=2.0),
     ]
 
-    prompt = montar_prompt(_MENSAGEM, falas)
+    mensagens = montar_mensagens(_MENSAGEM, falas)
 
-    assert prompt.index("prazo do termo de compromisso") < prompt.index(_MENSAGEM)
-    assert prompt.index("prazo do termo de compromisso") > prompt.index(PERSONA)
+    assert mensagens == [
+        {"role": "system", "content": PERSONA},
+        {"role": "user", "content": "qual o prazo do termo de compromisso?"},
+        {"role": "assistant", "content": "Antes: a assinatura já saiu?"},
+        {"role": "user", "content": _MENSAGEM},
+    ]
 
 
-def test_a_mensagem_do_turno_vem_rotulada_e_separada_do_historico() -> None:
-    """A pergunta atual tem cabeçalho próprio e rótulo `Aluno:`, como o histórico.
+def test_o_historico_vazio_e_so_persona_e_duvida() -> None:
+    """Na estreia, as mensagens são a persona em `system` e a dúvida em `user`.
 
-    Sem o cabeçalho, a mensagem nova colava no histórico com uma linha em
-    branco de separação; sem o rótulo, era a única fala sem dizer quem falou.
-    As duas metades importam: o cabeçalho diz que aquilo é o presente, e o
-    rótulo dá à pergunta atual a mesma forma das antigas.
+    Sem seção ausente e sem marcador fixo: papéis nativos não precisam dizer
+    que é a primeira mensagem, porque a lista com duas mensagens já é isso.
+    """
+    mensagens = montar_mensagens(_MENSAGEM)
+
+    assert mensagens == [
+        {"role": "system", "content": PERSONA},
+        {"role": "user", "content": _MENSAGEM},
+    ]
+
+
+def test_nenhuma_mensagem_carrega_cerca_nem_rotulo_textual() -> None:
+    """Nenhum texto das mensagens tem `<<<`, `Aluno:` ou `S.A.U.`.
+
+    É a garantia contra o vazamento de rótulo: a cerca textual induzia o modelo
+    a continuar a partir do prefixo, e esse prefixo saía na resposta do Aluno.
+    Sem rótulo no prompt, não há o que ecoar — e isso vale para as duas
+    personas, com histórico e sem.
     """
     falas = [
         Mensagem(papel="aluno", texto="qual o prazo do termo de compromisso?", em=1.0),
         Mensagem(papel="sau", texto="Antes: a assinatura já saiu?", em=2.0),
     ]
 
-    prompt = montar_prompt(_MENSAGEM, falas)
-
-    assert APRESENTACAO_DO_HISTORICO in prompt
-    assert APRESENTACAO_DA_MENSAGEM in prompt
-    assert prompt.index(APRESENTACAO_DO_HISTORICO) < prompt.index("prazo do termo de compromisso")
-    assert prompt.index(APRESENTACAO_DA_MENSAGEM) > prompt.index("a assinatura já saiu?")
-    assert prompt.index(APRESENTACAO_DA_MENSAGEM) < prompt.index(f"Aluno: {_MENSAGEM}")
-    assert prompt.count(APRESENTACAO_DO_HISTORICO) == 1
-    assert prompt.count(APRESENTACAO_DA_MENSAGEM) == 1
-
-
-def test_o_historico_vazio_ganha_marcador_de_primeira_mensagem() -> None:
-    """Na estreia, o lugar do histórico tem marcador fixo, e não seção ausente.
-
-    Seção ausente o modelo lê como bloco faltando; marcador fixo ele lê como
-    primeira mensagem, que é o que ela é. E a mensagem do turno continua
-    rotulada mesmo sem nada antes dela.
-    """
-    prompt = montar_prompt(_MENSAGEM)
-
-    assert HISTORICO_VAZIO in prompt
-    assert prompt.index(HISTORICO_VAZIO) > prompt.index(INICIO_CONVERSA)
-    assert prompt.index(HISTORICO_VAZIO) < prompt.index(APRESENTACAO_DA_MENSAGEM)
-    assert prompt.splitlines()[-3] == f"Aluno: {_MENSAGEM}"
+    todas = [
+        *montar_mensagens(_MENSAGEM, falas),
+        *montar_mensagens_de_roteamento(_MENSAGEM, falas),
+        *montar_mensagens(_MENSAGEM),
+        *montar_mensagens_de_roteamento(_MENSAGEM),
+    ]
+    assert todas, "nenhuma mensagem montada: o teste mediu o vazio"
+    for mensagem in todas:
+        texto = str(mensagem["content"])
+        assert "<<<" not in texto, f"cerca textual em {mensagem['role']!r}: {texto!r}"
+        assert "Aluno:" not in texto, f"rótulo textual em {mensagem['role']!r}: {texto!r}"
+        assert "S.A.U.:" not in texto, f"rótulo textual em {mensagem['role']!r}: {texto!r}"
 
 
 def test_o_prefixo_da_persona_e_travado_por_cache_de_prefixo() -> None:
-    """O prefixo até `INICIO_CONVERSA` inclusive é idêntico, byte a byte, em dois turnos.
+    """A mensagem `system` é idêntica, byte a byte, em dois turnos.
 
     O cache de prefixo do Ollama só funciona quando os primeiros bytes são
     exatamente iguais. Mover a persona para depois da conversa — ou trocar uma
@@ -473,9 +369,9 @@ def test_o_prefixo_da_persona_e_travado_por_cache_de_prefixo() -> None:
 
     A mensagem de falha é intencionalmente dura: quebrar este teste não é um
     "refactor inofensivo de prompt", é mudar o que o cache pode reaproveitar.
-    O teste compara o prefixo dos dois prompts montados com Alunos diferentes e
-    históricos diferentes — se ele passa, o cache de prefixo da persona continua
-    valendo. Se falha, a culpa é de quem mudou o prefixo antes de `INICIO_CONVERSA`.
+    O teste compara a mensagem `system` de dois turnos montados com Alunos
+    diferentes e históricos diferentes — se ele passa, o cache de prefixo da
+    persona continua valendo. Se falha, a culpa é de quem mudou a persona.
     """
     aluno_1 = "Até que dia preciso assinar o termo de compromisso?"
     aluno_2 = "Já entreguei o relatório. O que vem depois?"
@@ -490,25 +386,17 @@ def test_o_prefixo_da_persona_e_travado_por_cache_de_prefixo() -> None:
         Mensagem(papel="aluno", texto="Terceira fala diferente", em=12.0),
     ]
 
-    prompt_a = montar_prompt(aluno_1, historico_a)
-    prompt_b = montar_prompt(aluno_2, historico_b)
+    sistema_a = montar_mensagens(aluno_1, historico_a)[0]
+    sistema_b = montar_mensagens(aluno_2, historico_b)[0]
 
-    # O prefixo comum termina em INICIO_CONVERSA (inclusive). Depois dele começa
-    # a conversa — que é o que muda entre os dois turnos.
-    indice_a = prompt_a.index(INICIO_CONVERSA)
-    indice_b = prompt_b.index(INICIO_CONVERSA)
-
-    prefixo_a = prompt_a[: indice_a + len(INICIO_CONVERSA)]
-    prefixo_b = prompt_b[: indice_b + len(INICIO_CONVERSA)]
-
-    assert prefixo_a == prefixo_b, (
-        "O prefixo do prompt até `INICIO_CONVERSA` mudou entre dois turnos. "
-        "Isso quebra o **cache de prefixo** do Ollama: os 852 tokens da persona "
-        "deixam de ser reaproveitados e todo turno volta a custar a leitura "
-        "inteira do prompt (0,02 s → 3,8 s), do primeiro ao último Aluno. "
-        "Não mude este prefixo — nem espaço, nem parágrafo, nem ordem — sem "
-        "reconferir a medição. "
-        f"Tamanhos: {len(prefixo_a)} vs {len(prefixo_b)}"
+    assert sistema_a["role"] == "system" and sistema_b["role"] == "system"
+    assert sistema_a["content"] == sistema_b["content"], (
+        "A mensagem `system` mudou entre dois turnos. "
+        "Isso quebra o **cache de prefixo** do Ollama: a persona deixa de ser "
+        "reaproveitada e todo turno volta a custar a leitura inteira do prompt "
+        "(0,02 s → 3,8 s), do primeiro ao último Aluno. "
+        "Não mude esta mensagem — nem espaço, nem parágrafo, nem ordem — sem "
+        "reconferir a medição."
     )
 
 
@@ -574,8 +462,6 @@ def test_nenhuma_resposta_ditada_fora_do_exemplo_declarado(
     prompt = _prompt_do_turno(fazer_cliente)
 
     assert EXEMPLO_DE_ENCAMINHAMENTO in prompt
-    assert "Aluno:" in EXEMPLO_DE_ENCAMINHAMENTO
-    assert "S.A.U.:" in EXEMPLO_DE_ENCAMINHAMENTO
     assert "Coordenação de Estágios" in EXEMPLO_DE_ENCAMINHAMENTO
 
 
@@ -604,19 +490,21 @@ def test_a_orientacao_de_fonte_chega_ao_modelo(fazer_cliente: FabricaCliente) ->
 
 
 def test_o_prompt_do_roteador_abre_pela_persona_enxuta() -> None:
-    """O prompt do roteador abre pela `PERSONA_DE_ROTEAMENTO`, e não pela do redator.
+    """O roteador abre pela `PERSONA_DE_ROTEAMENTO` em `system`, e não pela do redator.
 
     A separação da #36 existe para que o roteador não carregue as regras de
     redação nem a `ORIENTACAO_DE_FONTE`: é o prompt enxuto que faz o modelo
     pequeno chamar a ferramenta, medido contra a persona inteira no ADR-0010. Um
     roteador aberto pela `PERSONA` voltaria ao defeito que a medição apontou.
     """
-    prompt = montar_prompt_de_roteamento(_MENSAGEM)
+    mensagens = montar_mensagens_de_roteamento(_MENSAGEM)
 
-    assert prompt.startswith(PERSONA_DE_ROTEAMENTO)
-    assert PERSONA not in prompt
-    assert ORIENTACAO_DE_FONTE not in prompt
-    assert EXEMPLO_DE_ENCAMINHAMENTO not in prompt
+    assert mensagens[0] == {"role": "system", "content": PERSONA_DE_ROTEAMENTO}
+    assert mensagens[-1] == {"role": "user", "content": _MENSAGEM}
+    sistema = str(mensagens[0]["content"])
+    assert PERSONA not in sistema
+    assert ORIENTACAO_DE_FONTE not in sistema
+    assert EXEMPLO_DE_ENCAMINHAMENTO not in sistema
 
 
 def test_o_roteador_responde_sem_busca_apos_o_resultado_da_ferramenta() -> None:
@@ -629,9 +517,9 @@ def test_o_roteador_responde_sem_busca_apos_o_resultado_da_ferramenta() -> None:
     grafo jogava fora, ficando só com as chamadas.
     """
     assert "quem escreve a resposta final ao Aluno é outra etapa" in PERSONA_DE_ROTEAMENTO
-    prompt = montar_prompt_de_roteamento(_MENSAGEM)
+    mensagens = montar_mensagens_de_roteamento(_MENSAGEM)
 
-    assert "quem escreve a resposta final ao Aluno é outra etapa" in prompt
+    assert "quem escreve a resposta final ao Aluno é outra etapa" in str(mensagens[0]["content"])
 
 
 def test_o_roteador_le_a_mensagem_atual_ate_o_fim() -> None:
@@ -643,9 +531,39 @@ def test_o_roteador_le_a_mensagem_atual_ate_o_fim() -> None:
     determinístico virava o caminho principal.
     """
     assert "inteira até o fim" in PERSONA_DE_ROTEAMENTO
-    prompt = montar_prompt_de_roteamento("Oi, queria saber sobre o termo de compromisso")
+    mensagens = montar_mensagens_de_roteamento("Oi, queria saber sobre o termo de compromisso")
 
-    assert "inteira até o fim" in prompt
+    assert "inteira até o fim" in str(mensagens[0]["content"])
+    assert mensagens[-1] == {
+        "role": "user",
+        "content": "Oi, queria saber sobre o termo de compromisso",
+    }
+
+
+def test_o_roteador_reescreve_a_duvida_em_linguagem_natural() -> None:
+    """A consulta ao Manual é o trecho relevante da dúvida, não a palavra solta.
+
+    É a regra que resgata os Prazos sem mexer no limiar: o roteador lê a
+    mensagem inteira até o fim, remove só saudação, apresentação e
+    agradecimento, e repassa a dúvida em linguagem natural com o verbo e o
+    objeto como o Aluno escreveu — nunca resumida para uma palavra só, que é
+    o que enterrava a pergunta factual de prazo. Os três few-shots fixam a
+    forma: "Oi" puro dispensa a busca, e a pergunta com saudação na frente
+    vira consulta em frase. Nem a persona nem o schema falam mais em
+    palavra solta do assunto.
+    """
+    assert "linguagem natural" in PERSONA_DE_ROTEAMENTO
+    assert "NUNCA resuma para uma palavra só" in PERSONA_DE_ROTEAMENTO
+    assert '"queria saber sobre o termo de compromisso"' in PERSONA_DE_ROTEAMENTO
+    assert '"quero prazo de estágio"' in PERSONA_DE_ROTEAMENTO
+    assert "palavras-chave" not in PERSONA_DE_ROTEAMENTO
+
+    consulta = esquema_da_ferramenta(k_padrao=4)["function"]["parameters"]["properties"][
+        "consulta"
+    ]["description"]
+    assert "linguagem natural" in consulta
+    assert "quero prazo de estágio" in consulta
+    assert "palavras-chave" not in consulta
 
 
 def test_a_regra_de_resposta_parcial_chega_ao_modelo(
@@ -653,14 +571,14 @@ def test_a_regra_de_resposta_parcial_chega_ao_modelo(
 ) -> None:
     """A regra de resposta parcial está no prompt que o modelo recebeu.
 
-    É ela que impede o tudo-ou-nada do redator: parte sustentada com Fonte,
-    buraco com o literal sobre o ponto específico mais Encaminhamento — nunca
-    resposta ancorada com negação genérica no fim.
+    Ela mora na `ORIENTACAO_DE_FONTE`, e não numa regra própria: parte
+    sustentada com a Fonte, buraco com o literal sobre o ponto específico mais
+    Encaminhamento — nunca resposta ancorada com negação genérica no fim. É
+    ela que impede o tudo-ou-nada do redator.
     """
     prompt = _prompt_do_turno(fazer_cliente)
 
-    assert RESPOSTA_PARCIAL.instrucao in prompt
-    assert prompt.count(RESPOSTA_PARCIAL.instrucao) == 1
+    assert "não encontrei no material sobre esse ponto" in prompt
 
 
 def test_o_exemplo_parcial_chega_ao_modelo(
@@ -675,56 +593,55 @@ def test_o_exemplo_parcial_chega_ao_modelo(
     prompt = _prompt_do_turno(fazer_cliente)
 
     assert EXEMPLO_PARCIAL in prompt
-    assert "Aluno:" in EXEMPLO_PARCIAL
-    assert "S.A.U.:" in EXEMPLO_PARCIAL
     assert "Coordenação de Estágios" in EXEMPLO_PARCIAL
 
 
-def test_o_prompt_do_roteador_cerca_a_conversa_como_o_do_redator() -> None:
-    """A cerca, a ordem da conversa e o sufixo do roteador são os mesmos do redator.
+def test_o_roteador_mapeia_a_conversa_como_o_redator() -> None:
+    """O mapeamento de papéis e o corte de janela do roteador são os do redator.
 
-    É a extração `_montar_com_cerca` que impede os dois prompts de divergirem: o
-    roteador precisa do mesmo contexto cercado para decidir, e o teste de cerca
-    do redator passa a valer para ele. O sufixo `S.A.U.:` continua induzindo onde
-    o modelo começa a gerar.
+    É a extração `_historico_para_papeis` que impede as duas listas de
+    divergirem: o roteador precisa do mesmo contexto em papéis para decidir, e o
+    teste de papéis do redator passa a valer para ele. Sem prefill de
+    `assistant`: a última mensagem continua sendo a dúvida atual em `user`.
     """
     falas = [
         Mensagem(papel="aluno", texto="qual o prazo do termo de compromisso?", em=1.0),
         Mensagem(papel="sau", texto="Antes: a assinatura já saiu?", em=2.0),
     ]
 
-    prompt = montar_prompt_de_roteamento(_MENSAGEM, falas)
+    mensagens = montar_mensagens_de_roteamento(_MENSAGEM, falas)
 
-    assert AVISO_CONVERSA in prompt
-    assert prompt.index(INICIO_CONVERSA) > prompt.index(PERSONA_DE_ROTEAMENTO)
-    assert prompt.index("a assinatura já saiu?") > prompt.index(INICIO_CONVERSA)
-    assert prompt.index("a assinatura já saiu?") < prompt.index(_MENSAGEM)
-    assert prompt.index(_MENSAGEM) < prompt.index(FIM_CONVERSA)
-    assert prompt.endswith("S.A.U.:")
+    assert mensagens == [
+        {"role": "system", "content": PERSONA_DE_ROTEAMENTO},
+        {"role": "user", "content": "qual o prazo do termo de compromisso?"},
+        {"role": "assistant", "content": "Antes: a assinatura já saiu?"},
+        {"role": "user", "content": _MENSAGEM},
+    ]
 
 
-def test_o_historico_vazio_do_roteador_ganha_o_marcador_de_primeira_mensagem() -> None:
-    """Sem histórico, o roteador recebe o mesmo marcador fixo do redator.
+def test_o_historico_vazio_do_roteador_e_so_persona_e_duvida() -> None:
+    """Sem histórico, o roteador recebe só a persona enxuta e a dúvida atual.
 
-    O roteador decide a partir da mensagem de agora; na estreia, o lugar do
-    histórico tem o mesmo marcador, para que ele leia "primeira mensagem" em vez
-    de "bloco faltando". E a mensagem do turno continua rotulada mesmo sem nada
-    antes dela.
+    O roteador decide a partir da mensagem de agora; na estreia, a lista tem
+    duas mensagens — `system` e `user` —, sem marcador de primeira mensagem,
+    porque a lista de dois já é isso.
     """
-    prompt = montar_prompt_de_roteamento(_MENSAGEM)
+    mensagens = montar_mensagens_de_roteamento(_MENSAGEM)
 
-    assert HISTORICO_VAZIO in prompt
-    assert prompt.splitlines()[-3] == f"Aluno: {_MENSAGEM}"
-    assert prompt.splitlines()[-2] == FIM_CONVERSA
+    assert mensagens == [
+        {"role": "system", "content": PERSONA_DE_ROTEAMENTO},
+        {"role": "user", "content": _MENSAGEM},
+    ]
 
 
 def _normalizar(texto: str) -> str:
-    """Tira espaços e aspas para comparar o runtime com o fonte.
+    """Tira espaços, aspas e escapes para comparar o runtime com o fonte.
 
     No fonte, cada instrução é uma sequência de literais adjacentes — com
-    aspas e quebras de linha entre os pedaços — e em runtime ela é uma string
-    só. Sem normalizar, a instrução "não aparece" nem no próprio
-    `persona.py`, e o teste acima quebra com a lista de donos vazia em vez de
-    quebrar com o segundo prompt.
+    aspas e quebras de linha entre os pedaços — e pode trazer `\n` explícito
+    onde em runtime há a quebra de verdade: sem apagar o escape, a instrução
+    "não aparece" nem no próprio `persona.py`, e o teste acima quebra com a
+    lista de donos vazia em vez de quebrar com o segundo prompt. Em runtime
+    ela é uma string só, então a quebra real sai com os espaços.
     """
-    return re.sub(r"[\s\"']", "", texto)
+    return re.sub(r"[\s\"']", "", texto.replace("\\n", ""))

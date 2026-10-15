@@ -51,8 +51,8 @@ from sau.graph.nodes import (
     criar_no_roteador,
     rota_das_ferramentas,
 )
-from sau.graph.nodes import montar_prompt as montar_prompt
-from sau.graph.nodes import montar_prompt_de_roteamento as montar_prompt_de_roteamento
+from sau.graph.nodes import montar_mensagens as montar_mensagens
+from sau.graph.nodes import montar_mensagens_de_roteamento as montar_mensagens_de_roteamento
 from sau.graph.state import Mensagem
 from sau.inference.ollama import ClienteOllama
 from sau.manual.tool import LITERAL_NAO_ENCONTREI, esquema_da_ferramenta
@@ -116,19 +116,31 @@ def construir_grafo(
         construtor.add_node(
             "ferramentas", cast(Any, criar_no_ferramentas(cliente, manual=manual))
         )
-        construtor.add_node(
-            "busca_de_seguranca",
-            cast(Any, criar_no_busca_de_seguranca(cliente, manual=manual)),
-        )
+        if manual.busca_de_seguranca:
+            construtor.add_node(
+                "busca_de_seguranca",
+                cast(Any, criar_no_busca_de_seguranca(cliente, manual=manual)),
+            )
+            construtor.add_edge("busca_de_seguranca", "redator")
+            destino_do_declinio = "busca_de_seguranca"
+        else:
+            # TEMPORÁRIO (teste manual do roteador sozinho): o declínio vai
+            # direto ao redator, sem a busca determinística. Religar é voltar
+            # `MANUAL_BUSCA_SEGURANCA` para `1`; remover de vez é apagar este
+            # `else` junto com o nó e a flag.
+            logger.warning(
+                "Busca de segurança DESATIVADA (MANUAL_BUSCA_SEGURANCA=0): "
+                "o declínio do roteador vai direto ao redator, sem material."
+            )
+            destino_do_declinio = "redator"
         construtor.add_edge(START, "roteador")
         construtor.add_edge("ferramentas", "roteador")
-        construtor.add_edge("busca_de_seguranca", "redator")
         construtor.add_conditional_edges(
             "roteador",
             rota_das_ferramentas,
             {
                 "ferramentas": "ferramentas",
-                "busca_de_seguranca": "busca_de_seguranca",
+                "busca_de_seguranca": destino_do_declinio,
                 "redator": "redator",
             },
         )
@@ -156,22 +168,22 @@ def executar_turno(
     `manual` são as opções da ferramenta; sem elas o turno roda sem consulta ao
     Manual.
 
-    A entrada é o prompt do **roteador** quando há Manual — é ele quem abre o
-    turno decidindo se consulta; o `redator` reconstrói o próprio prompt a partir
-    de `mensagem` e `historico`. Sem Manual não há roteador, e a entrada é o
-    prompt do redator.
+    A entrada é a lista de mensagens do **roteador** quando há Manual — é ele
+    quem abre o turno decidindo se consulta; o `redator` monta as próprias
+    mensagens a partir de `mensagem` e `historico`. Sem Manual não há roteador,
+    e a entrada é a lista de mensagens do redator.
     """
     grafo = construir_grafo(cliente, manual=manual)
     logger.info("Entrada do grafo: mensagem do Aluno:\n%s", mensagem)
-    prompt = (
-        montar_prompt_de_roteamento(mensagem, historico)
+    mensagens = (
+        montar_mensagens_de_roteamento(mensagem, historico)
         if manual is not None
-        else montar_prompt(mensagem, historico)
+        else montar_mensagens(mensagem, historico)
     )
     entrada: EstadoTurno = {
         "mensagem": mensagem,
         "historico": list(historico),
-        "mensagens": [{"role": "user", "content": prompt}],
+        "mensagens": mensagens,
         "rodadas": 0,
     }
     resultado = grafo.invoke(entrada)

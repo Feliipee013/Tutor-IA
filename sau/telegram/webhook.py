@@ -49,7 +49,10 @@ from sau.rag.embed import ClienteEmbedding
 
 logger = logging.getLogger(__name__)
 
-TEXTO_ACK = "Recebi sua mensagem. Vou te responder em instantes."
+TEXTO_ACK = (
+    "Recebi sua mensagem. Vou te responder em instantes — "
+    "pode levar de 1 a 3 minutos dependendo do movimento."
+)
 """O acuse de recibo, fixo e sem o modelo, e a primeira das duas mensagens que o
 Aluno leva. O texto não promete posição na fila porque a #11 é dona dela; o que
 ele promete é que a mensagem chegou e que alguém respondeu. A resposta do modelo

@@ -14,17 +14,18 @@ evidência. Sem ela, um declínio numa pergunta factual deixava o redator sem
 material nenhum.
 
 O nó `roteador` leva as mensagens ao modelo por `/api/chat`, com o schema da
-ferramenta declarado em `tools`, e a persona enxuta do roteamento
-(`sau.persona.montar_prompt_de_roteamento`). Ele **decide**: quando o modelo
+ferramenta declarado em `tools`, e a persona enxuta do roteamento em `system`
+(`sau.persona.montar_mensagens_de_roteamento`). Ele **decide**: quando o modelo
 responde direto — saudação, agradecimento, pergunta fora do escopo —, o ciclo
 não abre; quando pede a ferramenta, o nó `ferramentas` busca no Manual, devolve o
 resultado como mensagem `tool` e o roteador decide de novo.
 
-O nó `redator` é quem escreve a resposta ao Aluno: monta o prompt com a persona
-completa (`sau.persona.montar_prompt`) **sem declarar `tools`** e recebe os pares
-de ferramenta do roteador como mensagens `tool`. Um redator que recebe os trechos
-sem tool calling escreve ancorado e fluente — era a tentativa de o modelo fazer
-tool-call e persona ao mesmo tempo que produzia a resposta quebrada.
+O nó `redator` é quem escreve a resposta ao Aluno: monta as mensagens com a
+persona completa em `system` (`sau.persona.montar_mensagens`) **sem declarar
+`tools`** e recebe os pares de ferramenta do roteador como mensagens `tool` no
+fim. Um redator que recebe os trechos sem tool calling escreve ancorado e
+fluente — era a tentativa de o modelo fazer tool-call e persona ao mesmo tempo
+que produzia a resposta quebrada.
 
 O nó `finalizar` carrega a **guarda determinística** da ausência de evidência:
 se o roteador chamou a ferramenta e nada passou pelo limiar, a resposta vira o
@@ -34,7 +35,7 @@ prompt pede e o grafo garante.
 
 Os prompts do turno vêm de `sau.persona`, reexportados aqui para que quem importa
 o caminho do prompt continue resolvendo a partir deste módulo: o do roteador
-(`montar_prompt_de_roteamento`) e o do redator (`montar_prompt`).
+(`montar_mensagens_de_roteamento`) e o do redator (`montar_mensagens`).
 """
 
 from __future__ import annotations
@@ -58,8 +59,8 @@ from sau.manual.tool import (
     executar_chamada,
     formatar_para_o_modelo,
 )
-from sau.persona import montar_prompt as montar_prompt
-from sau.persona import montar_prompt_de_roteamento as montar_prompt_de_roteamento
+from sau.persona import montar_mensagens as montar_mensagens
+from sau.persona import montar_mensagens_de_roteamento as montar_mensagens_de_roteamento
 
 logger = logging.getLogger("sau.graph.nodes")
 
@@ -78,15 +79,17 @@ class OpcoesDoManual:
     """O que o turno precisa para consultar o Manual: onde, quanto e com que corte.
 
     Vem da `Configuracao` do serviço (`manual_chroma_caminho`, `manual_colecao`,
-    `manual_k_padrao`, `manual_limiar_similaridade`). O grafo não lê o ambiente
-    sozinho: quem monta o turno passa estas opções, e o teste monta com as dele
-    — o mesmo desenho do registro de conversas e do semáforo.
+    `manual_k_padrao`, `manual_limiar_similaridade`, `manual_busca_seguranca`).
+    O grafo não lê o ambiente sozinho: quem monta o turno passa estas opções,
+    e o teste monta com as dele — o mesmo desenho do registro de conversas e
+    do semáforo.
     """
 
     diretorio_chroma: Path
     nome_colecao: str
     k_padrao: int
     limiar: float
+    busca_de_seguranca: bool = True
 
     @classmethod
     def de_config(cls, config: Configuracao) -> OpcoesDoManual:
@@ -96,6 +99,7 @@ class OpcoesDoManual:
             nome_colecao=config.manual_colecao,
             k_padrao=config.manual_k_padrao,
             limiar=config.manual_limiar_similaridade,
+            busca_de_seguranca=config.manual_busca_seguranca,
         )
 
 
@@ -107,7 +111,7 @@ class EstadoTurno(TypedDict):
     fato é `mensagens`: a lista no formato do `/api/chat`, que começa com a
     persona do roteamento mais a conversa, ganha a resposta do modelo, ganha as
     mensagens `tool` dos resultados e volta ao roteador até o modelo responder
-    direto. O `redator` reconstrói o próprio prompt a partir de `mensagem` e
+    direto. O `redator` monta as próprias mensagens a partir de `mensagem` e
     `historico`, então não depende dessa lista: ele só colhe dela os pares de
     ferramenta.
 
@@ -180,23 +184,24 @@ def criar_no_roteador(
 def criar_no_redator(cliente: ClienteOllama) -> Callable[[EstadoTurno], dict[str, Any]]:
     """Cria o nó `redator`, que escreve a resposta ao Aluno **sem** tool calling.
 
-    O redator reconstrói o próprio prompt a partir de `mensagem` e `historico` —
-    não depende das `mensagens` que o roteador acumulou — e recebe os pares de
-    ferramenta daquele acúmulo como mensagens `tool`. O ponto central da #36 é a
-    ausência de `ferramentas`: `cliente.conversar(mensagens, ferramentas=None)`.
-    Um redator que declarasse `tools` voltaria a tentar tool-call e persona ao
-    mesmo tempo, que é o defeito que a separação veio fechar.
+    O redator monta as próprias mensagens a partir de `mensagem` e `historico`
+    — não depende das `mensagens` que o roteador acumulou — e recebe os pares de
+    ferramenta daquele acúmulo como mensagens `tool` no fim. O ponto central da
+    #36 é a ausência de `ferramentas`: `cliente.conversar(mensagens,
+    ferramentas=None)`. Um redator que declarasse `tools` voltaria a tentar
+    tool-call e persona ao mesmo tempo, que é o defeito que a separação veio
+    fechar.
 
     Quando não há resultado de ferramenta — saudação, resposta direta —, a lista
-    tem só o próprio prompt: não há material a ancorar, e a resposta sai da
-    persona.
+    tem só as mensagens da persona com a conversa: não há material a ancorar, e
+    a resposta sai da persona.
     """
 
     def redator(estado: EstadoTurno) -> dict[str, Any]:
         mensagem = estado["mensagem"]
         historico = estado.get("historico", [])
         mensagens = [
-            {"role": "user", "content": montar_prompt(mensagem, historico)},
+            *montar_mensagens(mensagem, historico),
             *_pares_de_ferramenta(estado.get("mensagens", [])),
         ]
         logger.info("Prompt do turno enviado ao modelo:\n%s", _ultima_mensagem(mensagens))
@@ -212,9 +217,10 @@ def _pares_de_ferramenta(mensagens: list[dict[str, Any]]) -> list[dict[str, Any]
 
     Devolve, na ordem em que foram acumuladas, só as mensagens `assistant` que
     carregam `tool_calls` e as mensagens `role == "tool"` — o que o roteador
-    consultou e o que a ferramenta respondeu. Os prompts `user` e as mensagens
-    de texto ficam de fora: o redator reconstrói o próprio prompt, e reenviar a
-    conversa inteira duplicaria a persona no corpo da requisição.
+    consultou e o que a ferramenta respondeu. O `system` da persona, o histórico
+    em `user`/`assistant` e a dúvida atual em `user` ficam de fora: o redator
+    monta as próprias mensagens, e reenviá-las duplicaria a persona no corpo da
+    requisição.
     """
     pares: list[dict[str, Any]] = []
     for mensagem in mensagens:
@@ -442,13 +448,17 @@ def _mensagem_do_assistente(resposta: Resposta) -> dict[str, Any]:
 
 
 def _ultima_mensagem(mensagens: list[dict[str, Any]]) -> str:
-    """O texto da última mensagem `user`: o prompt que o modelo recebeu.
+    """O texto da última mensagem `user`: a dúvida atual do Aluno.
 
-    Aqui entra no log só o **prompt**. O texto do modelo já sai em dois outros
+    Aqui entra no log só a **dúvida**. O texto do modelo já sai em dois outros
     lugares, e nenhum deles é este: o `ClienteOllama` grava a resposta com os
     tempos que a mediram, e o `grafo` grava a entrada e a saída do turno. A
     composição do que foi enviado só existe aqui, e é por isso que ela fica
     registrada.
+
+    A busca é de trás para frente porque o redator anexa os pares de ferramenta
+    (`assistant` com `tool_calls` e `tool`) depois da dúvida: a última mensagem
+    da lista nem sempre é a do Aluno.
     """
     for mensagem in reversed(mensagens):
         if mensagem.get("role") == "user":

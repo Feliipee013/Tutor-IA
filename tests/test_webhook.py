@@ -432,6 +432,10 @@ class ModeloFalso:
         só a chamada do `redator` — uma por turno, como era antes da separação —
         e um falso que segura a vaga continua segurando dentro do semáforo, que
         é onde o redator roda.
+
+        O que vai ao `responder` é a conversa em papéis nativos (`user` e
+        `assistant`), sem a persona em `system`: é a conversa que os testes de
+        isolamento e de ordem conferem, e a persona não é o que eles medem.
         """
         if ferramentas is not None:
             return Resposta(
@@ -445,8 +449,12 @@ class ModeloFalso:
                 concluida=True,
                 motivo_de_parada="stop",
             )
-        prompt = mensagens[0]["content"] if mensagens else ""
-        return self.responder(prompt, opcoes=opcoes)
+        conversa = "\n".join(
+            str(mensagem.get("content", ""))
+            for mensagem in mensagens
+            if mensagem.get("role") in ("user", "assistant")
+        )
+        return self.responder(conversa, opcoes=opcoes)
 
     def responder(self, prompt: str, *, opcoes: dict[str, Any] | None = None) -> Resposta:
         self.prompts.append(prompt)
@@ -999,12 +1007,12 @@ def test_o_texto_do_aluno_e_a_mensagem_que_o_grafo_recebe(
 
     Um turno que respondesse a uma pergunta fixa passaria pelo teste do caminho
     inteiro acima, porque o texto do modelo voltaria igual. Aqui o modelo falso
-    guarda o prompt que recebeu, e ele tem que conter a mensagem do update.
+    guarda a conversa que recebeu, e ela tem que conter a mensagem do update.
 
-    A afirmação é `in` e não `endswith` desde a #10: o prompt termina no marcador
-    de fechamento da cerca, que é o que impede a mensagem do Aluno de ser lida como
-    instrução. Que a fala do Aluno seja a última antes do fechamento é o que
-    `test_persona.py` afirma, no módulo que monta o prompt.
+    A afirmação é `in` e não igualdade desde os papéis nativos: a conversa tem
+    o histórico junto da dúvida atual. Que a fala do Aluno chegue verbatim e
+    por último é o que `test_persona.py` afirma, no módulo que monta as
+    mensagens.
     """
     prompts: list[str] = []
 

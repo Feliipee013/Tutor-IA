@@ -75,6 +75,10 @@ services:
       - MANUAL_PDF_CAMINHO=/app/corpus/manual-estagio-obrigatorio-polo-2026-2.pdf
       - MANUAL_CHROMA_CAMINHO=/var/lib/sau/manual-chroma
       - MANUAL_COLECAO=${MANUAL_COLECAO:-manual-estagio-obrigatorio}
+      # Interruptor TEMPORÁRIO da busca de segurança (teste manual do roteador
+      # sozinho): com 0 o declínio vai direto ao redator, sem material. Padrão 1
+      # (ligada); remover de vez é apagar a flag junto com o nó.
+      - MANUAL_BUSCA_SEGURANCA=${MANUAL_BUSCA_SEGURANCA:-1}
     volumes:
       - conversas:/var/lib/sau
       - manual-chroma:/var/lib/sau/manual-chroma

@@ -55,7 +55,7 @@ from harness.run import (
 )
 from sau.config import carregar_configuracao
 from sau.graph.graph import construir_grafo
-from sau.graph.nodes import OpcoesDoManual, montar_prompt_de_roteamento
+from sau.graph.nodes import OpcoesDoManual, montar_mensagens_de_roteamento
 from sau.inference.ollama import NUM_CTX_PADRAO, Resposta
 from sau.rag.retrieve import ultimo_indice
 
@@ -244,11 +244,9 @@ def main(argumentos: Sequence[str] | None = None) -> int:
                 "mensagem": texto,
                 "historico": [],
                 # O grafo aqui roda sempre com Manual, então o turno abre pelo
-                # roteador: a entrada é o prompt dele. O redator reconstrói o
-                # próprio prompt a partir de `mensagem`/`historico`.
-                "mensagens": [
-                    {"role": "user", "content": montar_prompt_de_roteamento(texto)}
-                ],
+                # roteador: a entrada são as mensagens dele. O redator monta as
+                # próprias a partir de `mensagem`/`historico`.
+                "mensagens": montar_mensagens_de_roteamento(texto),
                 "rodadas": 0,
             }
         )
