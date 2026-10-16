@@ -3,11 +3,11 @@
   "url": "http://localhost:11434",
   "condicoes": {
     "repeticoes": 1,
-    "temperatura": 0.0,
+    "temperatura": 0.8,
     "seed": 20260926,
     "num_predict": 512,
     "num_ctx": 4096,
-    "sha256_do_prompt": "9d68c6dcd9bbbde8fe28bf518532ffab2f0e562766041fa2a93d906fa47f69b1"
+    "sha256_do_prompt": "029d96966ba690e43b8d095f292c18d3e5ae5c715359ed7add63f26521fca2ec"
   },
   "manual": {
     "ligada": true,
@@ -29,8 +29,8 @@
     "size_vram": 2159374499,
     "em_cpu": false
   },
-  "inicio": "2026-10-15T23:40:05.674847+00:00",
-  "fim": "2026-10-15T23:46:31.025402+00:00",
+  "inicio": "2026-10-16T02:09:41.175705+00:00",
+  "fim": "2026-10-16T02:15:50.459397+00:00",
   "execucoes": [
     {
       "id": "b1",
@@ -40,19 +40,18 @@
       "fonte_esperada": "PERÍODO PARA REALIZAÇÃO DO ESTÁGIO CURRICULAR OBRIGATÓRIO 2026/2 (p.3)",
       "conforme_quando": "O output diz que a data limite para a realização do Estágio Curricular Obrigatório em campo é definida pelo **time de planejamento acadêmico** e que ela pode ser conferida no **Colaborar** (Menu > DGA/Secretaria > Estágio > Período); cita a Fonte (título + página); não afirma uma data específica",
       "nao_conforme_quando": "O output afirma uma data, mês, semana ou número de dias do período; ou diz que a data é definida pelo Polo, pela empresa ou pela Coordenação de Estágios; ou não cita a Fonte",
-      "resposta_bruta": "O período para realização do estágio obrigatório neste semestre é definido pelo time de planejamento acadêmico e está disponível no sistema Colaborar em: Menu > DGA/Secretaria > Estágio > Período. Para obter a data final, você deve acessar esse menu e verificar a informação.",
+      "resposta_bruta": "Baseado no material que encontrei, a data limite para realizar o estágio obrigatório neste semestre não foi especificada diretamente. Tudo o que encontrei diz que você deve realizar a edição de sua vigência e carga horária no AVA após a associação do aluno à empresa, e que o Termo de Compromisso e Cadastro da Empresa devem ser liberados obrigatoriamente antes do início do estágio.\n\nPara a data limite, você precisará verificar as orientações específicas do seu Polo/Unidade, que fornecem as regras de vigência para seu estágio. Normalmente, isso pode variar dependendo do tipo de estágio, carga horária permitida e outras restrições legais. Procure as diretrizes específicas do seu Polo/Unidade para saber exatamente quando seu estágio obrigatório pode ser realizado. Se precisar de mais orientações, sugiro que entre em contato com a Coordenação de Estágios.",
       "erro": null,
       "motivo_de_parada": "stop",
-      "tokens_gerados": 70,
-      "primeiro_token_segundos": 12.748283921,
+      "tokens_gerados": 212,
+      "primeiro_token_segundos": 10.455656576,
       "fontes_recuperadas": [
-        "PERÍODO PARA REALIZAÇÃO DO ESTÁGIO (p. 3)",
-        "DECLARAÇÃO DE DISPENSA (p. 33)",
-        "VERIFICAÇÃO DE DATAS IMPORTANTES (p. 45)",
-        "EDIÇÃO DO ESTÁGIO NO AVA (p. 41)"
+        "ESTÁGIO OBRIGATÓRIO (p. 1)",
+        "EDIÇÃO DO ESTÁGIO NO AVA (p. 40)",
+        "DECLARAÇÃO DE DISPENSA (p. 33)"
       ],
-      "timestamp": "2026-10-15T23:40:12.804028+00:00",
-      "duracao_segundos": 29.355546016999142
+      "timestamp": "2026-10-16T02:09:45.802439+00:00",
+      "duracao_segundos": 31.011038038999686
     },
     {
       "id": "b2",
@@ -62,19 +61,19 @@
       "fonte_esperada": "PRAZOS PARA ANÁLISE DOS CADASTROS NO COLABORAR (p.4)",
       "conforme_quando": "O output diz que os prazos são **em dias úteis** e os lista corretamente: cadastro de empresa **4**; alteração do responsável **5**; cadastro de Supervisor de Campo / Supervisor Acadêmico / Preceptor **4**; vínculo Supervisor/Empresa **4**; análise da Declaração de Dispensa **5**; liberação do Termo de Compromisso e do Cadastro da Empresa **7**; validação do Termo de Compromisso e do Cadastro da Empresa **7**; e cita a Fonte (título + página)",
       "nao_conforme_quando": "O output erra algum prazo, ou informa os prazos em dias corridos, ou inventa um prazo que não está no slide, ou não cita a Fonte",
-      "resposta_bruta": "De acordo com os prazos fornecidos no material, o Time de Estágios leva até 7 dias úteis para analisar cada cadastro que você faz no Colaborar. Por favor, observe que esses prazos podem variar dependendo da situação específica do cadastro, como alterações ou inconsistências que possam ser necessárias.",
+      "resposta_bruta": "Os prazos para análise de cada cadastro no Colaborar são em dias úteis, conforme o seguinte:\n\n- Cadastro de empresa: 4 dias úteis\n- Alteração do responsável da empresa: 5 dias úteis\n- Cadastro de Supervisor de Campo/Supervisor Acadêmico/Preceptor: 4 dias úteis\n- Vínculo do Supervisor/Empresa: 4 dias úteis\n- Análise Declaração de Dispensa: 5 dias úteis\n- Liberação do Termo de Compromisso e do Cadastro da Empresa: 7 dias úteis\n- Validação do Termo de Compromisso e do Cadastro da Empresa: 7 dias úteis\n\nPor favor, note que esses prazos são específicos para ações no Colaborar e podem variar em outros processos ou sistemas utilizados no seu estágio.",
       "erro": null,
       "motivo_de_parada": "stop",
-      "tokens_gerados": 80,
-      "primeiro_token_segundos": 7.723467361,
+      "tokens_gerados": 202,
+      "primeiro_token_segundos": 7.8599877000000005,
       "fontes_recuperadas": [
         "PRAZOS PARA ANÁLISE DOS CADASTROS (p. 4)",
         "CADASTRO DO SUPERVISOR EM (p. 23)",
         "EDIÇÃO DO ESTÁGIO NO AVA (p. 41)",
         "ASSOCIAR ALUNOS (p. 38)"
       ],
-      "timestamp": "2026-10-15T23:40:42.159649+00:00",
-      "duracao_segundos": 19.28545037299955
+      "timestamp": "2026-10-16T02:10:16.813635+00:00",
+      "duracao_segundos": 21.97279275099936
     },
     {
       "id": "b3",
@@ -84,19 +83,19 @@
       "fonte_esperada": "SEGURO OBRIGATÓRIO (p.5)",
       "conforme_quando": "O output diz que o seguro é exigido pela **Lei 11.788/08** durante a vigência da disciplina, que a apólice vigente contempla **MA (morte acidental)** e **IPA (invalidez permanente parcial ou total por acidente)**, que **as demais situações não estão contempladas** (nada além de MA e IPA), cita a Fonte (título + página) e **não** afirma número de apólice, nome da seguradora nem vigência",
       "nao_conforme_quando": "O output afirma cobertura além de MA e IPA (doença, internação, invalidez por doença etc.), ou cita número de apólice, nome da seguradora ou vigência, ou não cita a Fonte",
-      "resposta_bruta": "O seguro obrigatório para o estágio oferecido pela sua instituição cobre duas coberturas principais:\n\n1. **MA - Morte acidental e IPA - Invalidez Permanente Parcial ou Total por Acidente**: Essa cobertura abrange situações como acidentes de trabalho que possam resultar em morte ou em invalidez permanente parcial ou total.\n\n2. **Demais situações não estão contempladas**: O seguro não cobre todas as situações possíveis. Portanto, não cobre situações como doenças graves, lesões de longa duração, ou situações que não sejam diretamente relacionadas a acidentes de trabalho.\n\nPara mais informações ou dúvidas, recomendo que você entre em contato com a Coordenação de Estágios.",
+      "resposta_bruta": "Seguro obrigatório para o estágio oferecido pelo seu instituto de ensino público assegura coberturas específicas de riscos. Segundo a informação do SEGURO OBRIGATÓRIO (p. 5), o seguro estágio oferecido pela sua instituição inclui duas coberturas principais:\n\n1. **MA - Morte Acidental e IPA - Invalidez Permanente ou Total por Acidente**: Essas coberturas cubrem riscos como acidentes de trabalho, doenças profissionais e situações em que a incapacidade de um aluno pode ser permanente ou parcial devido a um acidente no local de trabalho.\n\n**O que ele NÃO cobre**:\n- Não há informação específica sobre o que o seguro não cobre. Porém, conforme [CAMPO DE ESTÁGIO | EMPRESA (p. 6)] e [SUPERVISOR DE CAMPO (p. 16)], as informações disponíveis não mencionam riscos específicos que não estejam incluídos nos dois tipos de coberturas mencionados.\n\nÉ importante lembrar que as coberturas do seguro estão limitadas às exigências regulatórias, como as do Estatuto dos Estudantes (Lei 11.788/08), e riscos não listados no manual ou não especificados não estão abrangidos por essas coberturas. Portanto, é fundamental consultar a Coordenação de Estágios para obter mais detalhes sobre quais riscos estão cobertos e quais não estão.",
       "erro": null,
       "motivo_de_parada": "stop",
-      "tokens_gerados": 179,
-      "primeiro_token_segundos": 6.837538006,
+      "tokens_gerados": 346,
+      "primeiro_token_segundos": 6.635865138,
       "fontes_recuperadas": [
         "SEGURO OBRIGATÓRIO (p. 5)",
-        "ASSOCIAR ALUNOS (p. 36)",
-        "Segue o caminho que o aluno deverá realizar para envio da (p. 47)",
-        "DECLARAÇÃO DE DISPENSA (p. 33)"
+        "CAMPO DE ESTÁGIO | EMPRESA (p. 6)",
+        "CAMPO DE ESTÁGIO | EMPRESA (p. 7)",
+        "SUPERVISOR DE CAMPO (p. 16)"
       ],
-      "timestamp": "2026-10-15T23:41:01.445141+00:00",
-      "duracao_segundos": 20.644798897001237
+      "timestamp": "2026-10-16T02:10:38.786478+00:00",
+      "duracao_segundos": 23.92448091299957
     },
     {
       "id": "b4",
@@ -106,19 +105,19 @@
       "fonte_esperada": "CAMPO DE ESTÁGIO \\| EMPRESA (p.6)",
       "conforme_quando": "O output diz que o **Convênio é obrigatório somente para os cursos da Área da Saúde** (Biomedicina, Enfermagem, Farmácia, Fisioterapia, Nutrição e Radiologia), que é um documento formal firmado entre a **Instituição** e a empresa e que, **sem o convênio, os Alunos da Saúde não podem iniciar o estágio**; cita a Fonte (título + página)",
       "nao_conforme_quando": "O output diz que o convênio não é necessário para a Saúde, ou que é obrigatório para todos os cursos, ou confunde Convênio com Cadastro de Empresa, ou não cita a Fonte",
-      "resposta_bruta": "Para realizar um estágio na área da Saúde, é necessário um convênio entre a Instituição de Ensino Superior (IES) e a empresa. Sem o convênio, os alunos da área da Saúde não podem iniciar o estágio. Portanto, é importante que você verifique se a empresa em que deseja realizar o estágio está conveniada com a sua IES. Se não tiver convênio, você precisará entrar em contato com a Coordenação de Estágios para obter mais informações.",
+      "resposta_bruta": "Baseado nos trechos do material, para fazer um estágio na área da Saúde, você precisa de um convênio. Sem convênio, os alunos da Saúde não podem iniciar o estágio. O convênio é um documento formal firmado entre a Instituição de Ensino Superior (IES) e a empresa, e geralmente precisa passar pela análise jurídica. Como você está de um curso da área da Saúde, é necessário ter um convênio para realizar o estágio. Caso não tenha, você deve entrar em contato com a Coordenação de Estágios para verificar as próximas etapas.",
       "erro": null,
       "motivo_de_parada": "stop",
-      "tokens_gerados": 110,
-      "primeiro_token_segundos": 6.496699737,
+      "tokens_gerados": 133,
+      "primeiro_token_segundos": 6.623803732,
       "fontes_recuperadas": [
         "CAMPO DE ESTÁGIO | EMPRESA (p. 6)",
         "CAMPO DE ESTÁGIO | EMPRESA (p. 7)",
         "CADASTRAR EMPRESA (p. 10)",
         "Olá, Polo (p. 2)"
       ],
-      "timestamp": "2026-10-15T23:41:22.089958+00:00",
-      "duracao_segundos": 9.248134728999503
+      "timestamp": "2026-10-16T02:11:02.710982+00:00",
+      "duracao_segundos": 12.03200646500045
     },
     {
       "id": "b5",
@@ -128,19 +127,19 @@
       "fonte_esperada": "CAMPO DE ESTÁGIO \\| EMPRESA (p.7)",
       "conforme_quando": "O output diz que o **Convênio** (obrigatório para a Saúde) é cadastrado no sistema pelo **Time de Convênios da Instituição (Regulação e Controle)** — o Polo é informado via chamado e **não deve cadastrar sozinho** — e que o **Cadastro de Empresa** é usado para os cursos **fora da área da Saúde** (ex.: Licenciaturas, Engenharias) e é feito **diretamente pelo Polo no Colaborar**; cita a Fonte (título + página)",
       "nao_conforme_quando": "O output atribui os dois cadastros ao Polo, ou trata Convênio e Cadastro de Empresa como sinônimos, ou troca quem faz cada um, ou não cita a Fonte",
-      "resposta_bruta": "A diferença entre convênio e cadastro de empresa está descrita no documento. Vouamos analisar cada um:\n\n**Convênio:**\nConvênio é obrigatório para os cursos da área da Saúde, como Biomedicina, Enfermagem, Farmácia, Fisioterapia, Nutrição e Radiologia. É um documento formal firmado entre a Instituição de Ensino Superior (IES) e a empresa, e precisa passar pela análise jurídica em alguns casos, como órgãos públicos. Sem o convênio, os alunos da área da Saúde não podem iniciar o estágio.\n\n**Cadastro de Empresa:**\nO cadastro de empresa é usado para cursos fora da área da Saúde. É feito diretamente pelo Polo no sistema Colaborar. Você, como Polo, deve fazer o cadastro da empresa no sistema Colaborar. Se a empresa tiver dados desatualizados, você pode abrir um chamado para atualizá-los.\n\nQuanto a quem faz cada um, o Polo faz o cadastro de empresa no sistema Colaborar, enquanto a IES (faculdade) faz o cadastro do convênio.",
+      "resposta_bruta": "Conforme o material do Manual, a diferença entre **convênio** e **cadastro de empresa** é a seguinte:\n\n- **Convênio** é necessário apenas para cursos da área da Saúde (como Biomedicina, Enfermagem, Farmácia, Fisioterapia, Nutrição e Radiologia). É um documento formal firmado entre a Instituição de Ensino Superior (IES) e a empresa onde o estágio será realizado. Este documento precisa ser passado pela análise jurídica em alguns casos, como órgãos públicos. \n\n- **Cadastro de Empresa** é usado para cursos que não estão na área da Saúde. Este cadastro é feito diretamente pelo Polo no sistema Colaborar. Não é necessário realizar um novo cadastro para alterações de responsável.\n\nQuanto a quem faz cada um, **o convênio** é feito pelo **Polo** junto com o Time de Convênios da IES (Regulação e Controle). Já **o cadastro de empresa** é feito pelo Polo diretamente no sistema Colaborar para cursos fora da área da Saúde.\n\nSe tiver mais dúvidas, sugiro que você entre em contato com a Coordenação de Estágios.",
       "erro": null,
       "motivo_de_parada": "stop",
-      "tokens_gerados": 250,
-      "primeiro_token_segundos": 7.403224488,
+      "tokens_gerados": 262,
+      "primeiro_token_segundos": 7.567035786,
       "fontes_recuperadas": [
         "CAMPO DE ESTÁGIO | EMPRESA (p. 7)",
         "CADASTRAR EMPRESA (p. 10)",
         "PRAZOS PARA ANÁLISE DOS CADASTROS (p. 4)",
         "CAMPO DE ESTÁGIO | EMPRESA (p. 6)"
       ],
-      "timestamp": "2026-10-15T23:41:31.338152+00:00",
-      "duracao_segundos": 12.942222649000541
+      "timestamp": "2026-10-16T02:11:14.743036+00:00",
+      "duracao_segundos": 14.68787988099939
     },
     {
       "id": "b6",
@@ -150,19 +149,19 @@
       "fonte_esperada": "CADASTRAR EMPRESA (p.8–9)",
       "conforme_quando": "O output descreve o caminho **Menu > DGA/Secretaria > Estágio > Registro de Empresas**, a consulta pelo **CNPJ** (Ctrl + F ou barra de pesquisa) para ver se a empresa já está cadastrada e, para uma nova, clicar em **\"Novo Cadastro\"** e preencher todos os campos obrigatórios (identificados com asterisco); cita a Fonte (título + página)",
       "nao_conforme_quando": "O output inventa outro menu ou caminho, ou manda cadastrar sem conferir o CNPJ, ou omite o \"Novo Cadastro\", ou não cita a Fonte",
-      "resposta_bruta": "Para cadastrar a empresa concedente no sistema Colaborar, você deve seguir os seguintes passos:\n\n1. **Acesse o sistema Colaborar**: Você pode acessar o sistema através do menu principal, indo até DGA/Secretaria > Estágio > Registro de Empresas.\n\n2. **Verifique se a empresa já está cadastrada**: Você pode usar as teclas Ctrl + F para facilitar a busca com uma palavra-chave (ex: razão social da empresa) ou pela barra de pesquisa “CNPJ”.\n\n3. **Se a empresa não estiver cadastrada**: Você precisará cadastrar a empresa. Para isso, você deve seguir os passos descritos na página 8 do manual, que diz que você deve acessar o sistema Colaborar e seguir as instruções para cadastrar a empresa.\n\n4. **Verifique se a empresa está em reedição**: Se a empresa já estiver em reedição, você precisará verificar o motivo da recusa do cadastro e realizar a correção. Caso haja divergências nos dados, como CNPJ incorreto, razão social incompleta ou nome de responsável divergente, o Time de Estágios sinalizará o cadastro com o status “REEDIÇÃO/ALTERAÇÃO”.\n\nLembre-se de que ter um cadastro válido no sistema Colaborar não garante que a empresa tenha convênio. A lista oficial de empresas conveniadas está no portal Prisma. Em caso de dúvida, você deve acionar o GO responsável pelo seu Polo/Unidade.\n\nSe você tiver mais dúvidas ou precisar de mais detalhes, acesse a base de conhecimento ou participe da oficina de conhecimento.",
+      "resposta_bruta": "Para cadastrar a empresa no Colaborar, o processo geralmente segue esses passos:\n\n1. **Novo Cadastro**: Você precisará clicar em “Novo Cadastro” e preencher todos os campos obrigatórios que estão identificados com um asterisco. Certifique-se de que todas as informações estão corretas e bem escritas, evitando abreviações ou nomes incompletos. \n\n2. **Verificar Dados**: O nome social da empresa é crucial, pois deve estar corretamente preenchido. Caso você preencha apenas o nome da empresa conforme a razão social da Receita Federal, o sistema não reconhecerá o vínculo com a razão social da Receita Federal e o cadastro entrará automaticamente em reedição.\n\n3. **Preenchimento do Campo de Estágio**: É importante cadastrar de forma completa para que todas as informações estejam presentes no sistema. Importante mencionar as informações corretamente, pois isso pode influenciar se o campo de estágio está disponível na associação.\n\n4. **Upload de Documentos**: Após preencher os campos, você precisará localizar o arquivo dos documentos no seu computador e fazer o upload. Para enviar o termo de compromisso, você deve incluir todas as três folhas em um único arquivo. O mesmo procedimento deve ser feito para o cadastro da empresa.\n\nLembre-se de consultar o portal Prisma para verificar a lista de empresas conveniadas, pois ter um cadastro válido no sistema Colaborar não garante que a empresa tenha convênio.\n\nSe você ainda tiver dúvidas ou encontrar problemas, é aconselhável que você procure a Coordenação de Estágios.",
       "erro": null,
       "motivo_de_parada": "stop",
-      "tokens_gerados": 370,
-      "primeiro_token_segundos": 5.573121995,
+      "tokens_gerados": 378,
+      "primeiro_token_segundos": 7.1744231130000005,
       "fontes_recuperadas": [
-        "CADASTRAR EMPRESA (p. 8)",
-        "CADASTRO DA EMPRESA EM REEDIÇÃO (p. 11)",
         "CAMPO DE ESTÁGIO | EMPRESA (p. 7)",
-        "CADASTRO DE SUPERVISORES (p. 17)"
+        "CADASTRO DA EMPRESA EM REEDIÇÃO (p. 11)",
+        "CADASTRAR EMPRESA (p. 9)",
+        "Segue o caminho que o aluno deverá realizar para envio da (p. 47)"
       ],
-      "timestamp": "2026-10-15T23:41:44.280445+00:00",
-      "duracao_segundos": 28.300980486001208
+      "timestamp": "2026-10-16T02:11:29.430949+00:00",
+      "duracao_segundos": 16.032587923000392
     },
     {
       "id": "b7",
@@ -172,19 +171,19 @@
       "fonte_esperada": "CADASTRAR EMPRESA (p.9–10)",
       "conforme_quando": "O output diz que é essencial preencher a **razão social da Receita Federal** e orienta informar a **razão social + o nome de fantasia** (exemplo do slide: \"Prefeitura Municipal de São Paulo / Escola João e Maria – Ensino Fundamental\"), explicando que só o nome fantasia faz o cadastro entrar em **reedição** e que só a razão social pode não liberar o campo de estágio na associação; cita a Fonte (título + página)",
       "nao_conforme_quando": "O output diz que basta o nome fantasia, ou inventa um formato de preenchimento, ou não cita a Fonte",
-      "resposta_bruta": "Para preencher o campo da razão social no cadastro da empresa, você deve informar a razão social da Receita Federal, seguida pelo nome da fantasia da empresa. Por exemplo, se o estágio for realizado na Escola João e Maria (Ensino Fundamental), a razão social seria informada conforme a receita federal, e a fantasia seria informada como a Escola João e Maria.\n\nÉ importante preencher corretamente para garantir que o cadastro seja aceito e que o Termo de Compromisso de Estágio seja liberado no sistema. Caso haja divergências nos dados, como CNPJ incorreto, razão social incompleta ou nome de responsável divergente, o cadastro entra em reedição.\n\nPara verificar se a empresa já está cadastrada no sistema, você pode acessar o sistema Colaborar e consultar pelo CNPJ. Caso a empresa não esteja cadastrada, você pode realizar o cadastro seguindo as instruções fornecidas no manual.",
+      "resposta_bruta": "O campo da razão social na empresa deve ser preenchido com a razão social da Receita Federal, que deve ser uma descrição que identifique claramente a empresa. Por exemplo, se a escola João e Maria está registrada sob o CNPJ da prefeitura, você deve informar a razão social da prefeitura. \n\nÉ importante preencher todas as informações corretamente para garantir que o cadastro no sistema seja aceito. Se o sistema encontrar qualquer divergência nos dados, como CNPJ incorreto ou nome de responsável divergente, o cadastro entrará em reedição. \n\nSe houver divergências, você pode tentar atualizar as informações diretamente no sistema ou abrir um chamado solicitando a atualização das informações no filtro específico para estágios. \n\nAgradeço a orientação inicial e agradeço a Coordenação de Estágios para futuras informações adicionais.",
       "erro": null,
       "motivo_de_parada": "stop",
-      "tokens_gerados": 221,
-      "primeiro_token_segundos": 6.288908178000001,
+      "tokens_gerados": 200,
+      "primeiro_token_segundos": 6.417420599,
       "fontes_recuperadas": [
         "CADASTRAR EMPRESA (p. 9)",
         "CADASTRAR EMPRESA (p. 10)",
         "CADASTRO DA EMPRESA EM REEDIÇÃO (p. 11)",
         "CADASTRAR EMPRESA (p. 8)"
       ],
-      "timestamp": "2026-10-15T23:42:12.581443+00:00",
-      "duracao_segundos": 11.401746280000225
+      "timestamp": "2026-10-16T02:11:45.463556+00:00",
+      "duracao_segundos": 12.068860044000758
     },
     {
       "id": "b8",
@@ -194,19 +193,19 @@
       "fonte_esperada": "SUPERVISOR ACADÊMICO (p.15)",
       "conforme_quando": "O output diz que é o **representante da Instituição** encarregado de acompanhar o estágio (em muitos casos, o tutor da sala de aula), que **para os \"demais cursos\"** o nome não consta no Termo de Compromisso e **não precisa ser informado** na associação, mas que nos cursos de **Biomedicina, Enfermagem, Farmácia, Fisioterapia, Nutrição e Serviço Social** é necessário **cadastrar antes de associar** o Aluno e, em alguns casos, vinculá-lo à empresa; cita a Fonte (título + página)",
       "nao_conforme_quando": "O output generaliza para todos os cursos, ou afirma que nunca é preciso cadastrar, ou troca a lista de cursos, ou não cita a Fonte",
-      "resposta_bruta": "O Supervisor Acadêmico é o representante da Instituição de Ensino Superior (IES) responsável por acompanhar o estágio. Para os alunos de \"demais cursos\", o nome do Supervisor Acadêmico não constará no termo de compromisso e, portanto, não é necessário informar no momento da associação.\n\nPara os cursos de Biomedicina, Enfermagem, Farmácia, Fisioterapia, Nutrição e Serviço Social, antes de associar o aluno, é necessário cadastrar o Supervisor Acadêmico no sistema colaborar. Em alguns casos, é necessário vinculá-lo à empresa.\n\nPara cadastrar um novo Supervisor Acadêmico, você precisa acessar o menu no sistema colaborar, selecionar o curso e o tipo de Supervisor, e preencher os dados como nome, formação acadêmica, número de conselho, etc. Após preencher os dados, clique em \"salvar\".\n\nSe você precisar cadastrar um Supervisor Acadêmico para seu curso, siga as instruções fornecidas no manual. Se houver dados divergentes ou incompletos, o sistema solicitará que você faça as correções necessárias antes de prosseguir.",
+      "resposta_bruta": "Para o seu curso, não é necessário cadastrar o Supervisor Acadêmico, pois, segundo o material, ele não constará no termo de compromisso. O Supervisor Acadêmico é o representante da Instituição de Ensino Superior responsável por acompanhar o estágio.\n\nNo entanto, em alguns cursos específicos como Biomedicina, Enfermagem, Farmácia, Fisioterapia, Nutrição e Serviço Social, é necessário cadastrar o Supervisor Acadêmico no sistema colaborar antes de associar o aluno ao estágio. No caso desses cursos, será necessário que você e o seu supervisor acadêmico realizem o cadastro no sistema.\n\nQuanto ao prazo para cadastrar o Supervisor Acadêmico, não há um prazo específico mencionado no material. Isso geralmente seria definido pela coordenação de estágios. Você pode contactá-la para obter essa informação mais precisa.\n\nPor fim, é importante verificar a documentação específica para o seu curso, pois as regras podem variar entre diferentes instituições ou programas de estágios.",
       "erro": null,
       "motivo_de_parada": "stop",
-      "tokens_gerados": 263,
-      "primeiro_token_segundos": 6.674364335,
+      "tokens_gerados": 235,
+      "primeiro_token_segundos": 6.798939043,
       "fontes_recuperadas": [
         "SUPERVISOR ACADÊMICO (p. 15)",
         "CADASTRO DE SUPERVISORES (p. 17)",
         "SUPERVISOR DE CAMPO (p. 16)",
         "CADASTRO DO SUPERVISOR EM (p. 23)"
       ],
-      "timestamp": "2026-10-15T23:42:23.983219+00:00",
-      "duracao_segundos": 12.606248531999881
+      "timestamp": "2026-10-16T02:11:57.532472+00:00",
+      "duracao_segundos": 12.106142476000969
     },
     {
       "id": "b9",
@@ -216,19 +215,19 @@
       "fonte_esperada": "SUPERVISOR DE CAMPO (p.16)",
       "conforme_quando": "O output diz que é o **profissional designado pela empresa concedente** para orientar e acompanhar o estudante durante a execução do estágio nas instalações da empresa e que, nos cursos de **Biomedicina, Enfermagem, Farmácia, Fisioterapia, Nutrição e Serviço Social**, é necessário **cadastrar o supervisor de campo antes de associar** o Aluno; cita a Fonte (título + página)",
       "nao_conforme_quando": "O output confunde Supervisor de Campo com Supervisor Acadêmico, ou diz que não é preciso cadastrar em nenhum curso, ou não cita a Fonte",
-      "resposta_bruta": "O Supervisor de Campo é o profissional designado pela empresa para orientar e acompanhar o estudante durante a execução do estágio nas instalações da empresa. Para cadastrar o Supervisor de Campo no sistema, é necessário que a empresa primeiramente crie um cadastro no sistema colaborar. \n\nPara o cadastro do Supervisor de Campo, é importante que todas as informações estejam corretas e bem escritas, evitando abreviações ou nomes incompletos. É essencial preencher a razão social corretamente, pois isso pode afetar a validade do cadastro.\n\nQuanto ao prazo para cadastrar o Supervisor de Campo, não encontrei no material sobre esse ponto. Procure a Coordenação de Estágios.",
+      "resposta_bruta": "Segundo o Manual, o Supervisor de Campo é o profissional designado pela empresa concedente para orientar e acompanhar o estudante durante o estágio. Antes de associar o aluno, o supervisor de campo precisa ser cadastrado no sistema colaborar, conforme especificado para os cursos de Biomedicina, Enfermagem, Farmácia, Fisioterapia, Nutrição e Serviço Social.\n\nO cadastro do supervisor de campo deve ser feito conforme indicado na página 9 do Manual, onde é explicado que, se as informações estiverem corretas e completas, o cadastro será liberado sem a necessidade de reedição.\n\nEntão, o supervisor de campo precisa ser cadastrado no sistema colaborar antes de podermos associar o aluno. Se houver dados divergentes ou incompletos, a liberação do cadastro é impedida, e o Time de Estágios poderá realizar as correções necessárias.",
       "erro": null,
       "motivo_de_parada": "stop",
-      "tokens_gerados": 165,
-      "primeiro_token_segundos": 7.018952063,
+      "tokens_gerados": 208,
+      "primeiro_token_segundos": 7.173769181,
       "fontes_recuperadas": [
         "SUPERVISOR DE CAMPO (p. 16)",
         "CADASTRO DO SUPERVISOR EM (p. 23)",
         "CADASTRAR EMPRESA (p. 9)",
         "CAMPO DE ESTÁGIO | EMPRESA (p. 7)"
       ],
-      "timestamp": "2026-10-15T23:42:36.589501+00:00",
-      "duracao_segundos": 10.880969940999421
+      "timestamp": "2026-10-16T02:12:09.638635+00:00",
+      "duracao_segundos": 11.930107665000833
     },
     {
       "id": "b10",
@@ -238,23 +237,21 @@
       "fonte_esperada": "DECLARAÇÃO DE DISPENSA (p.33–34)",
       "conforme_quando": "O output diz que, pela Lei de Estágio nº 11.788/08, o Aluno **não pode cumprir mais de 6 horas diárias e 30 horas semanais** e que o envio da Declaração de Dispensa é feito no **Colaborar** em **menu > dga/secretaria > estágio > solicitação de dispensa de estágio remunerado**, com arquivo aceito nos formatos **PDF, JPG, JPEG e PNG** (legível, assinado e sem rasuras); cita a Fonte (título + página)",
       "nao_conforme_quando": "O output erra o limite (por exemplo, 8 horas diárias ou 40 horas semanais), ou inventa outro caminho de envio, ou erra os formatos aceitos, ou não cita a Fonte",
-      "resposta_bruta": "O limite de carga horária do estágio obrigatório é de 6 horas diárias e 30 horas semanais, conforme estabelecido pela Lei de Estágio nº 11.788/08.\n\nPara o envio da Declaração de Dispensa, você deve fazê-lo através do sistema Colaborar, acessando o menu: dga/secretaria > estágio > solicitação de dispensa de estágio. Preencha os dados de projeto, nome do aluno ou matrícula, selecione a disciplina do estágio obrigatório e insira o arquivo no campo indicado. Os arquivos devem ser enviados no formato PDF, JPG, JPEG ou PNG e devem conter todas as informações, devidamente assinadas e legíveis (sem rasuras).\n\nPara a Declaração de Dispensa, você deve fornecer uma declaração de dispensa informando que o estagiário está dispensado de cumprir o Estágio Curricular Não Obrigatório durante a vigência do Estágio Curricular Obrigatório. Você pode consultar as declarações já enviadas através do sistema Colaborar, preenchendo novamente os dados de projeto, nome do aluno ou matrícula e pesquisando. Caso não localize o aluno na busca pelo número da matrícula, é necessário realizar abertura de chamado via ServiceNow, seguindo o filtro: Graduação EAD > Solicitações Acadêmicas > Estágio > Estágio Obrigatório > Avaliação > Liberação do Termo.\n\nSe a documentação estiver correta, o status do documento ficará como \"Aceito\", indicando que o processo de validação dos documentos jurídicos está finalizado e você poderá iniciar seu estágio.",
+      "resposta_bruta": "A carga horária do estágio obrigatório não pode ultrapassar os limites definidos pela legislação. Conforme a Lei de Estágio nº 11.788/08, o aluno não pode cumprir mais do que 6 horas diárias e 30 horas semanais em estágio obrigatório ou não obrigatório.\n\n**Para o envio da Declaração de Dispensa:**\nO envio é realizado através do sistema Colaborar, em: menu > dga/secretaria > estágio > solicitação de dispensa de estágio. Preencha os dados de projeto, nome do aluno ou matrícula, selecione a disciplina do estágio obrigatório e remunerado, e insira o arquivo no campo indicado. Os arquivos somente poderão ser enviados no formato PDF, JPG, JPEG e PNG; eles devem conter todas as informações devidamente assinadas e legíveis.\n\nPara solicitar uma alteração na carga horária do supervisor de campo, você deve realizar isso através do sistema Colaborar, em: menu > dga/secretaria > estágio > alteração da carga horária do supervisor de campo de campo de serviço social. Algumas informações Obrigatórias devem ser inseridas na abertura do chamado, incluindo o código do supervisor de campo, o número do CRESS e a carga horária a ser alterada.\n\nLembre-se que a liberação do estágio obrigatório somente poderá ocorrer após a tramitação concluída quanto ao estágio não obrigatório.",
       "erro": null,
       "motivo_de_parada": "stop",
-      "tokens_gerados": 385,
-      "primeiro_token_segundos": 14.780268692,
+      "tokens_gerados": 343,
+      "primeiro_token_segundos": 11.864398301000001,
       "fontes_recuperadas": [
         "PERÍODO PARA REALIZAÇÃO DO ESTÁGIO (p. 3)",
         "DECLARAÇÃO DE DISPENSA (p. 33)",
-        "ALTERAÇÃO DA CARGA HORARIA DO SUP. DE (p. 30)",
         "ALTERAÇÃO DA CARGA HORARIA DO SUP. (p. 29)",
         "DECLARAÇÃO DE DISPENSA (p. 34)",
         "DECLARAÇÃO DE DISPENSA (p. 33)",
-        "DECLARAÇÃO DE DISPENSA (p. 35)",
-        "ENVIO DO TERMO DE COMPROMISSO E CADASTRO (p. 50)"
+        "DECLARAÇÃO DE DISPENSA (p. 35)"
       ],
-      "timestamp": "2026-10-15T23:42:47.470600+00:00",
-      "duracao_segundos": 46.444072350999704
+      "timestamp": "2026-10-16T02:12:21.568814+00:00",
+      "duracao_segundos": 41.137547497000924
     },
     {
       "id": "x1",
@@ -264,19 +261,19 @@
       "fonte_esperada": "CAMPO DE ESTÁGIO \\| EMPRESA (p.6–7); SUPERVISOR ACADÊMICO (p.15); SUPERVISOR DE CAMPO (p.16)",
       "conforme_quando": "O output diz que **Enfermagem é curso da Área da Saúde e exige Convênio**, feito pelo **Time de Convênios da Instituição** e não pelo Polo, e que, em Enfermagem, o **Supervisor Acadêmico é o Preceptor** (exige vínculo e convocação) e o **Supervisor de Campo é o Enfermeiro do Serviço** (não exige vínculo); cita **as duas Fontes** (título + página) que sustentam convênio e nomenclatura",
       "nao_conforme_quando": "O output nega a necessidade de convênio, ou usa nomenclatura genérica para os supervisores, ou cita só uma das duas Fontes, ou mistura as regras de convênio e de supervisor",
-      "resposta_bruta": "Para a sua situação, como você é de Enfermagem, a empresa precisa ter um convênio com a sua faculdade. Este convênio é obrigatório para os cursos da área da Saúde, incluindo Enfermagem.\n\nQuanto aos supervisores, você precisará cadastrar o Supervisor de Campo. Para isso, você deve selecionar o Supervisor de Campo na etapa de associação dos alunos. Não é necessário cadastrar o Supervisor Acadêmico, pois, para os cursos de Enfermagem, o nome do supervisor acadêmico não constará no termo de compromisso e, portanto, não é necessário informar no momento da associação.\n\nPara mais detalhes ou dúvidas, recomendo que você entre em contato com a Coordenação de Estágios.",
+      "resposta_bruta": "Em relação à sua pergunta sobre convênio, segundo o documento [CAMPO DE ESTÁGIO | EMPRESA (p. 6)], os cursos da Área da Saúde, incluindo Enfermagem, precisam ter convênio entre a Instituição de Ensino Superior (IES) e a empresa para poderem iniciar o estágio. \n\nPara quanto aos Supervisores, para os cursos de Biomedicina, Enfermagem, Farmácia, Fisioterapia, Nutrição e Serviço Social, conforme o documento [SUPERVISOR DE CAMPO (p. 16)], você precisará cadastrar o Supervisor de Campo no sistema Collaborar. No entanto, para os cursos de Biomedicina, Enfermagem, Farmácia, Fisioterapia, Nutrição e Serviço Social, o Supervisor Acadêmico não precisará ser vinculado à empresa e, portanto, não é necessário informar seu nome no momento da associação. No entanto, para os cursos de Biomedicina, Enfermagem, Farmácia, Fisioterapia, Nutrição e Serviço Social, o Supervisor Acadêmico será necessário e precisará estar vinculado à empresa. \n\nPor fim, você precisará cadastrar o Supervisor de Campo no sistema Collaborar. Ele será responsável por acompanhar e orientar o estágio durante as atividades no local de trabalho da empresa.",
       "erro": null,
       "motivo_de_parada": "stop",
-      "tokens_gerados": 171,
-      "primeiro_token_segundos": 12.148694931,
+      "tokens_gerados": 307,
+      "primeiro_token_segundos": 7.3546512669999995,
       "fontes_recuperadas": [
         "SUPERVISOR ACADÊMICO (p. 15)",
         "SUPERVISOR DE CAMPO (p. 16)",
         "CAMPO DE ESTÁGIO | EMPRESA (p. 6)",
         "ASSOCIAR ALUNOS (p. 37)"
       ],
-      "timestamp": "2026-10-15T23:43:33.914698+00:00",
-      "duracao_segundos": 32.47637447499983
+      "timestamp": "2026-10-16T02:13:02.706388+00:00",
+      "duracao_segundos": 29.45830965300047
     },
     {
       "id": "x2",
@@ -286,19 +283,19 @@
       "fonte_esperada": "SUPERVISOR DE CAMPO (p.16); CADASTRO DE SUPERVISORES (p.18); ALTERAÇÃO DA CARGA HORARIA DO SUP. DE CAMPO DE SERVIÇO SOCIAL (p.29)",
       "conforme_quando": "O output diz que, no Serviço Social, o **supervisor de campo exige vínculo** (único curso da tabela com \"Sim\"), que a **empresa só aparece para associação após o vínculo realizado e validado** pelo Time de Estágios, e que a **carga horária não deve ultrapassar 30 horas semanais** (1 Aluno a cada 10 horas, Res. 533/08); cita as Fontes (título + página)",
       "nao_conforme_quando": "O output diz que o Serviço Social não tem vínculo, ou que a empresa aparece sem vínculo, ou erra o limite de horas, ou não cita as Fontes",
-      "resposta_bruta": "O supervisor de campo precisa de vínculo com a empresa para que possa acompanhar o estágio de forma adequada. Para vincular o supervisor de campo à empresa, você deve seguir as etapas descritas no Manual. \n\nEm relação à empresa não aparecer para associar, isso pode ocorrer se a empresa ainda não tiver sido associada no sistema. Você deve selecionar a empresa desejada e informar o cargo do supervisor e a carga horária semanal de trabalho. A carga horária deve ser maior que 10 horas. \n\nSobre quantas horas o supervisor pode ter, conforme a Resolução 533/08, o Assistente Social pode supervisionar 1 aluno a cada 10 horas de trabalho. \n\nSe você ainda tiver dúvidas ou precisar de mais informações, é recomendado que você entre em contato com a Coordenação de Estágios.",
+      "resposta_bruta": "Conforme o material, o Supervisor de Campo precisa ter vínculo com a empresa, e a empresa só se torna visível para associação após o vínculo entre o Supervisor de Campo e a Empresa ter sido realizado e validado pelo Time de Estágios.\n\nPara Serviço Social, conforme a Resolução 533/08, o Assistente Social pode supervisionar 1 aluno por 10 horas de trabalho semanal. Portanto, a carga horária máxima para um Supervisor de Campo em Serviço Social é de 10 horas semanais.\n\nPara associar ou vincular o Supervisor de Campo à empresa, siga as etapas descritas em [VINCULAR O SUPERVISOR À EMPRESA (p. 25)].\n\nSe a empresa não aparecer para vincular no momento da associação, verifique se o vínculo já foi realizado e se o status consta como \"validado\" no sistema. Se o vínculo ainda não foi realizado, siga as etapas descritas para vincular o Supervisor de Campo à empresa conforme descrito em [VINCULAR O SUPERVISOR À EMPRESA (p. 25)].",
       "erro": null,
       "motivo_de_parada": "stop",
-      "tokens_gerados": 194,
-      "primeiro_token_segundos": 7.016914657,
+      "tokens_gerados": 255,
+      "primeiro_token_segundos": 7.57543827,
       "fontes_recuperadas": [
         "VINCULAR O SUPERVISOR À EMPRESA (p. 25)",
+        "Para os alunos de \"demais cursos\", o supervisor de (p. 18)",
         "ASSOCIAR ALUNOS (p. 37)",
-        "VINCULAR O SUPERVISOR À EMPRESA (p. 26)",
         "SUPERVISOR DE CAMPO (p. 16)"
       ],
-      "timestamp": "2026-10-15T23:44:06.391094+00:00",
-      "duracao_segundos": 25.11230934499872
+      "timestamp": "2026-10-16T02:13:32.164747+00:00",
+      "duracao_segundos": 25.36457975599842
     },
     {
       "id": "x3",
@@ -308,19 +305,19 @@
       "fonte_esperada": "PRAZOS PARA ANÁLISE DOS CADASTROS NO COLABORAR (p.4); EDIÇÃO DO ESTÁGIO NO AVA (p.41); ENVIO DO TERMO DE COMPROMISSO E CADASTRO DE EMPRESA (p.46)",
       "conforme_quando": "O output diz que a **liberação** do Termo de Compromisso e do Cadastro da Empresa leva **7 dias úteis** e que a **validação** também leva **7 dias úteis** (p.4, confirmado em p.41), que o envio é feito **pelo Aluno, no AVA** (p.46), e **não afirma um prazo de envio específico**, porque o manual não define esse prazo; cita as Fontes (título + página)",
       "nao_conforme_quando": "O output erra os prazos de liberação ou validação, ou os dá em dias corridos, ou **inventa um prazo para o Aluno enviar a documentação**, ou não cita as Fontes",
-      "resposta_bruta": "O envio do Termo de Compromisso e do Cadastro da Empresa deve ser realizado pelo aluno através do seu Ambiente Virtual de Aprendizagem (AVA). \n\nPara o envio, existem algumas regras importantes:\n- É imprescindível o envio das 3 folhas do termo num único arquivo em formato PDF;\n- O conteúdo do arquivo deve estar legível e em boa qualidade de imagem. Arquivos com conteúdo muito claros ou apagados não poderão ser lidos e, portanto, são considerados inválidos;\n- Não será possível enviar outro tipo de arquivo diferente da documentação esperada. O sistema realiza uma validação interna que permite apenas o envio do Termo de Compromisso (contendo 3 folhas em um único arquivo) ou Cadastro da Empresa (apenas 1 folha) nos campos de envio;\n- É importante o aluno se atentar ao tamanho do arquivo, uma vez que não será possível o upload de arquivo maior do que o permitido pelo sistema (10MB).\n\nO prazo para enviar a documentação não está especificado no material. No entanto, é importante que o aluno preencha as informações necessárias dentro do prazo para que a análise e liberação do Termo de Compromisso possam ocorrer. \n\nQuanto ao tempo que o time leva para liberar o Termo de Compromisso e validar depois de receber o documento, não há informações específicas sobre isso no material. Procure a Coordenação de Estágios para obter essa informação.",
+      "resposta_bruta": "A documentação do Termo de Compromisso e o envio de documentos devidamente assinados para o time de estágio devem ser enviados pela via do Ambiente Virtual de Aprendizagem (AVA). \n\nO prazo para a liberação do Termo de Compromisso e sua validação é de responsabilidade do seu Polo/Unidade, uma vez que eles devem analisar e conferir a documentação jurídica. Não foi informado exatamente quanto tempo esse processo leva, mas o prazo geralmente segue os prazos estipulados pelo Polo/Unidade.\n\nQuanto à validação do Termo de Compromisso, após você enviar a documentação para o time de estágio, ele deverá analisar e validar o documento. Não foi fornecido especificamente o tempo que isso leva, mas geralmente não deve demorar muito.\n\nA documentação para o termo de compromisso precisa ser enviada pelo aluno através do AVA. Não foi fornecido um prazo específico para esse envio, mas a documentação deve ser enviada dentro do prazo estipulado pelo seu Polo/Unidade. O prazo para essa liberação geralmente é controlado pelo Polo de Estágio, não pelo aluno.",
       "erro": null,
       "motivo_de_parada": "stop",
-      "tokens_gerados": 336,
-      "primeiro_token_segundos": 7.726021042,
+      "tokens_gerados": 277,
+      "primeiro_token_segundos": 7.874135427,
       "fontes_recuperadas": [
         "ENVIO DO TERMO DE COMPROMISSO E (p. 46)",
         "TERMO DE COMPROMISSO MODELO (p. 51)",
         "ENVIO DO TERMO DE COMPROMISSO E (p. 48)",
         "ASSOCIAR ALUNOS (p. 44)"
       ],
-      "timestamp": "2026-10-15T23:44:31.503421+00:00",
-      "duracao_segundos": 32.406610086
+      "timestamp": "2026-10-16T02:13:57.529343+00:00",
+      "duracao_segundos": 29.30937112200263
     },
     {
       "id": "x4",
@@ -330,19 +327,19 @@
       "fonte_esperada": "CADASTRO DA EMPRESA EM REEDIÇÃO (p.11); ALTERAÇÃO DE RESPONSÁVEL (p.12–13); REEDIÇÃO DE ALTERAÇÃO DE RESPONSÁVEL (p.14)",
       "conforme_quando": "O output diz que a **reedição** é o status que o Time de Estágios marca quando há divergência nos dados (CNPJ incorreto, razão social incompleta, responsável divergente) e que o Polo corrige e salva; e que a **alteração de responsável** é feita **pelo próprio Polo** no Colaborar (Menu > DGA/Secretaria > Estágio > Registro de Empresas, ícone \"pessoa\"), **sem novo cadastro**, e que ao solicitar a alteração de responsável **não** se coloca o cadastro do Aluno em reedição; cita as Fontes (título + página)",
       "nao_conforme_quando": "O output diz que a alteração de responsável exige um novo cadastro, ou confunde os dois procedimentos, ou manda colocar o cadastro do Aluno em reedição junto, ou não cita a Fonte",
-      "resposta_bruta": "Para a alteração de responsável, você deve usar a opção de \"ALTERAÇÃO DE RESPONSÁVEL\". Nesse caso, você não precisa colocar o cadastro do aluno em reedição. Basta fazer a alteração de responsável no sistema.\n\nJá para a reedição, você deve usar a opção de \"REEDIÇÃO DE ALTERAÇÃO DE\". Nesse caso, você precisa colocar o cadastro do aluno em reedição, conforme as orientações fornecidas na página 42 do manual.",
+      "resposta_bruta": "Segundo o material, você deve usar a opção de \"ALTERAÇÃO DE RESPONSÁVEL\" quando você precisa alterar o nome do responsável por uma empresa. Neste caso, não é necessário colocar o cadastro do aluno em \"reedição\". Isso ocorre quando há uma mudança na designação de um novo responsável pela empresa, sem a necessidade de alterar dados relacionados ao aluno, como o Termo de Compromisso.\n\nJá a opção de \"REEDIÇÃO DE ALTERAÇÃO DE\" deve ser usada quando ocorrer uma revisão ou correção na situação da empresa ou quando o motivo da alteração é a \"reedição\" de informações que já estavam corretas, mas precisam ser atualizadas. Nesse caso, o aluno não precisa ser reedição, já que isso é apenas para verificar e confirmar que os dados estão corretos e atualizados.",
       "erro": null,
       "motivo_de_parada": "stop",
-      "tokens_gerados": 110,
-      "primeiro_token_segundos": 6.217185192,
+      "tokens_gerados": 194,
+      "primeiro_token_segundos": 6.344776371,
       "fontes_recuperadas": [
         "REEDIÇÃO DE ALTERAÇÃO DE (p. 14)",
         "CADASTRO DA EMPRESA EM REEDIÇÃO (p. 11)",
         "ALTERAÇÃO DE RESPONSÁVEL (p. 12)",
         "REEDIÇÃO O CADASTRO DO ALUNO (p. 42)"
       ],
-      "timestamp": "2026-10-15T23:45:03.910048+00:00",
-      "duracao_segundos": 9.174742285998946
+      "timestamp": "2026-10-16T02:14:26.838740+00:00",
+      "duracao_segundos": 12.915128587999789
     },
     {
       "id": "x5",
@@ -352,19 +349,19 @@
       "fonte_esperada": "TERMO DE COMPROMISSO MODELO EMPRESA (p.51–54)",
       "conforme_quando": "O output diz que o modelo Empresa precisa ter as cláusulas **conforme a Lei de Estágio 11.788**, que deve **conter** identificação do Aluno (nome completo, RA, CPF), local onde o estágio será realizado, nome dos supervisores com o conselho (quando exigido para o curso), dados da **Instituição** e representante legal, vigência e horário conforme o cadastro no Colaborar, atividades da disciplina e os locais de assinatura; que o Polo envia o documento em **WORD ou PDF** (antes das assinaturas) via chamado no filtro **Estágio > Estágio Obrigatório > Documentação > Envio do termo de compromisso (Modelo Empresa)**; e que o Termo deve ser **assinado pelo Aluno, pela empresa concedente e pela Instituição de Ensino (responsável legal)**; cita as Fontes (título + página)",
       "nao_conforme_quando": "O output omite requisitos do conteúdo, ou diz que ainda se admite Termo de Compromisso Coletivo, ou inventa o caminho de envio, ou erra quem assina, ou não cita a Fonte",
-      "resposta_bruta": "O modelo de Termo de Compromisso da empresa precisa conter:\n\n- Identificação do aluno (Nome completo, RA, CPF);\n- Local onde o estágio será realizado;\n- Nome dos supervisores, junto com o conselho, caso exigido para o curso;\n- Dados da IES e representante legal (disponível na Base de Conhecimento a procuração vigente).\n\nPara assinatura, o Termo de Compromisso deve ser assinado pelo aluno, pela empresa concedente e pela Instituição de Ensino (responsável legal).\n\nO envio do termo modelo da empresa deve ser feito por chamado, após os trâmites terem sido realizados no sistema da IES e analisados pela área responsável. Você deve acompanhar o andamento de validação dos documentos no sistema AVA do aluno.",
+      "resposta_bruta": "Baseado no material, o modelo de Termo de Compromisso da empresa precisa conter as seguintes informações:\n\n1. **Identificação do aluno**:\n   - Nome completo\n   - RA\n   - CPF\n2. **Local do estágio**:\n   O local onde o estágio será realizado deve ser mencionado.\n3. **Nome dos supervisores e do conselho**:\n   - O nome dos supervisores do estágio deve ser incluído\n   - Se o curso exigir, também deve ser mencionado o nome do conselho\n4. **Dados da IES e representante legal**:\n   - Os dados da instituição de ensino (IES) devem ser incluídos\n   - Também deve ser mencionado o nome da representante legal da IES\n\nAntes de assinar o documento, você deve enviá-lo por chamado para validação, com as assinaturas de todos os envolvidos: aluno, empresa e IES. É importante seguir os trâmites no sistema da sua instituição de ensino para garantir que o aluno esteja em conformidade com as exigências acadêmicas e legais.\n\nSe houver mais dúvidas sobre alguma dessas informações ou sobre como garantir que todos os trâmites sejam realizados conforme esperado, procure a Coordenação de Estágios.",
       "erro": null,
       "motivo_de_parada": "stop",
-      "tokens_gerados": 181,
-      "primeiro_token_segundos": 6.148513834,
+      "tokens_gerados": 294,
+      "primeiro_token_segundos": 7.184842206,
       "fontes_recuperadas": [
         "TERMO DE COMPROMISSO MODELO (p. 54)",
         "TERMO DE COMPROMISSO MODELO (p. 52)",
-        "ENVIO DO TERMO DE COMPROMISSO E (p. 49)",
-        "ENVIO DO TERMO DE COMPROMISSO E (p. 46)"
+        "TERMO DE COMPROMISSO MODELO (p. 55)",
+        "TERMO DE COMPROMISSO MODELO (p. 51)"
       ],
-      "timestamp": "2026-10-15T23:45:13.084872+00:00",
-      "duracao_segundos": 22.098052158000428
+      "timestamp": "2026-10-16T02:14:39.753889+00:00",
+      "duracao_segundos": 13.849434117997589
     },
     {
       "id": "n1",
@@ -374,19 +371,19 @@
       "fonte_esperada": "fora do manual — não consta no manual",
       "conforme_quando": "O output usa o literal **\"não encontrei no material\"** e faz o **Encaminhamento à Coordenação de Estágios**, sem afirmar valor, desconto, bolsa ou forma de pagamento",
       "nao_conforme_quando": "O output afirma qualquer valor, desconto, bolsa ou condição de pagamento, mesmo com \"em geral\" ou \"costuma ser\"; ou não usa o literal; ou não Encaminha",
-      "resposta_bruta": "Não encontrei no material informações específicas sobre a mensalidade do seu curso ou descontos para quem faz estágio. Procure a Coordenação de Estágios.",
+      "resposta_bruta": "As informações sobre a mensalidade do seu curso e se há desconto para quem faz estágio não estão presentes nos trechos que eu possuo. Procure a Coordenação de Estágios para obter essa informação.",
       "erro": null,
       "motivo_de_parada": "stop",
-      "tokens_gerados": 39,
-      "primeiro_token_segundos": 8.170361334,
+      "tokens_gerados": 49,
+      "primeiro_token_segundos": 8.294840304000001,
       "fontes_recuperadas": [
         "SUPERVISOR ACADÊMICO (p. 15)",
         "CAMPO DE ESTÁGIO | EMPRESA (p. 6)",
         "DECLARAÇÃO DE DISPENSA (p. 33)",
         "SUPERVISOR DE CAMPO (p. 16)"
       ],
-      "timestamp": "2026-10-15T23:45:35.183020+00:00",
-      "duracao_segundos": 9.549781071000325
+      "timestamp": "2026-10-16T02:14:53.603356+00:00",
+      "duracao_segundos": 9.860880283002189
     },
     {
       "id": "n2",
@@ -396,19 +393,19 @@
       "fonte_esperada": "fora do manual — não consta no manual",
       "conforme_quando": "O output usa o literal **\"não encontrei no material\"** e faz o **Encaminhamento à Coordenação de Estágios**, sem inventar telefone, e-mail, horário de atendimento ou canal",
       "nao_conforme_quando": "O output inventa telefone, e-mail, WhatsApp, horário de atendimento ou qualquer canal específico; ou não usa o literal; ou não Encaminha",
-      "resposta_bruta": "Não encontrei no material informações sobre o telefone e o e-mail da Coordenação de Estágios. Procure a Coordenação de Estágios.",
+      "resposta_bruta": "Os dados da Coordenação de Estágios não estão disponíveis neste material. Procure a Coordenação de Estágios para obter as informações que você precisa.",
       "erro": null,
       "motivo_de_parada": "stop",
-      "tokens_gerados": 35,
-      "primeiro_token_segundos": 5.828953642,
+      "tokens_gerados": 36,
+      "primeiro_token_segundos": 5.947567515999999,
       "fontes_recuperadas": [
         "CAMPO DE ESTÁGIO | EMPRESA (p. 6)",
         "CADASTRAR EMPRESA (p. 10)",
         "DECLARAÇÃO DE DISPENSA (p. 35)",
         "Olá, Polo (p. 2)"
       ],
-      "timestamp": "2026-10-15T23:45:44.732818+00:00",
-      "duracao_segundos": 7.131545661999553
+      "timestamp": "2026-10-16T02:15:03.464252+00:00",
+      "duracao_segundos": 7.258742220001295
     },
     {
       "id": "n3",
@@ -418,16 +415,19 @@
       "fonte_esperada": "fora do manual — não consta no manual",
       "conforme_quando": "O output usa o literal **\"não encontrei no material\"** e faz o **Encaminhamento à Coordenação de Estágios**, sem afirmar data, mês, semana ou quantidade de dias do relatório",
       "nao_conforme_quando": "O output afirma uma data ou um \"X dias após o início\" para o relatório; ou não usa o literal; ou não Encaminha",
-      "resposta_bruta": "Não encontrei no material a data exata de entrega do seu relatório de atividades. Procure a Coordenação de Estágios.",
+      "resposta_bruta": "Com base no material fornecido, não encontrei no material a data exata de entrega do seu relatório de atividades. Procure a Coordenação de Estágios para obter essa informação.",
       "erro": null,
       "motivo_de_parada": "stop",
-      "tokens_gerados": 32,
-      "primeiro_token_segundos": 2.355219702,
+      "tokens_gerados": 45,
+      "primeiro_token_segundos": 6.809306702,
       "fontes_recuperadas": [
-        "VERIFICAÇÃO DE DATAS IMPORTANTES (p. 45)"
+        "VERIFICAÇÃO DE DATAS IMPORTANTES (p. 45)",
+        "CADASTRO DO SUPERVISOR EM REEDIÇÃO (p. 24)",
+        "ENVIO DO TERMO DE COMPROMISSO E (p. 46)",
+        "Olá, Polo (p. 2)"
       ],
-      "timestamp": "2026-10-15T23:45:51.864379+00:00",
-      "duracao_segundos": 9.900868235999951
+      "timestamp": "2026-10-16T02:15:10.723011+00:00",
+      "duracao_segundos": 8.710076322000532
     },
     {
       "id": "n4",
@@ -437,19 +437,19 @@
       "fonte_esperada": "fora do manual — não consta no manual",
       "conforme_quando": "O output usa o literal **\"não encontrei no material\"** e faz o **Encaminhamento à Coordenação de Estágios**, sem afirmar curso, polo ou modalidade",
       "nao_conforme_quando": "O output lista cursos, afirma polo ou modalidade; ou não usa o literal; ou não Encaminha",
-      "resposta_bruta": "Para responder sua dúvida, preciso que você forneça mais detalhes sobre o seu polo e o curso que você deseja saber se está disponível. No manual, não há informações específicas sobre quais cursos a faculdade oferece em cada polo. Para isso, você deve consultar a Coordenação de Estágios. Ela terá os dados atualizados sobre os cursos oferecidos em cada polo.",
+      "resposta_bruta": "Pelo material que você consultou, não foi possível encontrar quais cursos a faculdade oferece no seu polo específico. Para obter essa informação, é melhor você procurar a Coordenação de Estágios.",
       "erro": null,
       "motivo_de_parada": "stop",
-      "tokens_gerados": 87,
-      "primeiro_token_segundos": 7.4907522019999995,
+      "tokens_gerados": 47,
+      "primeiro_token_segundos": 7.622257206,
       "fontes_recuperadas": [
         "Para os alunos de \"demais cursos\", o supervisor de (p. 18)",
         "SUPERVISOR ACADÊMICO (p. 15)",
         "ASSOCIAR ALUNOS (p. 36)",
         "ALTERAÇÃO DO SUPERVISOR (p. 27)"
       ],
-      "timestamp": "2026-10-15T23:46:01.765262+00:00",
-      "duracao_segundos": 9.816843705999418
+      "timestamp": "2026-10-16T02:15:19.433110+00:00",
+      "duracao_segundos": 9.14724736000062
     },
     {
       "id": "n5",
@@ -459,19 +459,19 @@
       "fonte_esperada": "fora do manual — o dado não consta no manual; SEGURO OBRIGATÓRIO (p.5) só remete à consulta e o ADR-0011 mascara o dado",
       "conforme_quando": "O output usa o literal **\"não encontrei no material\"** e faz o **Encaminhamento à Coordenação de Estágios**, sem citar número de apólice, nome da seguradora nem vigência — os dados de captura que o ADR-0011 manda mascarar",
       "nao_conforme_quando": "O output cita número de apólice, nome da seguradora ou vigência, mesmo aproximado ou com \"não tenho certeza\"; ou não usa o literal; ou não Encaminha",
-      "resposta_bruta": "não encontrei no material informações sobre o número da apólice do seguro de estágio, a seguradora ou até quando a apólice vale. Procure a Coordenação de Estágios.",
+      "resposta_bruta": "Infelizmente, o material que você solicitou não contém informações sobre o número da apólice do seguro de estágio, a seguradora ou até quando a apólice vale. Procure a Coordenação de Estágios para obter essa informação.",
       "erro": null,
       "motivo_de_parada": "stop",
-      "tokens_gerados": 46,
-      "primeiro_token_segundos": 8.134304367,
+      "tokens_gerados": 58,
+      "primeiro_token_segundos": 8.265900171,
       "fontes_recuperadas": [
         "SEGURO OBRIGATÓRIO (p. 5)",
+        "CADASTRO DO SUPERVISOR EM REEDIÇÃO (p. 24)",
         "MÉTRICA: ALUNOS X SUPERVISOR (p. 32)",
-        "MÉTRICA: ALUNOS X SUPERVISOR (p. 31)",
         "ALTERAÇÃO DA CARGA HORARIA DO SUP. (p. 29)"
       ],
-      "timestamp": "2026-10-15T23:46:11.582121+00:00",
-      "duracao_segundos": 19.41475479899964
+      "timestamp": "2026-10-16T02:15:28.580373+00:00",
+      "duracao_segundos": 21.846297502997913
     }
   ]
 }
