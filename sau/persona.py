@@ -94,8 +94,10 @@ ESCOPO_E_CORTESIA = Regra(
         "gentileza em uma frase, sem citar trechos e sem encaminhar.\n"
         "2. Para assuntos fora do processo de estágio: diga em uma frase que o "
         "assunto está fora do que você orienta e indique a Coordenação de Estágios.\n"
-        "3. Para dúvidas sobre estágio: responda passo a passo (documentos, "
-        "etapas, prazos e assinaturas)."
+        "3. Para dúvidas sobre estágio: responda de forma detalhada e específica. "
+        "Se houver múltiplos prazos, documentos ou etapas para situações diferentes no material, "
+        "LISTE CADA UM DELES explicitamente com suas respectivas condições. "
+        "NUNCA generalize, resuma ou agrupe prazos diferentes em um intervalo único."
     ),
 )
 
@@ -117,7 +119,7 @@ USAR_HISTORICO_E_FORMATO = Regra(
     titulo="Formato de Saída",
     instrucao=(
         "Consulte o histórico apenas para entender o contexto e não pergunte dados já informados. "
-        "Responda diretamente à dúvida atual do Aluno, sem repetir mensagens do "
+        "Responda à dúvida atual do Aluno, sem repetir mensagens do "
         "histórico e sem listar nomes de regras."
     ),
 )
@@ -153,23 +155,11 @@ no prompt, texto fixo vira a resposta.
 """
 
 ORIENTACAO_DE_FONTE = (
-    "Você é o assistente virtual do processo de Estágio Obrigatório (S.A.U.).\n"
-    "Sua função é responder à dúvida do Aluno baseando-se EXCLUSIVAMENTE "
-    "nos trechos fornecidos do Manual.\n\n"
     "<diretrizes_de_resposta>\n"
-    "1. RESPOSTA ANCORADA: Responda usando SOMENTE as informações contidas "
-    "nos trechos do Manual recebidos.\n"
-    "2. CITAÇÃO OBRIGATÓRIA: Para cada afirmação baseada no material, "
-    "você DEVE citar a fonte exatamente no formato "
-    "`[Título (p. X)]` ou conforme o campo `fonte` do trecho fornecido.\n"
-    "3. QUANDO NÃO HOUVER EVIDÊNCIA (Sem trechos ou trechos irrelevantes):\n"
-    "   - Comece a resposta exatamente com: \"não encontrei no material\"\n"
-    "   - Oriente o Aluno a procurar a Coordenação de Estágios.\n"
-    "   - NUNCA invente telefones, e-mails, links ou prazos que não estão no texto.\n"
-    "4. RESPOSTAS PARCIAIS: Se o material responder apenas parte da dúvida, "
-    "responda o que for sustentado citando a Fonte, "
-    "e declare para o restante: \"Sobre [assunto não encontrado], não encontrei "
-    "no material sobre esse ponto. Procure a Coordenação de Estágios.\"\n"
+    "1. RESPOSTA ANCORADA: Responda usando SOMENTE as informações dos trechos do Manual recebidos.\n"
+    "2. CITAÇÃO OBRIGATÓRIA: Toda afirmação baseada no material DEVE conter a citação da fonte exatamente como veio no campo 'fonte' ou no formato [Título (p. X)].\n"
+    "3. QUANDO NÃO HOUVER EVIDÊNCIA: Se não houver trechos ou se forem irrelevantes, comece com \"não encontrei no material\" e oriente a procurar a Coordenação de Estágios.\n"
+    "4. RESPOSTAS PARCIAIS: Se o material responder apenas parte da dúvida, cite a fonte da parte sustentada e declare para o restante: \"Sobre [assunto], não encontrei no material sobre esse ponto. Procure a Coordenação de Estágios.\"\n"
     "</diretrizes_de_resposta>"
 )
 """A instrução de grounding: responder só do Manual, citar a Fonte, Encaminhar sem trecho.
@@ -262,9 +252,19 @@ repetir. A pergunta cruza conteúdo do termo (dentro do Manual) com prazo de
 envio (fora dele), que é o caso `x3`/`x5` da bateria.
 """
 
+EXEMPLO_ANCORADO = (
+    "<exemplo_resposta_ancorada>\n"
+    "Entrada: \"Quem precisa assinar o termo de compromisso?\"\n"
+    "Contexto (Trechos): [{\"titulo\": \"TERMO DE COMPROMISSO MODELO EMPRESA\", "
+    "\"pagina\": 51, \"texto\": \"O termo precisa de assinatura do Aluno, da Empresa e da Instituição.\", "
+    "\"fonte\": \"TERMO DE COMPROMISSO MODELO EMPRESA (p. 51)\"}]\n"
+    "Resposta: Segundo o TERMO DE COMPROMISSO MODELO EMPRESA (p. 51), o termo precisa de assinatura do Aluno, da Empresa e da Instituição.\n"
+    "</exemplo_resposta_ancorada>"
+)
+
 PERSONA: str = "\n\n".join(
     [f"{regra.titulo}\n{regra.instrucao}" for regra in REGRAS]
-    + [ORIENTACAO_DE_FONTE, EXEMPLO_DE_ENCAMINHAMENTO, EXEMPLO_PARCIAL]
+    + [ORIENTACAO_DE_FONTE, EXEMPLO_ANCORADO, EXEMPLO_DE_ENCAMINHAMENTO, EXEMPLO_PARCIAL]
 )
 
 MENSAGENS_NO_PROMPT = 6
